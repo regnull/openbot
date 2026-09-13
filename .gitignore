@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.db
+*.db-*
+workspace/
+node_modules/
+frontend/dist/
+.env
+.DS_Store
+.superpowers/
