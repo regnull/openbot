@@ -155,6 +155,7 @@ Targets are resolved by `router.resolve_targets(thread, message)`:
 2. If that set is empty and the thread has exactly one bot participant, that bot.
 3. Otherwise no targets. The API response and UI show "no bot addressed".
 4. The sending bot is removed from the set (a bot never triggers itself). Disabled bots are removed.
+5. System messages (`sender_kind=system`) never trigger runs, even if they mention a bot.
 
 Bots that are targeted but not yet participants are added as participants.
 
@@ -379,6 +380,13 @@ SEED_DEMO_BOTS=true
 
 Created on first start when the bots table is empty and `SEED_DEMO_BOTS=true`:
 
+- **chief_of_staff** (`@chief_of_staff`): tools `list_files, read_file` (read-only). The
+  coordinator. Instructions: take a request from the human, clarify it if needed with
+  `ask_human`, break it into concrete tasks, delegate each by mentioning the right bot
+  (`@engineer` for changes, `@reviewer` for review, `@qa` for testing and merging), track
+  progress in the thread, remember standing preferences with `manage_memory`, and report back
+  to the human with a short status when a workflow completes or stalls. It never edits code
+  itself.
 - **engineer** (`@engineer`): tools `run_shell, read_file, write_file, list_files`. Instructions:
   implement the requested change in the repo at the workspace root on a new branch, run tests,
   commit, push, open a PR with `gh pr create`, then reply with the PR link and mention
@@ -395,7 +403,9 @@ Default provider/model for seeds is the first configured provider in the order
 openai, anthropic, openrouter, xai, with a sensible default model per provider.
 
 The README walkthrough: clone a repo into `workspace/`, start OpenBot, open a thread with
-`@engineer`, send "Add a --version flag to the CLI", watch the hand-offs, approve the merge.
+`@chief_of_staff`, send "Add a --version flag to the CLI", watch it delegate to `@engineer`,
+follow the hand-offs to `@reviewer` and `@qa`, approve the merge when asked, and read the
+Chief of Staff's final status. A second, shorter path messages `@engineer` directly.
 
 ## 14. Testing
 
