@@ -11,6 +11,7 @@ from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
 from openbot.runtime.bus import EventBus
+from openbot.runtime.memory import MemoryReflector
 from openbot.runtime.persistence import open_langgraph_backends
 from openbot.runtime.providers import chat_model, embeddings
 from openbot.seed import ensure_human_actor
@@ -29,6 +30,7 @@ async def build_services(settings: Settings) -> Services:
     services.registry = build_registry(settings)
     services.bus = EventBus()
     services.model_factory = lambda actor: chat_model(actor.bot, settings)
+    services.reflector = MemoryReflector(services, settings.memory_reflection_delay)
 
     stack = AsyncExitStack()
     emb = embeddings(settings)
