@@ -171,15 +171,45 @@ async def test_memory_reflection_scheduled(settings):
     assert scheduled and scheduled[0][0] == "eng" and scheduled[0][1] >= 2
 
 
-def test_trace_root_id_prefers_the_trace_root():
-    """collect_runs() yields the first run that *finished*, which is a nested ChatOpenAI call, not
-    the bot:<handle> root; the card must link the root so the trace opens at the top."""
-    from openbot.runtime.runner import trace_root_id
 
-    class R:
-        def __init__(self, id, trace_id=None):
-            self.id, self.trace_id = id, trace_id
+async def test_langsmith_id_is_the_pinned_trace_root(settings, monkeypatch):
+    """The run card must link the `bot:<handle>` root. Under LangGraph streaming the runs that
+    collect_runs() returns all look parentless in memory (LangSmith only links them server-side
+    from dotted_order), so the root id is pinned in the config up front and stored from there."""
+    from openbot.runtime import runner as runner_mod
 
-    assert trace_root_id([]) is None
-    assert trace_root_id([R("child", "root"), R("other", "root")]) == "root"
-    assert trace_root_id([R("solo")]) == "solo"
+    seen: dict = {}
+    original = Runner._stream
+
+    async def spy(self, agent, inputs, config, ctx, run, seq):
+        seen["config_run_id"] = config.get("run_id")
+        return await original(self, agent, inputs, config, ctx, run, seq)
+
+    monkeypatch.setattr(Runner, "_stream", spy)
+    # collect_runs() yields nothing without a tracer, and then no LangSmith id may be stored.
+    monkeypatch.setattr(runner_mod, "collect_runs", _collecting(["nested-child-run"]))
+
+    services, _eng, _t, run = await make(settings, {"eng": [ai("done")]})
+    await services.runner.execute(run.id)
+
+    run = await get(services, Run, run.id)
+    assert run.langsmith_run_id == str(seen["config_run_id"]) != "nested-child-run"
+
+
+async def test_no_langsmith_id_when_nothing_is_traced(settings, monkeypatch):
+    from openbot.runtime import runner as runner_mod
+
+    monkeypatch.setattr(runner_mod, "collect_runs", _collecting([]))
+    services, _eng, _t, run = await make(settings, {"eng": [ai("done")]})
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).langsmith_run_id is None
+
+
+def _collecting(traced):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake():
+        yield type("CB", (), {"traced_runs": traced})()
+
+    return fake

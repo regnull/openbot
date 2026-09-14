@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any
 
 from langchain.agents import create_agent
@@ -30,19 +31,6 @@ from openbot.tools.context import RunContext
 
 log = logging.getLogger(__name__)
 TOOL_RESULT_CAP = 4000
-
-
-def trace_root_id(traced_runs: list) -> str | None:
-    """The LangSmith run id to link from a run card.
-
-    `collect_runs()` hands back whichever run finished first, which for an agent is a nested
-    `ChatOpenAI` call, not the `bot:<handle>` root — linking that drops the reader into the middle
-    of the trace. Every run carries the id of its trace root in `trace_id`, so prefer that.
-    """
-    if not traced_runs:
-        return None
-    first = traced_runs[0]
-    return str(getattr(first, "trace_id", None) or first.id)
 
 
 def normalize_interrupt(value: Any) -> dict:
@@ -171,15 +159,20 @@ class Runner:
         seq = await self._next_seq(run.id)
         if resume is not None:
             seq = await self._record(run, seq, "resumed", {"value": getattr(resume, "resume", None)})
+        # Pin the id of the trace's root run instead of reading one back afterwards: under LangGraph's
+        # streaming the runs collect_runs() hands back each look like roots in memory (their parent is
+        # only established server-side from dotted_order), so the first one is a nested ChatOpenAI call
+        # and linking it drops the reader into the middle of the trace.
+        trace_id = uuid.uuid4()
         config = {"configurable": {"thread_id": run.id}, "metadata": {"bot": bot.handle, "thread_id": thread.id, "run_id": run.id},
-                  "run_name": f"bot:{bot.handle}"}
+                  "run_name": f"bot:{bot.handle}", "run_id": trace_id}
         try:
             system_prompt, inputs, hop = await self._prepare(bot, thread, run)
             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, self.s.settings.workspace_root, self.s, hop)
             agent = self._build_agent(bot, system_prompt)
             with collect_runs() as cb:
                 final_text, interrupt, seq = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq)
-            ls_id = trace_root_id(cb.traced_runs)
+            ls_id = str(trace_id) if cb.traced_runs else None
             if interrupt is not None:
                 run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id)
                 await deliver_question(self.s, run, interrupt)
