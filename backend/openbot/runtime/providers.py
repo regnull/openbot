@@ -29,30 +29,23 @@ def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
     if not key:
         raise ValueError(f"provider {bot.provider} is not configured: set {_KEY_ENV[bot.provider]}")
     ms = dict(bot.model_settings or {})
+    kwargs: dict = {}
+    if "temperature" in ms:
+        kwargs["temperature"] = ms["temperature"]
+    if "max_tokens" in ms:
+        kwargs["max_tokens"] = ms["max_tokens"]
 
     if bot.provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
-        model = ChatAnthropic(model=bot.model, api_key=key, max_tokens=ms.get("max_tokens", 8192))
-    else:
-        from langchain_openai import ChatOpenAI
-        kwargs: dict = {}
-        if bot.provider in _BASE_URL:
-            kwargs["base_url"] = _BASE_URL[bot.provider]
-        if bot.provider == "openrouter":
-            kwargs["default_headers"] = {"HTTP-Referer": "https://github.com/regnull/openbot", "X-Title": "OpenBot"}
-        if "max_tokens" in ms:
-            kwargs["max_tokens"] = ms["max_tokens"]
-        model = ChatOpenAI(model=bot.model, api_key=key, **kwargs)
+        kwargs.setdefault("max_tokens", 8192)
+        return ChatAnthropic(model=bot.model, api_key=key, **kwargs)
 
-    # Assigned post-construction (rather than passed to __init__) because some
-    # provider SDKs run model-name-dependent validation at construction time that
-    # silently strips an explicitly-requested temperature (e.g. langchain-openai
-    # clears `temperature` for "gpt-5*" reasoning models unless reasoning_effort
-    # is disabled). Assigning the attribute afterwards does not re-run that
-    # validator, so an operator-configured temperature always takes effect.
-    if "temperature" in ms:
-        model.temperature = ms["temperature"]
-    return model
+    from langchain_openai import ChatOpenAI
+    if bot.provider in _BASE_URL:
+        kwargs["base_url"] = _BASE_URL[bot.provider]
+    if bot.provider == "openrouter":
+        kwargs["default_headers"] = {"HTTP-Referer": "https://github.com/regnull/openbot", "X-Title": "OpenBot"}
+    return ChatOpenAI(model=bot.model, api_key=key, **kwargs)
 
 
 def embeddings(settings: Settings) -> Embeddings | None:

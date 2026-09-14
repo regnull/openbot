@@ -13,7 +13,7 @@ def s(**kw):
 
 def test_chat_model_per_provider():
     st = s(openai_api_key="k1", anthropic_api_key="k2", openrouter_api_key="k3", xai_api_key="k4")
-    m = chat_model(BotProfile(provider="openai", model="gpt-5.5", model_settings={"temperature": 0.2}), st)
+    m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={"temperature": 0.2}), st)
     assert isinstance(m, ChatOpenAI) and m.temperature == 0.2
     m = chat_model(BotProfile(provider="anthropic", model="claude-sonnet-5", model_settings={}), st)
     assert isinstance(m, ChatAnthropic)
