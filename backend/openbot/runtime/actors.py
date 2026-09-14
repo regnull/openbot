@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 from openbot.api.schemas import InboxItemOut, MessageOut, RunOut, to_json
 from openbot.db.models import Actor, InboxItem, Message, Run, utcnow
+from openbot.runtime.delivery import post_message
 
 log = logging.getLogger(__name__)
 
@@ -218,15 +219,29 @@ class ActorSystem:
         if self._started:
             return
         self._started = True
+        interrupted: list[tuple[str, str]] = []
         async with self.s.session_factory() as session:
             for run in (await session.execute(select(Run).where(Run.status == "running"))).scalars():
                 run.status, run.error, run.finished_at = "failed", "server restarted", utcnow()
+                bot = await session.get(Actor, run.actor_id)
+                interrupted.append((run.thread_id, bot.handle if bot else "bot"))
                 for it in (await session.execute(select(InboxItem).where(InboxItem.run_id == run.id, InboxItem.status == "processing"))).scalars():
                     it.status, it.processed_at = "done", utcnow()
             for it in (await session.execute(select(InboxItem).where(InboxItem.status == "processing"))).scalars():
                 it.status = "queued"
             await session.commit()
             pending = (await session.execute(select(InboxItem.actor_id).where(InboxItem.status == "queued").distinct())).scalars().all()
+        # A failed run draws no card in the thread, so without this a run killed by a restart leaves
+        # the reader staring at their own unanswered message. The runner says so for every other
+        # failure; say it here too.
+        for thread_id, handle in interrupted:
+            log.info("run for @%s in thread %s was interrupted by a restart", handle, thread_id)
+            try:
+                async with self.s.session_factory() as session:
+                    await post_message(self.s, session, thread_id=thread_id, sender=None,
+                                       content=f"@{handle} run was interrupted by a server restart.")
+            except Exception:
+                log.exception("could not post the restart notice for thread %s", thread_id)
         for aid in pending:
             await self.notify(aid)
 

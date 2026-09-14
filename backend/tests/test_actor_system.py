@@ -2,7 +2,7 @@ import asyncio
 
 from sqlalchemy import select
 
-from openbot.db.models import Actor, InboxItem, Run
+from openbot.db.models import Actor, InboxItem, Message, Run
 from openbot.runtime.actors import BotActor
 from openbot.runtime.delivery import create_thread, human_actor, post_message
 from tests.conftest import build_test_services
@@ -139,6 +139,12 @@ async def test_recovery_on_start(settings):
     await services.actors.wait_idle()
     rs = await runs(services)
     assert {r.status for r in rs} == {"failed", "completed"} and any(r.error == "server restarted" for r in rs)
+    # A failed run draws no card in the thread, so the interruption has to be said out loud or the
+    # reader is left staring at their own unanswered message.
+    async with services.session_factory() as s:
+        notices = [m.content for m in (await s.execute(select(Message).where(Message.thread_id == t.id))).scalars()
+                   if m.sender_kind == "system"]
+    assert notices == ["@eng run was interrupted by a server restart."]
     await services.actors.stop()
 
 
