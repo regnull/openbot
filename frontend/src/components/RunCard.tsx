@@ -2,17 +2,30 @@ import { useState } from "react";
 import type { Run, RunEvent } from "../api/types";
 import { Badge } from "./ui";
 
+const ACTIVE = ["queued", "running", "waiting_human"];
+
 type Tone = "green" | "red" | "amber" | "blue";
 const tone = (s: string): Tone => (s === "completed" ? "green" : s === "failed" || s === "cancelled" ? "red" : s === "waiting_human" ? "amber" : "blue");
 
 export default function RunCard({ run, events, streaming }: { run: Run; events: RunEvent[]; streaming?: string }) {
-  const [open, setOpen] = useState(run.status === "running");
+  // Runs arrive as `queued` before they run, so "open while active" has to react to the
+  // status changing, not just to its value at mount — otherwise a live card mounts
+  // collapsed and hides the streaming text. A card the reader collapsed stays collapsed.
+  const active = ACTIVE.includes(run.status);
+  const [open, setOpen] = useState(active);
+  const [collapsedByReader, setCollapsedByReader] = useState(false);
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (active && !collapsedByReader) setOpen(true);
+  }
+  const toggle = () => { setCollapsedByReader(open); setOpen(!open); };
   const calls = events.filter((e) => e.type === "tool_call");
   const results = new Map<unknown, RunEvent>(events.filter((e) => e.type === "tool_result").map((e) => [e.payload.tool_call_id, e] as const));
   return (
     <div className="mt-1 rounded-md border border-zinc-200 bg-zinc-50 text-xs dark:border-zinc-800 dark:bg-zinc-900/60">
       <div className="flex items-center gap-2 px-2 py-1">
-        <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setOpen((o) => !o)}>
+        <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={toggle}>
           <Badge tone={tone(run.status)}>{run.status}</Badge>
           <span className="text-zinc-500">{calls.length} tool call{calls.length === 1 ? "" : "s"}</span>
           <span className="ml-auto">{open ? "▾" : "▸"}</span>

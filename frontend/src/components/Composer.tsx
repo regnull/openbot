@@ -6,6 +6,7 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [sel, setSel] = useState(0);
+  const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const q = mentionQuery(text, caret);
   const options = q ? handles.filter((h) => h.startsWith(q.query)).slice(0, 6) : [];
@@ -17,12 +18,22 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
     setSel(0);
     requestAnimationFrame(() => { ref.current?.focus(); ref.current?.setSelectionRange(r.caret, r.caret); });
   };
+  // Clear only once the send succeeds: a failed post keeps the draft to retry, and the
+  // rejection stops here rather than escaping as an unhandled promise.
   const send = async () => {
     const t = text.trim();
-    if (!t) return;
-    setText("");
-    setCaret(0);
-    await onSend(t);
+    if (!t || sending) return;
+    setSending(true);
+    try {
+      await onSend(t);
+      setText("");
+      setCaret(0);
+      setSel(0);
+    } catch {
+      /* the caller renders the error; keep the draft */
+    } finally {
+      setSending(false);
+    }
   };
   return (
     <div className="relative">
@@ -51,7 +62,7 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
         }}
       />
-      <div className="mt-1 flex justify-end"><Button onClick={() => void send()} disabled={disabled || !text.trim()}>Send</Button></div>
+      <div className="mt-1 flex justify-end"><Button onClick={() => void send()} disabled={disabled || sending || !text.trim()}>{sending ? "Sending…" : "Send"}</Button></div>
     </div>
   );
 }

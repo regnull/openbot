@@ -6,7 +6,7 @@ import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
 import MessageList from "../components/MessageList";
 import { Button, ErrorText, Spinner } from "../components/ui";
-import { emptyThreadState, hydrate, reduceThreadEvent, type ThreadState } from "../lib/threadState";
+import { emptyThreadState, hydrate, mergeRun, reduceThreadEvent, type ThreadState } from "../lib/threadState";
 
 export default function ThreadPage() {
   const { id = "" } = useParams();
@@ -16,8 +16,9 @@ export default function ThreadPage() {
   const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
   const [state, setState] = useState<ThreadState>(emptyThreadState());
   const [notice, setNotice] = useState<string | null>(null);
-  useEffect(() => { setState(emptyThreadState()); }, [id]);
-  useEffect(() => { if (detail.data) setState((s) => hydrate(s, detail.data)); }, [id, detail.data]);
+  const [hasMore, setHasMore] = useState(false);
+  useEffect(() => { setState(emptyThreadState()); setHasMore(false); }, [id]);
+  useEffect(() => { if (detail.data) { setState((s) => hydrate(s, detail.data)); setHasMore(detail.data.has_more); } }, [id, detail.data]);
   // Ack on open and whenever new messages land, so the inbox badge stays honest.
   useEffect(() => { Api.ackThread(id).then(() => qc.invalidateQueries({ queryKey: ["inbox"] })).catch(() => {}); }, [id, qc, state.messages.length]);
   useBusEvents(id, (e) => setState((s) => reduceThreadEvent(s, e)));
@@ -25,12 +26,10 @@ export default function ThreadPage() {
     mutationFn: (content: string) => Api.postMessage(id, { content }),
     onSuccess: (r) => setNotice(r.unaddressed ? "No bot was addressed. Mention a bot with @handle to wake it up." : null),
   });
-  const loadOlder = async () => {
-    const first = state.messages[0];
-    if (!first) return;
-    const older = await Api.getThread(id, first.id);
-    setState((s) => hydrate(s, older));
-  };
+  const loadOlder = useMutation({
+    mutationFn: () => Api.getThread(id, state.messages[0].id),
+    onSuccess: (older) => { setState((s) => hydrate(s, older)); setHasMore(older.has_more); },
+  });
   const del = useMutation({ mutationFn: () => Api.deleteThread(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["threads"] }); nav("/threads"); } });
   if (detail.isLoading) return <Spinner />;
   if (!detail.data) return <ErrorText error={detail.error} />;
@@ -48,8 +47,13 @@ export default function ThreadPage() {
         <Button variant="secondary" onClick={() => window.confirm("Delete thread?") && del.mutate()}>Delete</Button>
       </div>
       <div className="flex-1 overflow-y-auto py-4">
-        {t.has_more && <div className="mb-3 text-center"><Button variant="secondary" onClick={() => void loadOlder()}>Load older</Button></div>}
-        <MessageList state={state} participants={t.participants} onRunLoaded={(runId, events) => setState((s) => ({ ...s, runEvents: { ...s.runEvents, [runId]: events } }))} />
+        {hasMore && state.messages.length > 0 && (
+          <div className="mb-3 space-y-1 text-center">
+            <Button variant="secondary" onClick={() => loadOlder.mutate()} disabled={loadOlder.isPending}>Load older</Button>
+            <ErrorText error={loadOlder.error} />
+          </div>
+        )}
+        <MessageList state={state} participants={t.participants} onRunLoaded={(run) => setState((s) => mergeRun(s, run))} />
       </div>
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         {notice && <p className="mb-1 text-xs text-amber-600">{notice}</p>}

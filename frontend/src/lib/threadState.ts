@@ -1,4 +1,4 @@
-import type { BusEvent, Message, Run, RunEvent, ThreadDetail } from "../api/types";
+import type { BusEvent, Message, Run, RunDetail, RunEvent, ThreadDetail } from "../api/types";
 
 export interface ThreadState { messages: Message[]; runs: Record<string, Run>; runEvents: Record<string, RunEvent[]>; streaming: Record<string, string>; }
 
@@ -12,6 +12,24 @@ export function hydrate(state: ThreadState, detail: ThreadDetail): ThreadState {
   const runs = { ...state.runs };
   detail.runs.forEach((r) => (runs[r.id] = r));
   return { ...state, messages: sortMsgs([...byId.values()]), runs };
+}
+
+/**
+ * Fold a run fetched on demand (GET /runs/{id}) into the thread. `GET /threads/{id}`
+ * only returns *open* runs, so a completed run reached this way is the only copy we
+ * have and must be kept in `runs` — otherwise its card would vanish as soon as the
+ * query that produced it is dropped. Idempotent: an existing run came from SSE and is
+ * at least as fresh, and events are merged by id.
+ */
+export function mergeRun(state: ThreadState, detail: RunDetail): ThreadState {
+  const { events, ...run } = detail;
+  const byId = new Map((state.runEvents[run.id] ?? []).map((e) => [e.id, e]));
+  events.forEach((e) => byId.set(e.id, e));
+  return {
+    ...state,
+    runs: { ...state.runs, [run.id]: state.runs[run.id] ?? run },
+    runEvents: { ...state.runEvents, [run.id]: [...byId.values()].sort((a, b) => a.seq - b.seq) },
+  };
 }
 
 export function reduceThreadEvent(state: ThreadState, e: BusEvent): ThreadState {
