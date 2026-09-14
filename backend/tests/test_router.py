@@ -22,6 +22,13 @@ def test_parse_mentions():
     assert parse_mentions("@a") == []
 
 
+def test_parse_mentions_trailing_punctuation():
+    assert parse_mentions("See @eng.") == ["eng"]
+    assert parse_mentions("cc @eng-team, then @qa!") == ["eng-team", "qa"]
+    assert parse_mentions("read @eng.txt") == []
+    assert parse_mentions("me@example.com") == []
+
+
 def test_explicit_targets_in_order():
     t = resolve_targets(sender=YOU, mentioned_handles=["rev"], to_handles=["eng", "rev"],
                         actors_by_handle=ACTORS, thread_bot_ids=[])
