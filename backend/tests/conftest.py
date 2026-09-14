@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from openbot.config import Settings
 from openbot.db.session import create_all, make_engine, make_session_factory
 from openbot.main import create_app
+from openbot.runtime.bus import EventBus
 from openbot.services import Services
 from openbot.tools.registry import build_registry
 
@@ -22,6 +23,7 @@ async def services(settings) -> Services:
     await create_all(engine)
     services = Services(settings=settings, session_factory=make_session_factory(engine), _owned_resources=[engine])
     services.registry = build_registry(settings)
+    services.bus = EventBus()
     return services
 
 

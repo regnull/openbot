@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from openbot.api import actors, bots, tools
+from openbot.api import actors, bots, events, tools
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
+from openbot.runtime.bus import EventBus
 from openbot.seed import ensure_human_actor
 from openbot.services import Services
 from openbot.tools.registry import build_registry
@@ -25,6 +26,7 @@ async def build_services(settings: Settings) -> Services:
     services = Services(settings=settings, session_factory=make_session_factory(engine))
     services._owned_resources = [engine]
     services.registry = build_registry(settings)
+    services.bus = EventBus()
     return services
 
 
@@ -73,6 +75,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     api.include_router(actors.router)
     api.include_router(bots.router)
     api.include_router(tools.router)
+    api.include_router(events.router)
     app.include_router(public)
     app.include_router(api)
     return app
