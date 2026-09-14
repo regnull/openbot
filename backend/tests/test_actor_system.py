@@ -27,6 +27,20 @@ async def post(services, t, text):
         return await post_message(services, s, thread_id=t.id, sender=you, content=text)
 
 
+async def until(check, timeout=5.0, interval=0.02):
+    """Poll `check` until it returns something truthy. A fixed sleep is a coin flip on a loaded
+    machine (and in CI); this waits for the condition instead and only fails after `timeout`."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    result = None
+    while loop.time() < deadline:
+        result = await check()
+        if result:
+            return result
+        await asyncio.sleep(interval)
+    raise AssertionError(f"condition not met within {timeout}s (last value: {result!r})")
+
+
 async def runs(services):
     async with services.session_factory() as s:
         return (await s.execute(select(Run).order_by(Run.created_at))).scalars().all()
@@ -84,15 +98,18 @@ async def test_one_run_at_a_time_per_bot_but_bots_parallel(settings):
 
         def __next__(self):
             import time
-            time.sleep(0.2)
+            time.sleep(1.0)            # wide enough that both runs are still "running" when polled
             return AIMessage(content="late")
 
     services, t = await setup(settings, {}, handles=("eng", "rev"))
     services.model_factory = lambda actor: ScriptedChatModel(messages=Slow())
     await post(services, t, "@eng @rev go")
-    await asyncio.sleep(0.05)
-    running = [r for r in await runs(services) if r.status == "running"]
-    assert len(running) == 2
+
+    async def both_running():
+        rs = [r for r in await runs(services) if r.status == "running"]
+        return rs if len(rs) == 2 else None
+
+    assert len(await until(both_running, timeout=2.0)) == 2
     await services.actors.wait_idle()
     await services.actors.stop()
 
@@ -106,14 +123,17 @@ async def test_cancel_running(settings):
 
         def __next__(self):
             import time
-            time.sleep(0.3)
+            time.sleep(1.0)
             return AIMessage(content="late")
 
     services, t = await setup(settings, {})
     services.model_factory = lambda actor: ScriptedChatModel(messages=Slow())
     await post(services, t, "go")
-    await asyncio.sleep(0.05)
-    run = (await runs(services))[0]
+
+    async def running():
+        return next((r for r in await runs(services) if r.status == "running"), None)
+
+    run = await until(running, timeout=2.0)
     assert await services.actors.cancel_run(run.id) is True
     await services.actors.wait_idle()
     assert (await runs(services))[0].status == "cancelled"
@@ -132,19 +152,34 @@ async def test_recovery_on_start(settings):
         await post_message(services, s, thread_id=t.id, sender=you, content="hi")     # actors not started: item stays queued
         stale = Run(actor_id=eng.id, thread_id=t.id, status="running")
         s.add(stale)
+        # _pick commits the run as "queued" with its items already "processing", before the
+        # semaphore and the runner. A shutdown in that window used to leave the run queued forever:
+        # nothing picks it up, it blocks DELETE /bots/{id} with 409, and it draws a phantom active
+        # card. No worker exists during start(), so a queued run is provably orphaned.
+        orphan = Run(actor_id=eng.id, thread_id=t.id, status="queued")
+        s.add(orphan)
         await s.flush()
         s.add(InboxItem(actor_id=eng.id, thread_id=t.id, kind="message", status="processing", run_id=stale.id))
+        s.add(InboxItem(actor_id=eng.id, thread_id=t.id, kind="message", status="processing", run_id=orphan.id))
         await s.commit()
+        stale_id, orphan_id = stale.id, orphan.id
     await services.actors.start()
     await services.actors.wait_idle()
     rs = await runs(services)
-    assert {r.status for r in rs} == {"failed", "completed"} and any(r.error == "server restarted" for r in rs)
+    by_id = {r.id: r for r in rs}
+    assert by_id[stale_id].status == "failed" and by_id[stale_id].error == "server restarted"
+    assert by_id[orphan_id].status == "failed" and by_id[orphan_id].error == "server restarted"
+    assert not [r for r in rs if r.status == "queued"]            # no ghost left behind
+    assert [r.status for r in rs if r.id not in (stale_id, orphan_id)] == ["completed"]
+    async with services.session_factory() as s:
+        settled = (await s.execute(select(InboxItem).where(InboxItem.run_id.in_([stale_id, orphan_id])))).scalars().all()
+    assert [i.status for i in settled] == ["done", "done"]
     # A failed run draws no card in the thread, so the interruption has to be said out loud or the
-    # reader is left staring at their own unanswered message.
+    # reader is left staring at their own unanswered message. Both orphans get the same notice.
     async with services.session_factory() as s:
         notices = [m.content for m in (await s.execute(select(Message).where(Message.thread_id == t.id))).scalars()
                    if m.sender_kind == "system"]
-    assert notices == ["@eng run was interrupted by a server restart."]
+    assert notices == ["@eng run was interrupted by a server restart."] * 2
     await services.actors.stop()
 
 

@@ -73,6 +73,36 @@ async def test_run_shell_kills_process_group_on_timeout(tmp_path):
         os.kill(child_pid, 0)
 
 
+async def test_run_shell_kills_process_group_on_cancellation(tmp_path):
+    # Cancelling a run cancels the tool coroutine. Without a killpg on CancelledError the shell and
+    # everything it spawned keep running after the run is gone -- an orphaned build or `sleep` that
+    # nothing will ever reap.
+    r = rt(tmp_path)
+    task = asyncio.create_task(run_shell.ainvoke({
+        "command": "sleep 5 & echo $! > child.pid; wait",
+        "timeout": 30,
+        "runtime": r,
+    }))
+    pid_file = tmp_path / "child.pid"
+    for _ in range(100):                      # wait for bash to actually spawn the child
+        await asyncio.sleep(0.01)
+        if pid_file.exists() and pid_file.read_text().strip():
+            break
+    child_pid = int(pid_file.read_text().strip())
+    os.kill(child_pid, 0)                     # alive before the cancel
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    for _ in range(100):
+        try:
+            os.kill(child_pid, 0)
+        except ProcessLookupError:
+            break
+        await asyncio.sleep(0.01)
+    with pytest.raises(ProcessLookupError):
+        os.kill(child_pid, 0)
+
+
 def test_selectable_names():
     assert [t.name for t in SELECTABLE_TOOLS] == [
         "run_shell", "read_file", "write_file", "list_files", "http_request", "fetch_url"]

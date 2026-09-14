@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
@@ -72,6 +73,15 @@ async def stop_background(services: Services) -> None:
     if services.actors is not None:
         await services.actors.stop()
     if services.reflector is not None:
+        # Reflection is debounced by MEMORY_REFLECTION_DELAY (30s by default), so on a normal
+        # restart the last run's memories are still sitting in the pending map. Run them now rather
+        # than dropping them -- but bounded, so a hung provider call cannot wedge the shutdown.
+        try:
+            await asyncio.wait_for(services.reflector.flush(), timeout=10)
+        except TimeoutError:
+            log.warning("memory reflection did not finish within 10s; dropping pending memories")
+        except Exception:
+            log.exception("memory reflection failed during shutdown")
         await services.reflector.shutdown()
 
 

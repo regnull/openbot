@@ -221,7 +221,13 @@ class ActorSystem:
         self._started = True
         interrupted: list[tuple[str, str]] = []
         async with self.s.session_factory() as session:
-            for run in (await session.execute(select(Run).where(Run.status == "running"))).scalars():
+            # "queued" runs are orphans too: _pick commits the Run row and flips its items to
+            # "processing" before the semaphore and the runner, so a shutdown in that window leaves a
+            # run nothing will ever pick up (it blocks DELETE /bots/{id} and draws a phantom active
+            # card). No worker exists yet at this point in start(), so every queued run is provably
+            # stale and gets the same treatment as an interrupted running one.
+            stale = select(Run).where(Run.status.in_(["running", "queued"]))
+            for run in (await session.execute(stale)).scalars():
                 run.status, run.error, run.finished_at = "failed", "server restarted", utcnow()
                 bot = await session.get(Actor, run.actor_id)
                 interrupted.append((run.thread_id, bot.handle if bot else "bot"))

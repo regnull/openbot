@@ -8,6 +8,14 @@ from openbot.tools.builtin.workspace import cap, resolve_in_workspace
 from openbot.tools.context import RunContext
 
 
+async def _kill_group(proc: asyncio.subprocess.Process) -> None:
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    await proc.wait()
+
+
 @tool
 async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | None = None,
                     timeout: int = 120) -> str:
@@ -25,12 +33,14 @@ async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | N
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except TimeoutError:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        await proc.wait()
+        await _kill_group(proc)
         return f"error: command timed out after {timeout}s"
+    except asyncio.CancelledError:
+        # A cancelled run (user pressed Cancel, or the actor's task was torn down) must not leave the
+        # command and everything it spawned running forever. start_new_session put them in their own
+        # process group, so one killpg reaps the lot; then wait() so no zombie is left behind.
+        await _kill_group(proc)
+        raise
     parts = [f"exit code: {proc.returncode}"]
     if out:
         parts.append("stdout:\n" + out.decode(errors="replace"))
