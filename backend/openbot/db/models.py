@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -28,13 +29,41 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class UTCDateTime(TypeDecorator):
+    """DateTime type that always round-trips as a tz-aware UTC datetime.
+
+    SQLite has no native timezone support, so values written as tz-aware UTC
+    come back from the driver as naive datetimes. This decorator normalizes
+    on the way in (converting aware datetimes to UTC, treating naive input as
+    already UTC) and re-attaches UTC on the way out (treating naive values
+    read back as UTC, converting any aware value to UTC just in case).
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+
 class Base(DeclarativeBase):
     pass
 
 
 class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class Actor(TimestampMixin, Base):
@@ -79,7 +108,7 @@ class Thread(TimestampMixin, Base):
     created_by_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     external_ref: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
     hop_limit_notified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_message_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
 class ThreadParticipant(Base):
@@ -103,7 +132,7 @@ class Message(Base):
     hop: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     meta: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
 
 class InboxItem(Base):
@@ -119,8 +148,8 @@ class InboxItem(Base):
     status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
 class Run(Base):
@@ -133,9 +162,9 @@ class Run(Base):
     interrupt: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     langsmith_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
 class RunEvent(Base):
@@ -146,4 +175,4 @@ class RunEvent(Base):
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     type: Mapped[str] = mapped_column(String(16), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)

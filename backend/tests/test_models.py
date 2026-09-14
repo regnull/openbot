@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from sqlalchemy import inspect, select
 
+from openbot.api.schemas import MessageOut, to_json
 from openbot.db.models import Actor, InboxItem, Message, Run, Thread, ThreadParticipant
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
 from tests.factories import bot_actor, external_actor, human_actor
@@ -37,6 +40,36 @@ async def test_roundtrip():
         assert m.hop == 0 and m.mentions == [a.id]
         await s.delete(a)
         await s.commit()
+
+
+async def test_timestamps_are_tz_aware_utc_on_reread(tmp_path):
+    url = f"sqlite+aiosqlite:///{tmp_path}/tz.db"
+    engine = make_engine(url)
+    await create_all(engine)
+    sf = make_session_factory(engine)
+    async with sf() as s:
+        thread = Thread(title="t")
+        s.add(thread)
+        await s.flush()
+        msg = Message(thread_id=thread.id, sender_kind="human", sender_name="You", content="hi")
+        s.add(msg)
+        await s.commit()
+        thread_id, message_id = thread.id, msg.id
+
+    # Re-read in a fresh session: SQLite loses tzinfo on round-trip unless the
+    # UTCDateTime decorator re-attaches it.
+    async with sf() as s:
+        reread_thread = (await s.execute(select(Thread).where(Thread.id == thread_id))).scalar_one()
+        reread_message = (await s.execute(select(Message).where(Message.id == message_id))).scalar_one()
+
+        for obj in (reread_thread, reread_message):
+            assert obj.created_at.tzinfo is not None
+            assert obj.created_at.utcoffset() == timedelta(0)
+        assert reread_thread.updated_at.tzinfo is not None
+        assert reread_thread.updated_at.utcoffset() == timedelta(0)
+
+        payload = to_json(MessageOut, reread_message)
+        assert payload["created_at"].endswith("+00:00") or payload["created_at"].endswith("Z")
 
 
 async def test_migrations_create_schema(tmp_path):
