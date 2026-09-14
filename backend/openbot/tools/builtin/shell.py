@@ -1,4 +1,6 @@
 import asyncio
+import os
+import signal
 
 from langchain.tools import ToolRuntime, tool
 
@@ -18,11 +20,15 @@ async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | N
     workdir.mkdir(parents=True, exist_ok=True)
     proc = await asyncio.create_subprocess_exec(
         "bash", "-lc", command, cwd=str(workdir),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        start_new_session=True)
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except TimeoutError:
-        proc.kill()
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         await proc.wait()
         return f"error: command timed out after {timeout}s"
     parts = [f"exit code: {proc.returncode}"]

@@ -1,3 +1,5 @@
+import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -47,6 +49,28 @@ async def test_run_shell(tmp_path):
     assert "timed out" in out
     out = await run_shell.ainvoke({"command": "pwd", "cwd": "../", "runtime": r})
     assert out.startswith("error:")
+
+
+async def test_run_shell_kills_process_group_on_timeout(tmp_path):
+    r = rt(tmp_path)
+    start = asyncio.get_event_loop().time()
+    out = await run_shell.ainvoke({
+        "command": "sleep 5 & echo $! > child.pid; wait",
+        "timeout": 1,
+        "runtime": r,
+    })
+    elapsed = asyncio.get_event_loop().time() - start
+    assert "timed out" in out
+    # If only the top-level bash pid were killed, the backgrounded `sleep 5` would
+    # keep the stdout/stderr pipes open and `proc.wait()` would block for the full
+    # 5s until it exits on its own. Killing the whole process group must make the
+    # tool return promptly instead.
+    assert elapsed < 2, f"run_shell took {elapsed:.2f}s - orphaned child was not killed promptly"
+    pid_file = tmp_path / "child.pid"
+    assert pid_file.exists()
+    child_pid = int(pid_file.read_text().strip())
+    with pytest.raises(ProcessLookupError):
+        os.kill(child_pid, 0)
 
 
 def test_selectable_names():
