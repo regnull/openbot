@@ -28,10 +28,23 @@ async def _noop(*_a, **_k):
     return []
 
 
+_engines: list = []
+
+
+@pytest.fixture(autouse=True)
+async def _dispose_engines():
+    """Autouse, so it tears down last: dispose every engine built during the test. Without this the
+    aiosqlite connection threads outlive the test's event loop and warn when it is already closed."""
+    yield
+    while _engines:
+        await _engines.pop().dispose()
+
+
 async def build_test_services(settings: Settings, scripts: dict | None = None) -> Services:
-    """In-memory DB/store/checkpointer, scripted models keyed by bot handle, @you present.
-    Runner/actor system are attached in Tasks 14/15 (they import lazily so earlier tasks still work)."""
+    """Per-test file-backed DB, in-memory store/checkpointer, scripted models keyed by bot handle,
+    @you present. Runner and actor system are attached here too (imported lazily)."""
     engine = make_engine(settings.database_url)
+    _engines.append(engine)
     await create_all(engine)
     scripts = scripts if scripts is not None else {}
     services = Services(settings=settings, session_factory=make_session_factory(engine), _owned_resources=[engine])
@@ -85,6 +98,8 @@ async def services(settings, scripts) -> Services:
     yield s
     if s.actors is not None:
         await s.actors.stop()
+    if s.http_client is not None:
+        await s.http_client.aclose()
 
 
 @pytest.fixture

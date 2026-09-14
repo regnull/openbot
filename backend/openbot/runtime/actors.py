@@ -113,13 +113,22 @@ class BotActor(_Worker):
             log.exception("run %s crashed", batch.run_id)
         finally:
             self.current_task, self.current_run_id = None, None
-            async with s.session_factory() as session:
-                rows = (await session.execute(select(InboxItem).where(InboxItem.id.in_([i.id for i in batch.items])))).scalars().all()
+            rows: list[InboxItem] = []
+            try:
+                async with s.session_factory() as session:
+                    # Only items still "processing": a cancel_run that raced _pick already settled
+                    # them as "cancelled", and that must not be overwritten with "done".
+                    rows = (await session.execute(select(InboxItem).where(InboxItem.id.in_([i.id for i in batch.items]),
+                                                                          InboxItem.status == "processing"))).scalars().all()
+                    for i in rows:
+                        i.status, i.processed_at = status, utcnow()
+                    await session.commit()
                 for i in rows:
-                    i.status, i.processed_at = status, utcnow()
-                await session.commit()
-            for i in rows:
-                await s.bus.publish("inbox.updated", i.thread_id, to_json(InboxItemOut, i))
+                    await s.bus.publish("inbox.updated", i.thread_id, to_json(InboxItemOut, i))
+            except Exception:
+                # Best-effort: bookkeeping must never abort the drain or mask the run's own error.
+                # Items left "processing" are requeued by recovery on the next start().
+                log.exception("failed to finalize inbox items for run %s", batch.run_id)
 
 
 class ExternalActor(_Worker):
@@ -185,11 +194,15 @@ class ActorSystem:
         if w is None:
             async with self.s.session_factory() as session:
                 actor = await session.get(Actor, actor_id)
-            if actor is None or actor.kind == "human":
+            if actor is None or actor.kind == "human" or not self._started:
                 return
-            w = BotActor(self, actor_id) if actor.kind == "bot" else ExternalActor(self, actor_id)
-            self._workers[actor_id] = w
-            w.start()
+            # Re-check after the await: a concurrent notify() for the same actor reaches here too, and
+            # a second worker would mean two concurrent runs for one bot plus a task stop() never sees.
+            w = self._workers.get(actor_id)
+            if w is None:
+                w = BotActor(self, actor_id) if actor.kind == "bot" else ExternalActor(self, actor_id)
+                self._workers[actor_id] = w
+                w.start()
         w.wake()
 
     async def cancel_run(self, run_id: str) -> bool:

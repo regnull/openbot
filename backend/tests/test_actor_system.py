@@ -2,7 +2,8 @@ import asyncio
 
 from sqlalchemy import select
 
-from openbot.db.models import InboxItem, Run
+from openbot.db.models import Actor, InboxItem, Run
+from openbot.runtime.actors import BotActor
 from openbot.runtime.delivery import create_thread, human_actor, post_message
 from tests.conftest import build_test_services
 from tests.factories import bot_actor
@@ -138,4 +139,55 @@ async def test_recovery_on_start(settings):
     await services.actors.wait_idle()
     rs = await runs(services)
     assert {r.status for r in rs} == {"failed", "completed"} and any(r.error == "server restarted" for r in rs)
+    await services.actors.stop()
+
+
+async def test_concurrent_notify_creates_one_worker(settings, monkeypatch):
+    services, _t = await setup(settings, {"eng": [ai("one")]})
+    async with services.session_factory() as s:
+        eng = (await s.execute(select(Actor).where(Actor.handle == "eng"))).scalar_one()
+    started: list[BotActor] = []
+    original_start = BotActor.start
+
+    def spy(self):
+        started.append(self)
+        original_start(self)
+
+    monkeypatch.setattr(BotActor, "start", spy)
+    # notify() awaits a DB session before registering the worker: concurrent calls must not race.
+    await asyncio.gather(*(services.actors.notify(eng.id) for _ in range(5)))
+    assert len(started) == 1 and len(services.actors._workers) == 1
+    assert services.actors._workers[eng.id] is started[0]
+    await services.actors.stop()
+
+
+async def test_drain_survives_item_bookkeeping_failure(settings):
+    services = await build_test_services(settings, {"eng": [ai("one"), ai("two")]})
+    async with services.session_factory() as s:
+        s.add(bot_actor("eng"))
+        await s.commit()
+        you = await human_actor(s)
+        t1 = await create_thread(services, s, title="t1", handles=["eng"], created_by=you)
+        t2 = await create_thread(services, s, title="t2", handles=["eng"], created_by=you)
+        await post_message(services, s, thread_id=t1.id, sender=you, content="one")
+        await post_message(services, s, thread_id=t2.id, sender=you, content="two")
+    real_factory, real_execute, armed = services.session_factory, services.runner.execute, {"on": False}
+
+    def factory():
+        if armed["on"]:                     # the first session opened after a run is _process's finally
+            armed["on"] = False
+            raise RuntimeError("bookkeeping db failure")
+        return real_factory()
+
+    async def execute(run_id, resume=None):
+        await real_execute(run_id, resume=resume)
+        armed["on"] = True
+
+    services.runner.execute, services.session_factory = execute, factory
+    await services.actors.start()
+    await services.actors.wait_idle()
+    rs = await runs(services)
+    # batch 1's bookkeeping blew up, but the drain kept going and still picked up batch 2
+    assert [r.thread_id for r in rs] == [t1.id, t2.id]
+    assert [r.status for r in rs] == ["completed", "completed"]
     await services.actors.stop()
