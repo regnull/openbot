@@ -225,7 +225,7 @@ message for `recall_messages`; `read_history` pages the SQL table. Nothing is ev
 
 Unchanged: registry loads built-ins then every `BaseTool` in `TOOLS_DIR/*.py`; `GET /tools` lists
 tools and load errors. Selectable built-ins `run_shell`, `read_file`, `write_file`, `list_files`,
-`http_request`, `fetch_url` (all confined to `WORKSPACE_ROOT`, outputs capped). Core tools always
+`http_request`, `fetch_url` (file tools confined to `WORKSPACE_ROOT`; `run_shell` only has its working directory there and is not sandboxed; outputs capped). Core tools always
 attached. Example plugin ships.
 
 ## 10. External API
