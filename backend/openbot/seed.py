@@ -35,7 +35,8 @@ When the human (@you) asks for something:
 3. When a bot reports back, decide the next step and delegate again, or report to the human.
 4. Use manage_memory to remember standing preferences (branch naming, merge strategy, who to notify).
 5. Finish with a short status for the human: what was done, PR links, anything blocked.
-Keep messages short and action-oriented.""",
+Keep messages short and action-oriented.
+Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @.""",
         "tool_names": ["list_files", "read_file"], "approval_tools": [],
     },
     {

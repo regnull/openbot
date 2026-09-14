@@ -238,13 +238,13 @@ Base `/api/v1`, JSON, OpenAPI at `/docs`. `X-API-Key` required when `OPENBOT_API
 | POST | `/actors` | create an **external** actor `{handle, name, description?, webhook_url?, webhook_secret?}` |
 | GET/PATCH/DELETE | `/actors/{id}` | external actors only for PATCH/DELETE; bots via `/bots` |
 | GET | `/actors/{handle}/inbox?status=queued` | that actor's inbox items |
-| POST | `/actors/{handle}/messages` | `{content, from?: handle (default "you"), thread_id?, external_ref?}`; with `thread_id` posts there addressed to the actor; otherwise reuses the thread with `external_ref` or creates a 1:1 thread; returns `{thread, message, runs}` |
+| POST | `/actors/{handle}/messages` | `{content, from?: handle (default "you"), thread_id?, external_ref?}`; with `thread_id` posts there addressed to the actor; otherwise reuses the thread with `external_ref` or creates a 1:1 thread; returns `{thread, message, addressed}` (runs are created asynchronously by the actor system and arrive over SSE) |
 | GET/POST | `/bots` | list; create bot actor + profile (flattened fields) |
 | GET/PATCH/DELETE | `/bots/{id}` | delete refuses while runs are open |
 | GET/POST | `/threads` | list (latest activity first); create `{title?, handles[]}` |
 | GET | `/threads/{id}?before=&limit=` | thread, participants, messages page, open runs |
 | DELETE | `/threads/{id}` | |
-| POST | `/threads/{id}/messages` | `{content, to?: handles[], from?: handle}` → `{message, runs, unaddressed}` |
+| POST | `/threads/{id}/messages` | `{content, to?: handles[], from?: handle}` → `{message, addressed, unaddressed}` (runs are created asynchronously by the actor system and arrive over SSE) |
 | POST | `/threads/{id}/ack` | mark `@you`'s queued message items in the thread done |
 | GET | `/inbox?status=queued` | `@you`'s inbox |
 | POST | `/inbox/{item_id}/ack` | mark an item done (any actor) |

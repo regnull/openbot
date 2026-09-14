@@ -19,8 +19,9 @@ webhook-driven external system all participate in the same conversation the same
   run at a time per bot, with a global concurrency cap.
 - **Multi-bot workflows**: bots hand off to each other with `@mention`, with a hop limit to
   prevent runaway bot-to-bot loops.
-- **Tools**: built-in shell/file/HTTP tools confined to a workspace directory, plus a plugin
-  directory of your own Python tools.
+- **Tools**: built-in shell/file/HTTP tools rooted at a workspace directory, plus a plugin
+  directory of your own Python tools. `run_shell` is **not** sandboxed — see
+  [Trust model / security](#trust-model--security).
 - **Memory**: per-bot long-term memory (LangMem) that bots can search and update, with automatic
   background reflection after each run.
 - **Approvals and questions**: bots can ask a human before taking a sensitive action
@@ -87,10 +88,49 @@ repository, using the [`gh`](https://cli.github.com/) CLI.
 | **Approval** | A pause requested by a tool (`ask_human`, or a tool flagged for approval) that turns into a `question` inbox item for the human and any external participants; the bot resumes once it is answered. |
 | **Memory** | Per-bot long-term memory in the LangGraph store, searchable and updatable by the bot, refreshed by a background reflection step after each run. Nothing is ever purged. |
 
+## Trust model / security
+
+OpenBot is built for a **single trusted operator running it on their own machine**. There is no
+login, no user accounts, and no privilege separation. Anyone who can reach the HTTP port and anyone
+who can get a bot to run a tool has, in practice, the privileges of the server process. Read this
+before exposing OpenBot to a network or pointing a bot at untrusted input.
+
+- **`run_shell` is not sandboxed.** It executes arbitrary commands with `bash -lc` as the user
+  running the server, with that user's full filesystem and network access. The only thing the
+  workspace gives you is the command's *starting working directory*: `cd /`, `../`, absolute paths
+  and anything else all work normally. It also inherits the server's environment, including the
+  provider API keys loaded from `.env`, so a command can read or exfiltrate them. There is no
+  container, no chroot, no seccomp, and no allowlist — giving a bot `run_shell` is equivalent to
+  giving whoever can talk to that bot a shell on the host.
+- **Only the file tools are path-confined.** `read_file`, `write_file` and `list_files` resolve
+  every path against `WORKSPACE_ROOT` and reject anything that escapes it (`../`, absolute paths,
+  symlinks out). That confinement is real, but it protects nothing once `run_shell` is also
+  enabled.
+- **`http_request` and `fetch_url` are unrestricted.** Any URL, any method — including private
+  network ranges and `localhost`. A bot can therefore call OpenBot's own API on the loopback
+  interface, which is **unauthenticated unless `OPENBOT_API_KEY` is set**: it could create or edit
+  bots, post messages as other actors, or answer its own approval questions. Setting
+  `OPENBOT_API_KEY` closes that loop only as long as the key is not in the environment the shell
+  tool inherits.
+- **The `?api_key=` query-string fallback leaks.** Browsers cannot set headers on an SSE
+  (`EventSource`) connection, so `/api/v1/events` accepts the key as a query parameter and the
+  frontend uses it. Query strings routinely end up in reverse-proxy access logs, browser history
+  and `Referer` headers — treat `OPENBOT_API_KEY` as a low-assurance secret, not a real
+  credential, and rotate it if such logs are shared.
+- **Prompt injection is a live path to all of the above.** A bot that reads a web page, a PR diff,
+  or a message from an external actor can be instructed by that content. With `run_shell` enabled
+  this is remote code execution. Give each bot the smallest tool set that does its job, use the
+  per-tool approval flags for anything destructive, and do not run OpenBot against repositories or
+  URLs you do not trust.
+
+Practical guidance: bind to `127.0.0.1`, keep it off shared networks, set `OPENBOT_API_KEY` even
+locally, and run it as a dedicated low-privilege user (or in a VM/container) if bots have
+`run_shell`. Docker sandboxing for tools is on the roadmap, not in v1.
+
 ## Tools and plugins
 
 Bots select from a registry of built-in tools (`run_shell`, `read_file`, `write_file`,
-`list_files`, `http_request`, `fetch_url`, all confined to `WORKSPACE_ROOT`) plus a handful of
+`list_files`, `http_request`, `fetch_url`) plus a handful of
 core tools every bot always has (`list_bots`, `start_thread`, `ask_human`, `read_history`,
 `recall_messages`, and LangMem's `manage_memory`/`search_memory`).
 
@@ -110,6 +150,10 @@ def get_time() -> str:
 ```
 
 `GET /api/v1/tools` lists every loaded tool and any load errors.
+
+Only `read_file`, `write_file` and `list_files` are path-confined to `WORKSPACE_ROOT`. `run_shell`
+starts in the workspace but is otherwise unrestricted, and `http_request`/`fetch_url` can reach any
+URL. Read [Trust model / security](#trust-model--security) before giving a bot these tools.
 
 ## External actors and webhooks
 
@@ -199,7 +243,7 @@ provider keys.
 | `LANGSMITH_API_KEY` | *(unset)* | LangSmith API key. |
 | `LANGSMITH_PROJECT` | `openbot` | LangSmith project name. |
 | `LANGSMITH_ENDPOINT` | *(unset)* | LangSmith endpoint override, for self-hosted/EU instances. |
-| `WORKSPACE_ROOT` | `./workspace` | Directory that shell/file tools are confined to. |
+| `WORKSPACE_ROOT` | `./workspace` | Working directory for the shell tool and the confinement root for the file tools. `run_shell` only *starts* here — it is not sandboxed to it. |
 | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
 | `MAX_CONCURRENT_RUNS` | `4` | Global cap on simultaneous bot runs. |
 | `MAX_BOT_HOPS` | `20` | Bot-to-bot mention chain limit per thread before a human message is required. |
@@ -226,6 +270,7 @@ automatically at startup against any non-`:memory:` database; nothing to run by 
 cd backend && uv sync
 uv run pytest -q
 uv run ruff check .
+uv run pytest -m smoke -v     # opt-in: live provider calls, costs real money
 
 # frontend
 cd frontend && pnpm install
@@ -235,7 +280,10 @@ pnpm lint
 pnpm build
 ```
 
-Or, from the repo root: `make test`, `make lint`, `make build`.
+Or, from the repo root: `make test`, `make lint`, `make build`. The live provider smoke
+tests in `backend/tests/smoke/` are marked `smoke` and deselected by default (`addopts =
+"-m 'not smoke'"`), so `make test` never bills a provider; run them deliberately with
+`make smoke`. Each one skips unless the matching API key is configured.
 
 ## Roadmap / out of scope for v1
 

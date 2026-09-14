@@ -43,3 +43,7 @@ def test_system_prompt_contents():
                             workspace_root="/w", older_count=12, tool_names=["run_shell"])
     assert "Be terse." in p and "@rev" in p and "@off" not in p and "prefers squash" in p
     assert "12 older messages" in p and "/w" in p and "ask_human" in p and "@eng" in p and "run_shell" in p
+    # Bots used to @-mention other bots while merely narrating ("handing this to @reviewer"), which
+    # woke them for no reason. Spell out that @ is an imperative, not a way of naming a bot.
+    assert ("Only write @handle when you want that bot to act now. When merely referring to a bot, "
+            "use its plain name without @.") in p

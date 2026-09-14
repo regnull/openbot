@@ -68,6 +68,7 @@ export default function BotEditorPage() {
       <Card className="space-y-2">
         <h2 className="font-semibold">Tools</h2>
         <p className="text-xs text-zinc-500">Core tools (ask_human, start_thread, list_bots, memory, history recall) are always available.</p>
+        <p className="text-xs text-amber-600">Warning: <code>run_shell</code> is not sandboxed. It runs any command as the server user, with access to the whole filesystem and the server environment (including your provider API keys). Only the file tools are confined to the workspace.</p>
         {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-red-600">{e.file}: {e.error}</p>)}
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {tools.data?.tools.map((t) => {
