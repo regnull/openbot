@@ -21,7 +21,11 @@ export default function ThreadPage() {
   useEffect(() => { if (detail.data) { setState((s) => hydrate(s, detail.data)); setHasMore(detail.data.has_more); } }, [id, detail.data]);
   // Ack on open and whenever new messages land, so the inbox badge stays honest.
   useEffect(() => { Api.ackThread(id).then(() => qc.invalidateQueries({ queryKey: ["inbox"] })).catch(() => {}); }, [id, qc, state.messages.length]);
-  useBusEvents(id, (e) => setState((s) => reduceThreadEvent(s, e)));
+  // Events published while the SSE socket was down are not replayed, so a reconnect leaves the
+  // locally-reduced thread state behind. Refetch the thread instead of trusting it.
+  useBusEvents(id, (e) => setState((s) => reduceThreadEvent(s, e)), () => {
+    qc.invalidateQueries({ queryKey: ["thread", id] });
+  });
   const send = useMutation({
     mutationFn: (content: string) => Api.postMessage(id, { content }),
     onSuccess: (r) => setNotice(r.unaddressed ? "No bot was addressed. Mention a bot with @handle to wake it up." : null),

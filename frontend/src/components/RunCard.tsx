@@ -1,6 +1,8 @@
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { Api } from "../api/client";
 import type { Run, RunEvent } from "../api/types";
-import { Badge } from "./ui";
+import { Badge, ErrorText } from "./ui";
 
 const ACTIVE = ["queued", "running", "waiting_human"];
 
@@ -20,6 +22,8 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
     if (active && !collapsedByReader) setOpen(true);
   }
   const toggle = () => { setCollapsedByReader(open); setOpen(!open); };
+  // Nothing to invalidate: the cancel lands as a `run.updated` over SSE like any other status change.
+  const cancel = useMutation({ mutationFn: () => Api.cancelRun(run.id) });
   const calls = events.filter((e) => e.type === "tool_call");
   const results = new Map<unknown, RunEvent>(events.filter((e) => e.type === "tool_result").map((e) => [e.payload.tool_call_id, e] as const));
   return (
@@ -33,7 +37,17 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
         {run.langsmith_run_id && (
           <a className="shrink-0 text-blue-600" target="_blank" rel="noreferrer" href={`https://smith.langchain.com/o/-/projects/p/-/r/${run.langsmith_run_id}`}>LangSmith ↗</a>
         )}
+        {active && (
+          <button
+            className="shrink-0 rounded border border-zinc-300 px-1.5 py-0.5 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            onClick={() => cancel.mutate()}
+            disabled={cancel.isPending}
+          >
+            {cancel.isPending ? "Cancelling…" : "Cancel"}
+          </button>
+        )}
       </div>
+      {cancel.error && <div className="px-2 pb-1"><ErrorText error={cancel.error} /></div>}
       {open && (
         <div className="space-y-1 border-t border-zinc-200 p-2 dark:border-zinc-800">
           {calls.map((c) => {

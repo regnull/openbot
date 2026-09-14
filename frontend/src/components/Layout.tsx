@@ -12,6 +12,10 @@ export default function Layout() {
   useBusEvents(null, (e) => {
     if (e.event === "inbox.updated") qc.invalidateQueries({ queryKey: ["inbox"] });
     if (e.event === "message.created") qc.invalidateQueries({ queryKey: ["threads"] });
+  }, () => {
+    // Missed events during the disconnect would leave a stale unread badge and thread list.
+    qc.invalidateQueries({ queryKey: ["inbox"] });
+    qc.invalidateQueries({ queryKey: ["threads"] });
   });
   const unread = inbox.data?.length ?? 0;
   return (
