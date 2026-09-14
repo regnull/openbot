@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from openbot.api import actors, bots, events, providers, tools
+from openbot.api import actors, bots, events, inbox, messages, providers, threads, tools
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
@@ -91,6 +91,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     api.include_router(tools.router)
     api.include_router(events.router)
     api.include_router(providers.router)
+    api.include_router(threads.router)
+    api.include_router(messages.router)
+    api.include_router(inbox.router)
     app.include_router(public)
     app.include_router(api)
     return app
