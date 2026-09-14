@@ -13,6 +13,21 @@ from openbot.services import Services
 from openbot.tools.registry import build_registry
 from tests.fakes import ScriptedChatModel
 
+# `openbot.main` calls load_dotenv() (it is how LANGSMITH_* reach the langsmith SDK), so importing
+# it for these tests copies a developer's repo-root .env into os.environ. pydantic-settings reads
+# os.environ even when a test passes `_env_file=None`, so without this the unit suite fails locally
+# for anyone with real provider keys configured, and quietly ships traces to LangSmith. CI has no
+# .env, which is why it stays green there.
+_DOTENV_LEAKS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY",
+                 "OPENBOT_API_KEY", "DATABASE_URL", "LANGSMITH_TRACING", "LANGSMITH_API_KEY",
+                 "LANGSMITH_PROJECT", "LANGSMITH_ENDPOINT")
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_env(monkeypatch):
+    for name in _DOTENV_LEAKS:
+        monkeypatch.delenv(name, raising=False)
+
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
