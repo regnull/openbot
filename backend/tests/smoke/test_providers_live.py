@@ -15,6 +15,8 @@ from openbot.config import Settings
 from openbot.db.models import BotProfile
 from openbot.runtime.providers import DEFAULT_MODEL, PROVIDER_MODELS, api_key_for, chat_model
 
+pytestmark = pytest.mark.smoke
+
 PROVIDERS = ["openai", "anthropic", "openrouter", "xai"]
 ALL_MODELS = [(p, m) for p in PROVIDERS for m in PROVIDER_MODELS[p]]
 

@@ -31,6 +31,10 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6", "asgi-lifespan>=2.1"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["smoke: live provider calls (costs money)"]
+# Smoke tests hit real provider APIs and bill real tokens, so they are opt-in: `make smoke`
+# (or `uv run pytest -m smoke`) is the only thing that runs them.
+addopts = "-m 'not smoke'"
 
 [tool.ruff]
 line-length = 100

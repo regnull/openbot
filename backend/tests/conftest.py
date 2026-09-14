@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import pytest
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
@@ -17,16 +20,40 @@ from tests.fakes import ScriptedChatModel
 # it for these tests copies a developer's repo-root .env into os.environ. pydantic-settings reads
 # os.environ even when a test passes `_env_file=None`, so without this the unit suite fails locally
 # for anyone with real provider keys configured, and quietly ships traces to LangSmith. CI has no
-# .env, which is why it stays green there.
-_DOTENV_LEAKS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY",
-                 "OPENBOT_API_KEY", "DATABASE_URL", "LANGSMITH_TRACING", "LANGSMITH_API_KEY",
-                 "LANGSMITH_PROJECT", "LANGSMITH_ENDPOINT")
+# .env, which is why it stays green there. An exported shell variable (CORS_ORIGINS=... pytest)
+# leaks exactly the same way, so every setting OpenBot reads has to go, not just the secrets.
+_STATIC_SETTING_VARS = (
+    "DATABASE_URL", "OPENBOT_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY",
+    "XAI_API_KEY", "EMBEDDING_MODEL", "EMBEDDING_DIMS", "LANGSMITH_TRACING", "LANGSMITH_API_KEY",
+    "LANGSMITH_PROJECT", "LANGSMITH_ENDPOINT", "WORKSPACE_ROOT", "TOOLS_DIR", "MAX_CONCURRENT_RUNS",
+    "MAX_BOT_HOPS", "HISTORY_TOKEN_BUDGET", "HISTORY_MAX_MESSAGES", "MEMORY_REFLECTION_DELAY",
+    "SEED_DEMO_BOTS", "CORS_ORIGINS", "WEBHOOK_RETRY_DELAYS", "FRONTEND_DIST",
+)
+
+
+def _env_example_vars() -> tuple[str, ...]:
+    """Every name in .env.example, so a new setting is covered without editing this list too.
+    The static tuple above is the fallback when the file is not next to the checkout."""
+    names = set(_STATIC_SETTING_VARS)
+    for parent in Path(__file__).resolve().parents:
+        example = parent / ".env.example"
+        if example.is_file():
+            for line in example.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    names.add(line.split("=", 1)[0].strip())
+            break
+    return tuple(sorted(names))
+
+
+_DOTENV_LEAKS = _env_example_vars()
 
 
 @pytest.fixture(autouse=True)
 def _hermetic_env(monkeypatch):
     for name in _DOTENV_LEAKS:
         monkeypatch.delenv(name, raising=False)
+    assert not [n for n in _DOTENV_LEAKS if n in os.environ]
 
 
 @pytest.fixture

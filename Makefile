@@ -1,4 +1,4 @@
-.PHONY: dev backend frontend test build run lint setup
+.PHONY: dev backend frontend test smoke build run lint setup
 
 setup:          ## install backend and frontend dependencies, create .env from the template
 	cd backend && uv sync
@@ -14,9 +14,12 @@ backend:        ## backend API with auto-reload, from the repo root so ./tools, 
 frontend:       ## Vite dev server, proxies /api to the backend
 	cd frontend && pnpm dev
 
-test:           ## run backend and frontend test suites
+test:           ## run backend and frontend test suites (live provider smoke tests excluded)
 	cd backend && uv run pytest -q
 	cd frontend && pnpm test && pnpm typecheck
+
+smoke:          ## run the live provider smoke tests -- these call real APIs and cost money
+	cd backend && uv run pytest -m smoke -v
 
 lint:           ## lint backend (ruff) and frontend (oxlint)
 	cd backend && uv run ruff check .

@@ -47,8 +47,13 @@ def test_cors_origins_json_list_form_is_not_supported(monkeypatch):
     assert settings.cors_origins == ['["http://x"]']
 
 
-def test_real_dotenv_file_matching_env_example_parses_correctly(tmp_path):
+def test_real_dotenv_file_matching_env_example_parses_correctly(tmp_path, monkeypatch):
     # The actual startup path that was broken: a real .env, not synthetic env vars.
+    # os.environ wins over _env_file in pydantic-settings, so an exported CORS_ORIGINS in the
+    # developer's (or CI's) shell would silently make this assert the environment, not the file.
+    # conftest's autouse fixture already strips these; state it here too so the test is self-contained.
+    for name in ("CORS_ORIGINS", "WEBHOOK_RETRY_DELAYS", "FRONTEND_DIST"):
+        monkeypatch.delenv(name, raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text(
         "CORS_ORIGINS=http://localhost:5173\n"
