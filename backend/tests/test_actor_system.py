@@ -1,0 +1,141 @@
+import asyncio
+
+from sqlalchemy import select
+
+from openbot.db.models import InboxItem, Run
+from openbot.runtime.delivery import create_thread, human_actor, post_message
+from tests.conftest import build_test_services
+from tests.factories import bot_actor
+from tests.fakes import ScriptedChatModel, ai, call
+
+
+async def setup(settings, scripts, handles=("eng",)):
+    services = await build_test_services(settings, scripts)
+    async with services.session_factory() as s:
+        s.add_all([bot_actor(h) for h in handles])
+        await s.commit()
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=list(handles), created_by=you)
+    await services.actors.start()
+    return services, t
+
+
+async def post(services, t, text):
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        return await post_message(services, s, thread_id=t.id, sender=you, content=text)
+
+
+async def runs(services):
+    async with services.session_factory() as s:
+        return (await s.execute(select(Run).order_by(Run.created_at))).scalars().all()
+
+
+async def items(services, kind=None):
+    async with services.session_factory() as s:
+        q = select(InboxItem).order_by(InboxItem.created_at)
+        if kind:
+            q = q.where(InboxItem.kind == kind)
+        return (await s.execute(q)).scalars().all()
+
+
+async def test_message_triggers_run_and_marks_item_done(settings):
+    services, t = await setup(settings, {"eng": [ai("one")]})
+    await post(services, t, "hi")
+    await services.actors.wait_idle()
+    rs = await runs(services)
+    assert [r.status for r in rs] == ["completed"]
+    bot_items = [i for i in await items(services, "message") if i.run_id == rs[0].id]
+    assert len(bot_items) == 1 and bot_items[0].status == "done"
+    await services.actors.stop()
+
+
+async def test_batching_and_parking(settings):
+    ScriptedChatModel.seen.clear()
+    services, t = await setup(settings, {"eng": [ai(tool_calls=[call("ask_human", question="?")]), ai("after"), ai("batched")]})
+    await post(services, t, "one")
+    await services.actors.wait_idle()
+    assert [r.status for r in await runs(services)] == ["waiting_human"]
+    await post(services, t, "two")
+    await post(services, t, "three")
+    await services.actors.wait_idle()
+    assert [r.status for r in await runs(services)] == ["waiting_human"]      # parked thread: new mail waits
+    first = (await runs(services))[0]
+    await services.actors.enqueue_resume(first, "yes", None)
+    await services.actors.wait_idle()
+    rs = await runs(services)
+    assert [r.status for r in rs] == ["completed", "completed"]              # resume, then ONE batched run for two+three
+    batched_items = [i for i in await items(services, "message") if i.run_id == rs[1].id]
+    assert len(batched_items) == 2 and all(i.status == "done" for i in batched_items)
+    # The batched human turn, not seen[-1][-1]: history is chronological, and the resumed run's own
+    # "after" reply is posted after "two"/"three" (which waited while the thread was parked).
+    last_prompt = next(m.content for m in ScriptedChatModel.seen[-1] if m.type == "human")
+    assert "[You]: two" in last_prompt and "[You]: three" in last_prompt
+    await services.actors.stop()
+
+
+async def test_one_run_at_a_time_per_bot_but_bots_parallel(settings):
+    from langchain_core.messages import AIMessage
+
+    class Slow:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            import time
+            time.sleep(0.2)
+            return AIMessage(content="late")
+
+    services, t = await setup(settings, {}, handles=("eng", "rev"))
+    services.model_factory = lambda actor: ScriptedChatModel(messages=Slow())
+    await post(services, t, "@eng @rev go")
+    await asyncio.sleep(0.05)
+    running = [r for r in await runs(services) if r.status == "running"]
+    assert len(running) == 2
+    await services.actors.wait_idle()
+    await services.actors.stop()
+
+
+async def test_cancel_running(settings):
+    from langchain_core.messages import AIMessage
+
+    class Slow:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            import time
+            time.sleep(0.3)
+            return AIMessage(content="late")
+
+    services, t = await setup(settings, {})
+    services.model_factory = lambda actor: ScriptedChatModel(messages=Slow())
+    await post(services, t, "go")
+    await asyncio.sleep(0.05)
+    run = (await runs(services))[0]
+    assert await services.actors.cancel_run(run.id) is True
+    await services.actors.wait_idle()
+    assert (await runs(services))[0].status == "cancelled"
+    assert [i.status for i in await items(services, "message") if i.run_id == run.id] == ["cancelled"]
+    await services.actors.stop()
+
+
+async def test_recovery_on_start(settings):
+    services = await build_test_services(settings, {"eng": [ai("recovered")]})
+    async with services.session_factory() as s:
+        eng = bot_actor("eng")
+        s.add(eng)
+        await s.commit()
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you)
+        await post_message(services, s, thread_id=t.id, sender=you, content="hi")     # actors not started: item stays queued
+        stale = Run(actor_id=eng.id, thread_id=t.id, status="running")
+        s.add(stale)
+        await s.flush()
+        s.add(InboxItem(actor_id=eng.id, thread_id=t.id, kind="message", status="processing", run_id=stale.id))
+        await s.commit()
+    await services.actors.start()
+    await services.actors.wait_idle()
+    rs = await runs(services)
+    assert {r.status for r in rs} == {"failed", "completed"} and any(r.error == "server restarted" for r in rs)
+    await services.actors.stop()

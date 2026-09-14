@@ -6,6 +6,12 @@ from openbot.runtime.delivery import create_thread, human_actor, post_message
 from tests.factories import bot_actor, external_actor
 
 
+@pytest.fixture(autouse=True)
+async def _no_actor_runs(services):
+    """Delivery bookkeeping is asserted on its own: keep the actor system from picking the items up."""
+    await services.actors.stop()
+
+
 async def seed(services, *actors):
     async with services.session_factory() as s:
         s.add_all(actors)

@@ -16,7 +16,10 @@ from tests.fakes import ScriptedChatModel
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(database_url="sqlite+aiosqlite:///:memory:", workspace_root=tmp_path / "workspace",
+    # A file-backed DB, not ":memory:": in-memory SQLite uses StaticPool, i.e. a single DBAPI
+    # connection shared by every session, so once the actor system runs bots concurrently one
+    # session's close (ROLLBACK) silently discards another's uncommitted writes.
+    return Settings(database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db", workspace_root=tmp_path / "workspace",
                     tools_dir=tmp_path / "tools", seed_demo_bots=False, memory_reflection_delay=0.01,
                     webhook_retry_delays=[0.01, 0.01, 0.01], _env_file=None)
 
@@ -59,6 +62,7 @@ async def build_test_services(settings: Settings, scripts: dict | None = None) -
         pass
     try:
         import httpx
+
         from openbot.runtime.actors import ActorSystem
         services.http_client = httpx.AsyncClient()
         services.actors = ActorSystem(services, settings.max_concurrent_runs)

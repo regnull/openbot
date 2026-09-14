@@ -15,3 +15,8 @@ async def ensure_human_actor(services) -> Actor:
             session.add(actor)
             await session.commit()
         return actor
+
+
+async def seed_demo_bots(services) -> int:
+    """Placeholder; the demo bot catalog lands in Task 17."""
+    return 0
