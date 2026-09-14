@@ -6,6 +6,7 @@ from openbot.config import Settings
 from openbot.db.session import create_all, make_engine, make_session_factory
 from openbot.main import create_app
 from openbot.services import Services
+from openbot.tools.registry import build_registry
 
 
 @pytest.fixture
@@ -19,7 +20,9 @@ def settings(tmp_path) -> Settings:
 async def services(settings) -> Services:
     engine = make_engine(settings.database_url)
     await create_all(engine)
-    return Services(settings=settings, session_factory=make_session_factory(engine), _owned_resources=[engine])
+    services = Services(settings=settings, session_factory=make_session_factory(engine), _owned_resources=[engine])
+    services.registry = build_registry(settings)
+    return services
 
 
 @pytest.fixture
