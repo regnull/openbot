@@ -75,8 +75,21 @@ async def stop_background(services: Services) -> None:
         await services.reflector.shutdown()
 
 
+def _configure_logging() -> None:
+    """uvicorn configures only its own loggers, so openbot's own INFO lines (demo bot seeding, the
+    missing-embedding-provider warning) never reach the console. Attach one handler to the openbot
+    logger — scoped, and only once, so repeated create_app() calls do not stack handlers."""
+    logger = logging.getLogger("openbot")
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+        logger.addHandler(handler)
+
+
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
     load_dotenv()
+    _configure_logging()
     settings = settings or get_settings()
 
     @asynccontextmanager
