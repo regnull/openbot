@@ -9,7 +9,10 @@ type Decision = "approve" | "reject";
 export default function InterruptCard({ run, botName, onDone }: { run: Run; botName?: string; onDone?: () => void }) {
   const qc = useQueryClient();
   const [answer, setAnswer] = useState("");
-  const [decisions, setDecisions] = useState<Decision[]>(run.interrupt?.actions?.map(() => "approve" as Decision) ?? []);
+  // Keyed by action index; a run can raise a second, differently shaped approval
+  // interrupt without remounting, so treat a missing entry as "approve".
+  const [decisions, setDecisions] = useState<Record<number, Decision>>({});
+  const decisionsFor = (n: number): Decision[] => Array.from({ length: n }, (_, i) => decisions[i] ?? "approve");
   const resume = useMutation({
     mutationFn: (body: { answer?: string; decisions?: Decision[] }) => Api.resumeRun(run.id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["inbox"] }); onDone?.(); },
@@ -34,13 +37,13 @@ export default function InterruptCard({ run, botName, onDone }: { run: Run; botN
               <span className="flex-1 truncate">{a.name}({JSON.stringify(a.args)})</span>
               {(["approve", "reject"] as const).map((d) => (
                 <label key={d} className="flex items-center gap-1">
-                  <input type="radio" checked={decisions[i] === d} onChange={() => setDecisions((ds) => ds.map((x, j) => (j === i ? d : x)))} />
+                  <input type="radio" checked={(decisions[i] ?? "approve") === d} onChange={() => setDecisions((ds) => ({ ...ds, [i]: d }))} />
                   {d}
                 </label>
               ))}
             </div>
           ))}
-          <Button onClick={() => resume.mutate({ decisions })} disabled={resume.isPending}>Submit decisions</Button>
+          <Button onClick={() => resume.mutate({ decisions: decisionsFor(it.actions?.length ?? 0) })} disabled={resume.isPending}>Submit decisions</Button>
         </>
       )}
       <ErrorText error={resume.error} />

@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Api } from "../api/client";
 import type { Participant, Run, RunDetail, RunEvent } from "../api/types";
 import type { ThreadState } from "../lib/threadState";
+import { parseTs } from "../lib/time";
 import Avatar from "./Avatar";
 import InterruptCard from "./InterruptCard";
 import RunCard from "./RunCard";
@@ -47,7 +48,7 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
             <Avatar name={m.sender_name} kind={m.sender_kind} />
             <div className="min-w-0 flex-1">
               <div className="text-xs text-zinc-500">
-                <span className="font-medium text-zinc-700 dark:text-zinc-300">{m.sender_name}</span> · {new Date(m.created_at).toLocaleTimeString()}{m.hop > 0 && ` · hop ${m.hop}`}
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">{m.sender_name}</span> · {parseTs(m.created_at).toLocaleTimeString()}{m.hop > 0 && ` · hop ${m.hop}`}
               </div>
               <div className="whitespace-pre-wrap text-sm">{m.content}</div>
               {run && <RunCard run={run} events={eventsFor(run.id)} />}

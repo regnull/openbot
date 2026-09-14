@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Api } from "../api/client";
 import Avatar from "../components/Avatar";
 import { Button, Card, ErrorText, Input, Spinner } from "../components/ui";
+import { parseTs } from "../lib/time";
 
 export default function ThreadsPage() {
   const qc = useQueryClient();
@@ -44,7 +45,7 @@ export default function ThreadsPage() {
                 <div className="truncate font-medium">{t.title || t.participants.map((p) => p.handle).join(", ")}</div>
                 <div className="text-xs text-zinc-500">{t.participants.map((p) => `@${p.handle}`).join(" ")}</div>
               </div>
-              <div className="shrink-0 text-xs text-zinc-500">{t.last_message_at ? new Date(t.last_message_at).toLocaleString() : "no messages"}</div>
+              <div className="shrink-0 text-xs text-zinc-500">{t.last_message_at ? parseTs(t.last_message_at).toLocaleString() : "no messages"}</div>
             </Card>
           </Link>
         ))}
