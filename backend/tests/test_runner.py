@@ -132,6 +132,37 @@ async def test_failure_mid_stream_records_error_after_earlier_events(settings):
     assert msgs[-1].sender_kind == "system" and "@eng failed" in msgs[-1].content
 
 
+async def test_failure_status_survives_a_broken_error_event(settings, monkeypatch):
+    services, _eng, t, run = await make(settings, {"eng": [RuntimeError("provider down")]})
+
+    async def boom(*_a, **_k):
+        raise RuntimeError("run_events table is gone")
+
+    monkeypatch.setattr(Runner, "_record", boom)
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert run.status == "failed" and "provider down" in run.error and run.finished_at is not None
+    assert not await events(services, run.id)
+    msgs = await messages(services, t.id)  # bookkeeping continued past the broken step
+    assert msgs[-1].sender_kind == "system" and "@eng failed" in msgs[-1].content
+
+
+async def test_reflection_failure_does_not_fail_a_completed_run(settings):
+    services, _eng, t, run = await make(settings, {"eng": [ai("Built it.")]})
+
+    def boom(*_a, **_k):
+        raise RuntimeError("reflector exploded")
+
+    services.reflector.schedule = boom
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert run.status == "completed" and run.error is None
+    msgs = await messages(services, t.id)
+    assert msgs[-1].sender_kind == "bot" and msgs[-1].content == "Built it."
+    assert not [m for m in msgs if m.sender_kind == "system"]
+    assert [e.type for e in await events(services, run.id)] == ["text", "message"]
+
+
 async def test_memory_reflection_scheduled(settings):
     services, _eng, _t, run = await make(settings, {"eng": [ai("ok")]})
     scheduled = []

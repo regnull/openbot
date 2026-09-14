@@ -177,8 +177,12 @@ class Runner:
                 seq = await self._record(run, seq, "message", {"message_id": res.message.id})
             await self._set_status(run.id, "completed", langsmith_run_id=ls_id)
             if bot.bot.memory_enabled and self.s.reflector is not None:
-                state = await agent.aget_state(config)
-                self.s.reflector.schedule(bot, list(state.values.get("messages", [])))
+                # The run is already complete and its reply posted; reflection must never undo that.
+                try:
+                    state = await agent.aget_state(config)
+                    self.s.reflector.schedule(bot, list(state.values.get("messages", [])))
+                except Exception:
+                    log.exception("could not schedule memory reflection for run %s", run.id)
         except asyncio.CancelledError:
             await self._set_status(run.id, "cancelled")
             await self._system_message(thread.id, f"@{bot.handle} run was cancelled.")
@@ -186,7 +190,14 @@ class Runner:
         except Exception as e:
             log.exception("run %s failed", run.id)
             err = f"{type(e).__name__}: {e}"[:2000]
-            # Re-read the sequence: events recorded inside _stream are not visible to `seq` here.
-            await self._record(run, await self._next_seq(run.id), "error", {"error": err})
+            # Status first: the bookkeeping below is best-effort and must never leave the run in "running".
             await self._set_status(run.id, "failed", error=err)
-            await self._system_message(thread.id, f"@{bot.handle} failed: {err}")
+            try:
+                # Re-read the sequence: events recorded inside _stream are not visible to `seq` here.
+                await self._record(run, await self._next_seq(run.id), "error", {"error": err})
+            except Exception:
+                log.exception("could not record the error event for run %s", run.id)
+            try:
+                await self._system_message(thread.id, f"@{bot.handle} failed: {err}")
+            except Exception:
+                log.exception("could not post the failure notice for run %s", run.id)
