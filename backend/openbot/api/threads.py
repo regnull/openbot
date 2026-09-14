@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,7 +71,8 @@ async def create(body: ThreadCreate, session: AsyncSession = Depends(get_session
 
 
 @router.get("/{thread_id}", response_model=ThreadDetail)
-async def get_thread(thread_id: str, before: str | None = None, limit: int = 50, session: AsyncSession = Depends(get_session)):
+async def get_thread(thread_id: str, before: str | None = None, limit: int = Query(50, ge=1, le=200),
+                     session: AsyncSession = Depends(get_session)):
     thread = await get_thread_or_404(session, thread_id)
     q = select(Message).where(Message.thread_id == thread_id)
     if before and (anchor := await session.get(Message, before)):

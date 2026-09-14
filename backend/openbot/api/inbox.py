@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,11 +13,11 @@ from openbot.services import Services
 router = APIRouter(tags=["inbox"])
 
 
-async def inbox_for(session: AsyncSession, actor: Actor, status: str | None) -> list[InboxItemOut]:
+async def inbox_for(session: AsyncSession, actor: Actor, status: str | None, limit: int = 200) -> list[InboxItemOut]:
     q = select(InboxItem).where(InboxItem.actor_id == actor.id)
     if status:
         q = q.where(InboxItem.status == status)
-    items = (await session.execute(q.order_by(InboxItem.created_at.desc()).limit(200))).scalars().all()
+    items = (await session.execute(q.order_by(InboxItem.created_at.desc()).limit(limit))).scalars().all()
     msg_ids = [i.message_id for i in items if i.message_id]
     msgs = {m.id: m for m in (await session.execute(select(Message).where(Message.id.in_(msg_ids)))).scalars()} if msg_ids else {}
     out = []
@@ -29,16 +29,18 @@ async def inbox_for(session: AsyncSession, actor: Actor, status: str | None) -> 
 
 
 @router.get("/inbox", response_model=list[InboxItemOut])
-async def my_inbox(status: str | None = "queued", session: AsyncSession = Depends(get_session)):
-    return await inbox_for(session, await human_actor(session), status)
+async def my_inbox(status: str | None = "queued", limit: int = Query(200, ge=1, le=200),
+                   session: AsyncSession = Depends(get_session)):
+    return await inbox_for(session, await human_actor(session), status, limit)
 
 
 @router.get("/actors/{handle}/inbox", response_model=list[InboxItemOut])
-async def actor_inbox(handle: str, status: str | None = "queued", session: AsyncSession = Depends(get_session)):
+async def actor_inbox(handle: str, status: str | None = "queued", limit: int = Query(200, ge=1, le=200),
+                      session: AsyncSession = Depends(get_session)):
     actor = await actor_by_handle(session, handle)
     if actor is None:
         raise HTTPException(404, "actor not found")
-    return await inbox_for(session, actor, status)
+    return await inbox_for(session, actor, status, limit)
 
 
 @router.post("/inbox/{item_id}/ack", response_model=InboxItemOut)

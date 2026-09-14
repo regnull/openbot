@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from collections.abc import AsyncIterator
 
 from fastapi import Depends, HTTPException, Request
@@ -25,5 +26,10 @@ async def require_api_key(request: Request, services: Services = Depends(get_ser
     expected = services.settings.openbot_api_key
     if not expected:
         return
-    if key != expected and request.query_params.get("api_key") != expected:
+    # compare_digest, not ==: `==` on str short-circuits at the first differing byte, which leaks the
+    # key prefix-by-prefix to anyone who can time the 401s. Compare bytes, because compare_digest
+    # rejects str with non-ASCII code points (a 500 on a hostile header, otherwise).
+    want = expected.encode()
+    supplied = [c for c in (key, request.query_params.get("api_key")) if c is not None]
+    if not any(hmac.compare_digest(c.encode(), want) for c in supplied):
         raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")

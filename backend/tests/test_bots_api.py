@@ -1,3 +1,7 @@
+from sqlalchemy import select
+
+from openbot.db.models import Actor, Run
+
 BOT = {"handle": "eng", "name": "Engineer", "description": "Builds", "instructions": "Do it",
        "provider": "openai", "model": "gpt-5.5"}
 
@@ -25,6 +29,24 @@ async def test_validation(client):
     assert (await client.post("/api/v1/bots", json={**BOT, "handle": "x2", "tool_names": ["no_such_tool"]})).status_code == 422
     assert (await client.post("/api/v1/bots", json={**BOT, "handle": "x3", "tool_names": ["run_shell"],
                                                      "approval_tools": ["read_file"]})).status_code == 422
+
+
+async def test_delete_refuses_while_a_run_is_open(client, services):
+    bot = (await client.post("/api/v1/bots", json=BOT)).json()
+    thread = (await client.post("/api/v1/threads", json={"title": "t", "handles": ["eng"]})).json()
+    async with services.session_factory() as session:
+        session.add(Run(actor_id=bot["id"], thread_id=thread["id"], status="running"))
+        await session.commit()
+    r = await client.delete(f"/api/v1/bots/{bot['id']}")
+    assert r.status_code == 409 and "open runs" in r.text
+    # and the bot is still there
+    assert (await client.get(f"/api/v1/bots/{bot['id']}")).status_code == 200
+    async with services.session_factory() as session:
+        run = (await session.execute(select(Run))).scalar_one()
+        run.status = "completed"
+        await session.commit()
+        assert (await session.execute(select(Actor).where(Actor.id == bot["id"]))).scalar_one() is not None
+    assert (await client.delete(f"/api/v1/bots/{bot['id']}")).status_code == 204
 
 
 async def test_api_key_required(settings, services):
