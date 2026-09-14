@@ -32,6 +32,19 @@ log = logging.getLogger(__name__)
 TOOL_RESULT_CAP = 4000
 
 
+def trace_root_id(traced_runs: list) -> str | None:
+    """The LangSmith run id to link from a run card.
+
+    `collect_runs()` hands back whichever run finished first, which for an agent is a nested
+    `ChatOpenAI` call, not the `bot:<handle>` root — linking that drops the reader into the middle
+    of the trace. Every run carries the id of its trace root in `trace_id`, so prefer that.
+    """
+    if not traced_runs:
+        return None
+    first = traced_runs[0]
+    return str(getattr(first, "trace_id", None) or first.id)
+
+
 def normalize_interrupt(value: Any) -> dict:
     if isinstance(value, dict):
         if value.get("kind") == "question":
@@ -166,7 +179,7 @@ class Runner:
             agent = self._build_agent(bot, system_prompt)
             with collect_runs() as cb:
                 final_text, interrupt, seq = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq)
-            ls_id = str(cb.traced_runs[0].id) if cb.traced_runs else None
+            ls_id = trace_root_id(cb.traced_runs)
             if interrupt is not None:
                 run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id)
                 await deliver_question(self.s, run, interrupt)

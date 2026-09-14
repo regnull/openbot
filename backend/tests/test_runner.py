@@ -169,3 +169,17 @@ async def test_memory_reflection_scheduled(settings):
     services.reflector.schedule = lambda bot, msgs: scheduled.append((bot.handle, len(msgs)))
     await services.runner.execute(run.id)
     assert scheduled and scheduled[0][0] == "eng" and scheduled[0][1] >= 2
+
+
+def test_trace_root_id_prefers_the_trace_root():
+    """collect_runs() yields the first run that *finished*, which is a nested ChatOpenAI call, not
+    the bot:<handle> root; the card must link the root so the trace opens at the top."""
+    from openbot.runtime.runner import trace_root_id
+
+    class R:
+        def __init__(self, id, trace_id=None):
+            self.id, self.trace_id = id, trace_id
+
+    assert trace_root_id([]) is None
+    assert trace_root_id([R("child", "root"), R("other", "root")]) == "root"
+    assert trace_root_id([R("solo")]) == "solo"
