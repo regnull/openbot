@@ -1,0 +1,43 @@
+import type { BusEvent, Message, Run, RunEvent, ThreadDetail } from "../api/types";
+
+export interface ThreadState { messages: Message[]; runs: Record<string, Run>; runEvents: Record<string, RunEvent[]>; streaming: Record<string, string>; }
+
+export const emptyThreadState = (): ThreadState => ({ messages: [], runs: {}, runEvents: {}, streaming: {} });
+
+const sortMsgs = (ms: Message[]) => [...ms].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+
+export function hydrate(state: ThreadState, detail: ThreadDetail): ThreadState {
+  const byId = new Map(state.messages.map((m) => [m.id, m]));
+  detail.messages.forEach((m) => byId.set(m.id, m));
+  const runs = { ...state.runs };
+  detail.runs.forEach((r) => (runs[r.id] = r));
+  return { ...state, messages: sortMsgs([...byId.values()]), runs };
+}
+
+export function reduceThreadEvent(state: ThreadState, e: BusEvent): ThreadState {
+  switch (e.event) {
+    case "message.created": {
+      if (state.messages.some((m) => m.id === e.data.id)) return state;
+      return { ...state, messages: sortMsgs([...state.messages, e.data]) };
+    }
+    case "run.updated": {
+      const run: Run = e.data;
+      const streaming = { ...state.streaming };
+      if (run.status !== "running") delete streaming[run.id];
+      return { ...state, runs: { ...state.runs, [run.id]: run }, streaming };
+    }
+    case "run.event": {
+      const d = e.data;
+      if (d.type === "text_delta") {
+        return { ...state, streaming: { ...state.streaming, [d.run_id]: (state.streaming[d.run_id] ?? "") + d.payload.delta } };
+      }
+      const list = state.runEvents[d.run_id] ?? [];
+      if (list.some((x) => x.id === d.id)) return state;
+      const streaming = { ...state.streaming };
+      if (d.type === "text") delete streaming[d.run_id];
+      return { ...state, runEvents: { ...state.runEvents, [d.run_id]: [...list, d].sort((a, b) => a.seq - b.seq) }, streaming };
+    }
+    default:
+      return state;
+  }
+}
