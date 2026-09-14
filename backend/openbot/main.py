@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
@@ -11,7 +11,8 @@ from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
 from openbot.runtime.bus import EventBus
-from openbot.runtime.providers import chat_model
+from openbot.runtime.persistence import open_langgraph_backends
+from openbot.runtime.providers import chat_model, embeddings
 from openbot.seed import ensure_human_actor
 from openbot.services import Services
 from openbot.tools.registry import build_registry
@@ -25,16 +26,25 @@ async def build_services(settings: Settings) -> Services:
         await run_migrations(settings.database_url)
         engine = make_engine(settings.database_url)
     services = Services(settings=settings, session_factory=make_session_factory(engine))
-    services._owned_resources = [engine]
     services.registry = build_registry(settings)
     services.bus = EventBus()
     services.model_factory = lambda actor: chat_model(actor.bot, settings)
+
+    stack = AsyncExitStack()
+    emb = embeddings(settings)
+    services.checkpointer, services.store = await stack.enter_async_context(
+        open_langgraph_backends(settings, emb)
+    )
+    services._owned_resources = [engine, stack]
     return services
 
 
 async def close_services(services: Services) -> None:
     for r in services._owned_resources:
-        await r.dispose()
+        if isinstance(r, AsyncExitStack):
+            await r.aclose()
+        else:
+            await r.dispose()
 
 
 async def start_background(services: Services) -> None:
