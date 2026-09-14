@@ -295,3 +295,17 @@ and the tool registry are designed as the seams for adding these later.
 ## License
 
 [MIT](LICENSE)
+
+## Elixir Hello World
+
+Run the Elixir Hello World program with:
+
+```sh
+elixir examples/hello_world.exs
+```
+
+Expected output:
+
+```text
+Hello, world!
+```
