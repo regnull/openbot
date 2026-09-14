@@ -26,13 +26,21 @@ export default function BotEditorPage() {
   }, [providers.data, isNew, form.model]);
 
   const save = useMutation({
-    mutationFn: () => (isNew ? Api.createBot(form) : Api.updateBot(id!, form)),
+    mutationFn: () => {
+      const payload = { ...form, approval_tools: form.approval_tools.filter((t) => form.tool_names.includes(t)) };
+      return isNew ? Api.createBot(payload) : Api.updateBot(id!, payload);
+    },
     onSuccess: (b) => { qc.invalidateQueries({ queryKey: ["bots"] }); nav(`/bots/${b.id}`); },
   });
   const remove = useMutation({ mutationFn: () => Api.deleteBot(id!), onSuccess: () => { qc.invalidateQueries({ queryKey: ["bots"] }); nav("/bots"); } });
 
   const set = <K extends keyof BotInput>(k: K, v: BotInput[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const toggleTool = (name: string) => set("tool_names", form.tool_names.includes(name) ? form.tool_names.filter((t) => t !== name) : [...form.tool_names, name]);
+  const toggleTool = (name: string) => setForm((f) => {
+    const on = f.tool_names.includes(name);
+    const tool_names = on ? f.tool_names.filter((t) => t !== name) : [...f.tool_names, name];
+    const approval_tools = on ? f.approval_tools.filter((t) => t !== name) : f.approval_tools;
+    return { ...f, tool_names, approval_tools };
+  });
   const toggleApproval = (name: string) => set("approval_tools", form.approval_tools.includes(name) ? form.approval_tools.filter((t) => t !== name) : [...form.approval_tools, name]);
   const prov = providers.data?.providers.find((p) => p.id === form.provider);
   if (!isNew && bot.isLoading) return <Spinner />;
@@ -42,7 +50,7 @@ export default function BotEditorPage() {
       <h1 className="text-xl font-semibold">{isNew ? "New bot" : `Edit @${form.handle}`}</h1>
       <Card className="grid gap-4 sm:grid-cols-2">
         <Field label="Name"><Input value={form.name} onChange={(e) => set("name", e.target.value)} required /></Field>
-        <Field label="Handle" hint="lowercase, digits, _ or -; used as @handle"><Input value={form.handle} onChange={(e) => set("handle", e.target.value)} pattern="[a-z0-9_-]{2,32}" required /></Field>
+        <Field label="Handle" hint="lowercase, digits, _ or -; used as @handle"><Input value={form.handle} onChange={(e) => set("handle", e.target.value)} pattern="[-a-z0-9_]{2,32}" required /></Field>
         <div className="sm:col-span-2"><Field label="Description" hint="Shown to other bots so they know when to hand work to this one"><Input value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
         <div className="sm:col-span-2"><Field label="Instructions"><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field></div>
         <Field label="Provider">
