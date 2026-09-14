@@ -1,16 +1,31 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 from dataclasses import dataclass
 
+import httpx
 from langgraph.types import Command
 from sqlalchemy import select
 
-from openbot.api.schemas import InboxItemOut, RunOut, to_json
-from openbot.db.models import Actor, InboxItem, Run, utcnow
+from openbot.api.schemas import InboxItemOut, MessageOut, RunOut, to_json
+from openbot.db.models import Actor, InboxItem, Message, Run, utcnow
 
 log = logging.getLogger(__name__)
+
+
+def sign(secret: str, body: bytes) -> str:
+    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+def webhook_body(item: InboxItem, message: Message | None) -> dict:
+    return {"item_id": item.id, "kind": item.kind, "thread_id": item.thread_id,
+            "message": to_json(MessageOut, message) if message else None,
+            "question": item.payload if item.kind == "question" else None,
+            "created_at": item.created_at.isoformat()}
 
 
 @dataclass
@@ -150,12 +165,46 @@ class ExternalActor(_Worker):
             await session.commit()
             return item
 
-    async def _deliver(self, item: InboxItem) -> None:   # replaced in Task 16
-        async with self.system.s.session_factory() as session:
-            row = await session.get(InboxItem, item.id)
-            row.status = "queued"
+    async def _deliver(self, item: InboxItem) -> None:
+        s = self.system.s
+        async with s.session_factory() as session:
+            actor = await session.get(Actor, self.actor_id)
+            message = await session.get(Message, item.message_id) if item.message_id else None
+        url = actor.external.webhook_url if actor and actor.external else None
+        if not url:
+            # The actor lost its webhook between _pick and here; settle the item so it is not
+            # left "processing" forever and _drain can move on.
+            await self._update(item.id, "failed", 0, "no webhook url")
+            return
+        secret = actor.external.webhook_secret or ""
+        body = json.dumps(webhook_body(item, message), default=str).encode()
+        headers = {"Content-Type": "application/json", "X-OpenBot-Kind": item.kind, "X-OpenBot-Item": item.id,
+                   "X-OpenBot-Signature": sign(secret, body)}
+        delays = [0.0, *s.settings.webhook_retry_delays]
+        last_error = None
+        for attempt, delay in enumerate(delays, start=1):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                r = await s.http_client.post(url, content=body, headers=headers)
+                ok, last_error = r.status_code < 300, None if r.status_code < 300 else f"HTTP {r.status_code}"
+            except httpx.HTTPError as e:
+                ok, last_error = False, f"{type(e).__name__}: {e}"
+            await self._update(item.id, "done" if ok else "processing", attempt, last_error)
+            if ok:
+                return
+        await self._update(item.id, "failed", len(delays), last_error)
+
+    async def _update(self, item_id: str, status: str, attempts: int, error: str | None) -> None:
+        s = self.system.s
+        async with s.session_factory() as session:
+            it = await session.get(InboxItem, item_id)
+            it.status, it.attempts, it.last_error = status, attempts, error
+            if status in ("done", "failed"):
+                it.processed_at = utcnow()
             await session.commit()
-        await asyncio.sleep(3600)
+        if status in ("done", "failed"):
+            await s.bus.publish("inbox.updated", it.thread_id, to_json(InboxItemOut, it))
 
 
 class ActorSystem:
@@ -238,8 +287,8 @@ class ActorSystem:
         deadline = loop.time() + timeout
         while loop.time() < deadline:
             await asyncio.sleep(0.02)
-            if all(w.idle for w in self._workers.values() if isinstance(w, BotActor)):
+            if all(w.idle for w in self._workers.values()):
                 await asyncio.sleep(0.02)
-                if all(w.idle for w in self._workers.values() if isinstance(w, BotActor)):
+                if all(w.idle for w in self._workers.values()):
                     return
         raise TimeoutError("actor system did not become idle")

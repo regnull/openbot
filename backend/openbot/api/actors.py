@@ -4,9 +4,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openbot.api.deps import get_session
-from openbot.api.schemas import ActorCreate, ActorOut, ActorUpdate, actor_out
-from openbot.db.models import Actor, ExternalProfile
+from openbot.api.deps import get_services, get_session
+from openbot.api.messages import resolve_sender
+from openbot.api.schemas import (
+    ActorCreate,
+    ActorMessageCreate,
+    ActorMessageOut,
+    ActorOut,
+    ActorUpdate,
+    MessageOut,
+    actor_out,
+)
+from openbot.api.threads import participants_for, thread_out
+from openbot.db.models import Actor, ExternalProfile, Thread
+from openbot.runtime.delivery import actor_by_handle, create_thread, post_message
+from openbot.services import Services
 
 router = APIRouter(prefix="/actors", tags=["actors"])
 
@@ -67,3 +79,29 @@ async def delete_actor(actor_id: str, session: AsyncSession = Depends(get_sessio
         raise HTTPException(409, "only external actors can be deleted here")
     await session.delete(actor)
     await session.commit()
+
+
+@router.post("/{handle}/messages", response_model=ActorMessageOut, status_code=201)
+async def message_actor(handle: str, body: ActorMessageCreate, session: AsyncSession = Depends(get_session),
+                        services: Services = Depends(get_services)):
+    target = await actor_by_handle(session, handle)
+    if target is None:
+        raise HTTPException(404, "actor not found")
+    sender = await resolve_sender(session, body.from_handle)
+    thread = None
+    if body.thread_id:
+        thread = await session.get(Thread, body.thread_id)
+        if thread is None:
+            raise HTTPException(404, "thread not found")
+    elif body.external_ref:
+        thread = (await session.execute(select(Thread).where(Thread.external_ref == body.external_ref))).scalar_one_or_none()
+    if thread is None:
+        thread = await create_thread(services, session, title=f"{sender.name} ↔ {target.name}", handles=[handle],
+                                     created_by=sender, external_ref=body.external_ref)
+    try:
+        res = await post_message(services, session, thread_id=thread.id, sender=sender, content=body.content, to_handles=[handle])
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    parts = await participants_for(session, [thread.id])
+    return ActorMessageOut(thread=thread_out(thread, parts[thread.id]), message=MessageOut.model_validate(res.message),
+                           addressed=[a.handle for a in res.addressed])
