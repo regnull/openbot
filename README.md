@@ -82,7 +82,7 @@ repository, using the [`gh`](https://cli.github.com/) CLI.
 |---|---|
 | **Actor** | Any participant with a persistent inbox: a bot, the human (`@you`), or an external system. |
 | **Inbox** | An actor's queue of items (`message`, `question`, `resume`) waiting to be processed or acknowledged. |
-| **Thread** | A conversation with a set of actor participants and a default bot. Messages are posted into a thread and routed to inbox items for explicit bot mentions, or to the default bot when a user message has no explicit bot mention. |
+| **Thread** | A conversation with a set of actor participants, a default bot, and a working directory for thread tools. Messages are posted into a thread and routed to inbox items for explicit bot mentions, or to the default bot when a user message has no explicit bot mention. |
 | **Run** | One execution of a bot's agent loop, triggered by a batch of queued messages or by resuming after a question/approval. |
 | **Hop** | A counter on bot-to-bot messages; bot replies increment it, human/external messages reset it to 0. Once `MAX_BOT_HOPS` is reached, further bot-to-bot delegation is blocked in that thread until a human message resets it. |
 | **Approval** | A pause requested by a tool (`ask_human`, or a tool flagged for approval) that turns into a `question` inbox item for the human and any external participants; the bot resumes once it is answered. |
@@ -97,13 +97,14 @@ before exposing OpenBot to a network or pointing a bot at untrusted input.
 
 - **`run_shell` is not sandboxed.** It executes arbitrary commands with `bash -lc` as the user
   running the server, with that user's full filesystem and network access. The only thing the
-  workspace gives you is the command's *starting working directory*: `cd /`, `../`, absolute paths
+  thread working directory gives you is the command's *starting working directory*: `cd /`, `../`, absolute paths
   and anything else all work normally. It also inherits the server's environment, including the
   provider API keys loaded from `.env`, so a command can read or exfiltrate them. There is no
   container, no chroot, no seccomp, and no allowlist — giving a bot `run_shell` is equivalent to
   giving whoever can talk to that bot a shell on the host.
 - **Only the file tools are path-confined.** `read_file`, `write_file` and `list_files` resolve
-  every path against `WORKSPACE_ROOT` and reject anything that escapes it (`../`, absolute paths,
+  every path against the thread working directory (the selected subdirectory of `WORKSPACE_ROOT`,
+  or `WORKSPACE_ROOT` itself by default) and reject anything that escapes it (`../`, absolute paths,
   symlinks out). That confinement is real, but it protects nothing once `run_shell` is also
   enabled.
 - **`http_request` and `fetch_url` are unrestricted.** Any URL, any method — including private
@@ -151,9 +152,11 @@ def get_time() -> str:
 
 `GET /api/v1/tools` lists every loaded tool and any load errors.
 
-Only `read_file`, `write_file` and `list_files` are path-confined to `WORKSPACE_ROOT`. `run_shell`
-starts in the workspace but is otherwise unrestricted, and `http_request`/`fetch_url` can reach any
-URL. Read [Trust model / security](#trust-model--security) before giving a bot these tools.
+Only `read_file`, `write_file` and `list_files` are path-confined to the thread working directory,
+which defaults to `WORKSPACE_ROOT` and can be set to an existing relative subdirectory when the
+thread is created. `run_shell` starts in that directory but is otherwise unrestricted, and
+`http_request`/`fetch_url` can reach any URL. Read [Trust model / security](#trust-model--security)
+before giving a bot these tools.
 
 ## External actors and webhooks
 
@@ -210,7 +213,7 @@ route except `/health` requires an `X-API-Key` header.
 | POST | `/actors/{handle}/messages` | `{content, from?: handle (default "you"), thread_id?, external_ref?}` — reuses a thread by `external_ref` or `thread_id`, or creates a 1:1 thread; returns `{thread, message, addressed}` |
 | GET/POST | `/bots` | list bots; create a bot actor + profile |
 | GET/PATCH/DELETE | `/bots/{id}` | delete refuses while runs are open |
-| GET/POST | `/threads` | list (latest activity first); create `{title?, handles[]}` |
+| GET/POST | `/threads` | list (latest activity first); create `{title?, handles[], default_bot_handle?, working_directory?}`. `working_directory` must be an existing relative directory under `WORKSPACE_ROOT`; omit it to use `WORKSPACE_ROOT`. |
 | GET | `/threads/{id}?before=&limit=` | thread, participants, a page of messages, open runs |
 | DELETE | `/threads/{id}` | |
 | POST | `/threads/{id}/messages` | `{content, to?: handles[], from?: handle}` → `{message, addressed, unaddressed}` |
@@ -243,7 +246,7 @@ provider keys.
 | `LANGSMITH_API_KEY` | *(unset)* | LangSmith API key. |
 | `LANGSMITH_PROJECT` | `openbot` | LangSmith project name. |
 | `LANGSMITH_ENDPOINT` | *(unset)* | LangSmith endpoint override, for self-hosted/EU instances. |
-| `WORKSPACE_ROOT` | `./workspace` | Working directory for the shell tool and the confinement root for the file tools. `run_shell` only *starts* here — it is not sandboxed to it. |
+| `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the maximum confinement root for file tools. New threads can choose an existing relative subdirectory; `run_shell` only *starts* in the thread directory — it is not sandboxed to it. |
 | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
 | `MAX_CONCURRENT_RUNS` | `4` | Global cap on simultaneous bot runs. |
 | `MAX_BOT_HOPS` | `20` | Bot-to-bot mention chain limit per thread before a human message is required. |

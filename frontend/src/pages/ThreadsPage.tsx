@@ -5,6 +5,7 @@ import { Api } from "../api/client";
 import Avatar from "../components/Avatar";
 import { Button, Card, ErrorText, Input, Spinner } from "../components/ui";
 import { parseTs } from "../lib/time";
+import { normalizeWorkingDirectory } from "../lib/workingDirectory";
 
 export default function ThreadsPage() {
   const qc = useQueryClient();
@@ -14,10 +15,20 @@ export default function ThreadsPage() {
   const [title, setTitle] = useState("");
   const [handles, setHandles] = useState<string[]>([]);
   const [defaultBot, setDefaultBot] = useState("chief_of_staff");
+  const [workingDirectory, setWorkingDirectory] = useState("");
   const enabledBots = bots.data?.filter((b) => b.enabled) ?? [];
   const effectiveDefaultBot = enabledBots.some((b) => b.handle === defaultBot) ? defaultBot : enabledBots[0]?.handle;
+  const workingDirectoryValidation = normalizeWorkingDirectory(workingDirectory);
   const create = useMutation({
-    mutationFn: () => Api.createThread({ title, handles, ...(effectiveDefaultBot ? { default_bot_handle: effectiveDefaultBot } : {}) }),
+    mutationFn: () => {
+      if (!workingDirectoryValidation.ok) throw new Error(workingDirectoryValidation.error ?? "Invalid working directory");
+      return Api.createThread({
+        title,
+        handles,
+        ...(effectiveDefaultBot ? { default_bot_handle: effectiveDefaultBot } : {}),
+        ...(workingDirectoryValidation.value ? { working_directory: workingDirectoryValidation.value } : {}),
+      });
+    },
     onSuccess: (t) => { qc.invalidateQueries({ queryKey: ["threads"] }); nav(`/threads/${t.id}`); },
   });
   return (
@@ -26,6 +37,12 @@ export default function ThreadsPage() {
       <Card className="space-y-3">
         <h2 className="font-medium">New thread</h2>
         <Input placeholder="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label className="block space-y-1 text-sm">
+          <span className="text-zinc-600 dark:text-zinc-400">Working directory for thread tools</span>
+          <Input placeholder=". (workspace root)" value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} />
+          <span className="block text-xs text-zinc-500">Leave blank to use the current workspace root. Enter an existing relative directory under the workspace.</span>
+        </label>
+        {workingDirectoryValidation.error && <p className="text-xs text-red-600">{workingDirectoryValidation.error}</p>}
         <div className="flex flex-wrap gap-2">
           {enabledBots.map((b) => (
             <label key={b.id} className={`cursor-pointer rounded-full border px-3 py-1 text-sm ${handles.includes(b.handle) ? "border-blue-500 bg-blue-50 dark:bg-blue-950" : "border-zinc-300 dark:border-zinc-700"}`}>
@@ -43,7 +60,7 @@ export default function ThreadsPage() {
           </label>
         )}
         <ErrorText error={create.error} />
-        <Button onClick={() => create.mutate()} disabled={create.isPending}>Start thread</Button>
+        <Button onClick={() => create.mutate()} disabled={create.isPending || !workingDirectoryValidation.ok}>Start thread</Button>
       </Card>
       <ErrorText error={threads.error} />
       {threads.isLoading && <Spinner />}
@@ -54,7 +71,7 @@ export default function ThreadsPage() {
               <div className="flex -space-x-2">{t.participants.map((p) => <Avatar key={p.actor_id} name={p.name} kind={p.kind} small />)}</div>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{t.title || t.participants.map((p) => p.handle).join(", ")}</div>
-                <div className="text-xs text-zinc-500">{t.participants.map((p) => `@${p.handle}`).join(" ")} · default @{t.default_bot_handle ?? "chief_of_staff"}</div>
+                <div className="text-xs text-zinc-500">{t.participants.map((p) => `@${p.handle}`).join(" ")} · default @{t.default_bot_handle ?? "chief_of_staff"} · cwd {t.working_directory ?? "."}</div>
               </div>
               <div className="shrink-0 text-xs text-zinc-500">{t.last_message_at ? parseTs(t.last_message_at).toLocaleString() : "no messages"}</div>
             </Card>

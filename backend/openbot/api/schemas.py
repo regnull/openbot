@@ -93,6 +93,7 @@ class ThreadCreate(BaseModel):
     title: str = ""
     handles: list[str] = []
     default_bot_handle: str | None = Field(default=None, pattern=HANDLE_RE)
+    working_directory: str | None = Field(default=None, max_length=1000)
 
 
 class ThreadUpdate(BaseModel):
@@ -106,6 +107,7 @@ class ThreadOut(BaseModel):
     created_by_actor_id: str | None
     default_bot_actor_id: str | None
     default_bot_handle: str | None = None
+    working_directory: str | None
     external_ref: str | None
     created_at: datetime
     updated_at: datetime

@@ -9,7 +9,7 @@ from tests.factories import bot_actor
 from tests.fakes import ScriptedChatModel, ai, call
 
 
-async def make(settings, scripts, **profile):
+async def make(settings, scripts, *, working_directory=None, **profile):
     services = await build_test_services(settings, scripts)
     services.actors = None            # drive the runner directly in these tests
     services.runner = Runner(services)
@@ -18,7 +18,8 @@ async def make(settings, scripts, **profile):
         s.add_all([eng, rev])
         await s.commit()
         you = await human_actor(s)
-        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you,
+                                working_directory=working_directory)
         res = await post_message(services, s, thread_id=t.id, sender=you, content="please build it")
         item = res.items[0]
         run = Run(actor_id=eng.id, thread_id=t.id)
@@ -65,6 +66,18 @@ async def test_simple_reply_and_handoff(settings):
     sent = ScriptedChatModel.seen[0]
     assert sent[0].type == "system" and "@rev" in sent[0].content and "[You]: please build it" in sent[-1].content
     assert [e.type for e in await events(services, run.id)] == ["text", "message"]
+
+
+async def test_runner_uses_thread_working_directory_for_tools(settings):
+    (settings.workspace_root / "project").mkdir(parents=True)
+    ScriptedChatModel.seen.clear()
+    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command="pwd")]), ai("done")]},
+                                         working_directory="project", tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+
+    assert str(settings.workspace_root / "project") in ScriptedChatModel.seen[0][0].content
+    assert any(e.type == "tool_result" and str(settings.workspace_root / "project") in e.payload["content"]
+               for e in await events(services, run.id))
 
 
 async def test_tool_call_events(settings):

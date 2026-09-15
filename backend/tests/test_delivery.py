@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import select
 
-from openbot.db.models import InboxItem, Message, ThreadParticipant
+from openbot.db.models import InboxItem, Message, Thread, ThreadParticipant
 from openbot.runtime.delivery import create_thread, human_actor, post_message
 from tests.factories import bot_actor, external_actor
 
@@ -44,6 +44,23 @@ async def test_post_creates_items_for_bots_and_notifies_humans(services):
     its = await items(services)
     assert {(i.actor_id, i.kind, i.status) for i in its} == {(rev.id, "message", "queued"), (ci.id, "message", "queued")}
     assert (await services.store.asearch(("threads", t.id, "messages"), query="hi"))[0].key == res.message.id
+
+
+async def test_create_thread_persists_working_directory(services):
+    _eng = (await seed(services, bot_actor("eng")))[0]
+    services.settings.workspace_root.mkdir(parents=True)
+    (services.settings.workspace_root / "project").mkdir()
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        defaulted = await create_thread(services, s, title="root", handles=["eng"], created_by=you)
+        custom = await create_thread(services, s, title="project", handles=["eng"], created_by=you,
+                                     working_directory="./project")
+        assert defaulted.working_directory is None
+        assert custom.working_directory == "project"
+
+    async with services.session_factory() as s:
+        reread = await s.get(Thread, custom.id)
+        assert reread.working_directory == "project"
 
 
 async def test_default_bot_routes_unmentioned_human_messages(services):

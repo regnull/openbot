@@ -15,7 +15,7 @@ async def test_roundtrip():
     async with sf() as s:
         eng, you, ci = bot_actor("eng", instructions="build"), human_actor(), external_actor("ci", webhook_url="http://x")
         s.add_all([eng, you, ci])
-        thread = Thread(title="t")
+        thread = Thread(title="t", working_directory="project")
         s.add(thread)
         await s.flush()
         s.add_all([ThreadParticipant(thread_id=thread.id, actor_id=eng.id),
@@ -36,6 +36,8 @@ async def test_roundtrip():
         assert item.status == "queued" and item.attempts == 0
         r = (await s.execute(select(Run))).scalar_one()
         assert r.status == "queued"
+        thread = (await s.execute(select(Thread))).scalar_one()
+        assert thread.working_directory == "project"
         m = (await s.execute(select(Message))).scalar_one()
         assert m.hop == 0 and m.mentions == [a.id]
         await s.delete(a)
@@ -82,3 +84,4 @@ async def test_migrations_create_schema(tmp_path):
     assert {"actors", "bot_profiles", "external_profiles", "threads", "thread_participants", "messages",
             "inbox_items", "runs", "run_events"} <= set(names)
     assert "default_bot_actor_id" in cols
+    assert "working_directory" in cols
