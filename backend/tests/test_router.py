@@ -35,12 +35,24 @@ def test_explicit_targets_in_order():
     assert [b.handle for b in t] == ["eng", "rev"]
 
 
-def test_single_bot_thread_default():
+def test_single_bot_thread_legacy_default():
     t = resolve_targets(sender=YOU, mentioned_handles=[], to_handles=[], actors_by_handle=ACTORS, thread_bot_ids=["id-qa"])
     assert [b.handle for b in t] == ["qa"]
 
 
-def test_multi_bot_thread_requires_mention():
+def test_multi_bot_thread_uses_default_bot():
+    t = resolve_targets(sender=YOU, mentioned_handles=[], to_handles=[], actors_by_handle=ACTORS,
+                        thread_bot_ids=["id-qa", "id-eng"], default_bot_id="id-eng")
+    assert [b.handle for b in t] == ["eng"]
+
+
+def test_explicit_mentions_take_precedence_over_default_bot():
+    t = resolve_targets(sender=YOU, mentioned_handles=["qa"], to_handles=[], actors_by_handle=ACTORS,
+                        thread_bot_ids=["id-qa", "id-eng"], default_bot_id="id-eng")
+    assert [b.handle for b in t] == ["qa"]
+
+
+def test_multi_bot_thread_without_configured_default_requires_mention():
     assert resolve_targets(sender=YOU, mentioned_handles=[], to_handles=[], actors_by_handle=ACTORS,
                            thread_bot_ids=["id-qa", "id-eng"]) == []
 

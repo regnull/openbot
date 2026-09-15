@@ -13,6 +13,7 @@ from openbot.runtime.router import parse_mentions, resolve_targets
 
 HOP_LIMIT_NOTICE = "Bot-to-bot hop limit reached; a human message resets it."
 HUMAN_HANDLE = "you"
+DEFAULT_BOT_HANDLE = "chief_of_staff"
 
 
 @dataclass
@@ -55,17 +56,27 @@ async def _publish_items(services, items: list[InboxItem]) -> None:
 
 
 async def create_thread(services, session: AsyncSession, *, title: str, handles: list[str], created_by: Actor | None,
-                        external_ref: str | None = None, include_human: bool = True) -> Thread:
+                        external_ref: str | None = None, include_human: bool = True,
+                        default_bot_handle: str | None = None) -> Thread:
     by_handle = await _actors_by_handle(session)
     unknown = [h for h in handles if h not in by_handle]
     if unknown:
         raise ValueError(f"unknown handles: {unknown}")
-    thread = Thread(title=title, created_by_actor_id=created_by.id if created_by else None, external_ref=external_ref)
+    effective_default = default_bot_handle or DEFAULT_BOT_HANDLE
+    default_bot = by_handle.get(effective_default)
+    if default_bot is not None and default_bot.kind != "bot":
+        raise ValueError(f"default bot must be a bot: {effective_default}")
+    if default_bot_handle is not None and default_bot is None:
+        raise ValueError(f"unknown default bot: {effective_default}")
+    thread = Thread(title=title, created_by_actor_id=created_by.id if created_by else None,
+                    default_bot_actor_id=default_bot.id if default_bot else None, external_ref=external_ref)
     session.add(thread)
     await session.flush()
     ids = {by_handle[h].id for h in handles}
     if created_by:
         ids.add(created_by.id)
+    if default_bot:
+        ids.add(default_bot.id)
     if include_human and HUMAN_HANDLE in by_handle:
         ids.add(by_handle[HUMAN_HANDLE].id)
     for aid in ids:
@@ -91,7 +102,9 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
     part_ids = [p.actor_id for p in parts]
     thread_bot_ids = [aid for aid in part_ids if aid in by_id and by_id[aid].kind == "bot"]
     targets = resolve_targets(sender=sender, mentioned_handles=mentioned, to_handles=to_handles,
-                              actors_by_handle=by_handle, thread_bot_ids=thread_bot_ids)
+                              actors_by_handle=by_handle, thread_bot_ids=thread_bot_ids,
+                              default_bot_id=thread.default_bot_actor_id
+                              or (by_handle[DEFAULT_BOT_HANDLE].id if DEFAULT_BOT_HANDLE in by_handle else None))
     unaddressed = sender is not None and not targets and not (mentioned or to_handles)
     now = utcnow()
     msg = Message(thread_id=thread_id, sender_actor_id=sender.id if sender else None,

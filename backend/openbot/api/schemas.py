@@ -92,6 +92,11 @@ class ParticipantOut(BaseModel):
 class ThreadCreate(BaseModel):
     title: str = ""
     handles: list[str] = []
+    default_bot_handle: str | None = Field(default=None, pattern=HANDLE_RE)
+
+
+class ThreadUpdate(BaseModel):
+    default_bot_handle: str = Field(pattern=HANDLE_RE)
 
 
 class ThreadOut(BaseModel):
@@ -99,6 +104,8 @@ class ThreadOut(BaseModel):
     id: str
     title: str
     created_by_actor_id: str | None
+    default_bot_actor_id: str | None
+    default_bot_handle: str | None = None
     external_ref: str | None
     created_at: datetime
     updated_at: datetime

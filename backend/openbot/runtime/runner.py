@@ -24,7 +24,7 @@ from openbot.db.models import (
     utcnow,
 )
 from openbot.runtime import memory
-from openbot.runtime.delivery import deliver_question, post_message
+from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.context import RunContext
@@ -101,11 +101,16 @@ class Runner:
         history, older = build_history(list(rows), bot.id, token_budget=st.history_token_budget, max_messages=st.history_max_messages)
         older += max(0, total - len(rows))
         by_id = {a.id: a for a in all_actors}
+        by_handle = {a.handle: a for a in all_actors}
         participants = [by_id[p.actor_id].name for p in parts if p.actor_id in by_id]
+        default_bot_handle = by_id[thread.default_bot_actor_id].handle if thread.default_bot_actor_id in by_id else None
+        if default_bot_handle is None and DEFAULT_BOT_HANDLE in by_handle:
+            default_bot_handle = DEFAULT_BOT_HANDLE
         query = "\n".join(m.content for m in triggers)
         memories = await memory.relevant_memories(self.s.store, bot.id, query) if self.s.store is not None else []
         prompt = build_system_prompt(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
-                                     workspace_root=str(st.workspace_root), older_count=older, tool_names=list(bot.bot.tool_names))
+                                     workspace_root=str(st.workspace_root), older_count=older,
+                                     tool_names=list(bot.bot.tool_names), default_bot_handle=default_bot_handle)
         hop = max([m.hop for m in triggers], default=0) + 1
         return prompt, {"messages": history}, hop
 

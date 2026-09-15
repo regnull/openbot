@@ -59,7 +59,7 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
           </div>
         </div>
       ))}
-      {state.messages.length === 0 && active.length === 0 && <p className="text-sm text-zinc-500">No messages yet. Say hello and mention a bot with @handle.</p>}
+      {state.messages.length === 0 && active.length === 0 && <p className="text-sm text-zinc-500">No messages yet. Say hello; unmentioned messages go to the thread default bot.</p>}
       <div ref={bottom} />
     </div>
   );

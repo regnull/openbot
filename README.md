@@ -17,7 +17,7 @@ webhook-driven external system all participate in the same conversation the same
 
 - **Actor model runtime**: bots, humans, and external systems are all actors with inboxes; one
   run at a time per bot, with a global concurrency cap.
-- **Multi-bot workflows**: bots hand off to each other with `@mention`, with a hop limit to
+- **Multi-bot workflows**: user messages without an explicit bot mention go to the thread default bot (`@chief_of_staff` unless changed); bots hand off to each other with `@mention`, with a hop limit to
   prevent runaway bot-to-bot loops.
 - **Tools**: built-in shell/file/HTTP tools rooted at a workspace directory, plus a plugin
   directory of your own Python tools. `run_shell` is **not** sandboxed — see
@@ -65,7 +65,7 @@ repository, using the [`gh`](https://cli.github.com/) CLI.
 1. Clone a repository you can push to into `workspace/` (the default `WORKSPACE_ROOT`), and make
    sure `gh auth status` succeeds from that directory — the bots shell out to `git` and `gh`.
 2. Start OpenBot (`make dev` or `make run`) and open the UI.
-3. Start a new thread and mention `@chief_of_staff`, then send:
+3. Start a new thread (its default bot is `@chief_of_staff` unless you change it), then send:
 
    > Add a `--version` flag to the CLI and open a PR.
 
@@ -82,7 +82,7 @@ repository, using the [`gh`](https://cli.github.com/) CLI.
 |---|---|
 | **Actor** | Any participant with a persistent inbox: a bot, the human (`@you`), or an external system. |
 | **Inbox** | An actor's queue of items (`message`, `question`, `resume`) waiting to be processed or acknowledged. |
-| **Thread** | A conversation with a set of actor participants; messages are posted into a thread and routed to inbox items for the actors they address. |
+| **Thread** | A conversation with a set of actor participants and a default bot. Messages are posted into a thread and routed to inbox items for explicit bot mentions, or to the default bot when a user message has no explicit bot mention. |
 | **Run** | One execution of a bot's agent loop, triggered by a batch of queued messages or by resuming after a question/approval. |
 | **Hop** | A counter on bot-to-bot messages; bot replies increment it, human/external messages reset it to 0. Once `MAX_BOT_HOPS` is reached, further bot-to-bot delegation is blocked in that thread until a human message resets it. |
 | **Approval** | A pause requested by a tool (`ask_human`, or a tool flagged for approval) that turns into a `question` inbox item for the human and any external participants; the bot resumes once it is answered. |

@@ -16,7 +16,8 @@ def parse_mentions(content: str) -> list[str]:
 
 
 def resolve_targets(*, sender: Actor | None, mentioned_handles: list[str], to_handles: list[str],
-                    actors_by_handle: dict[str, Actor], thread_bot_ids: list[str]) -> list[Actor]:
+                    actors_by_handle: dict[str, Actor], thread_bot_ids: list[str],
+                    default_bot_id: str | None = None) -> list[Actor]:
     if sender is None:
         return []
     ordered: list[Actor] = []
@@ -24,6 +25,9 @@ def resolve_targets(*, sender: Actor | None, mentioned_handles: list[str], to_ha
         a = actors_by_handle.get(h)
         if a and a.kind == "bot" and a not in ordered:
             ordered.append(a)
-    if not ordered and len(thread_bot_ids) == 1:
-        ordered = [a for a in actors_by_handle.values() if a.id == thread_bot_ids[0] and a.kind == "bot"]
+    if not ordered and not (to_handles or mentioned_handles):
+        if sender.kind == "human" and default_bot_id is not None:
+            ordered = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
+        elif len(thread_bot_ids) == 1:
+            ordered = [a for a in actors_by_handle.values() if a.id == thread_bot_ids[0] and a.kind == "bot"]
     return [a for a in ordered if a.enabled and a.id != sender.id]
