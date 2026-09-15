@@ -5,7 +5,7 @@ import logging
 
 from langchain_core.messages import BaseMessage
 from langchain_core.tools import BaseTool
-from langgraph.store.base import BaseStore
+from langgraph.store.base import BaseStore, SearchItem
 from langmem import (
     create_manage_memory_tool,
     create_memory_store_manager,
@@ -25,10 +25,62 @@ def thread_namespace(thread_id: str) -> tuple[str, ...]:
     return ("threads", thread_id, "messages")
 
 
+def _memory_value(content: object) -> dict[str, object]:
+    """Return the structured value expected by langmem's store manager."""
+    return {"kind": "Memory", "content": {"content": str(content)}}
+
+
+def _legacy_memory_content(value: dict) -> object:
+    if "content" not in value:
+        return dict(value)
+    content = value["content"]
+    if isinstance(content, dict) and set(content) == {"content"}:
+        return content["content"]
+    return content
+
+
+def _normalize_memory_search_items(items: list[SearchItem]) -> list[SearchItem]:
+    """Upgrade old manage_memory-tool values before MemoryStoreManager reads them.
+
+    Older memories were written as {"content": "..."}, while langmem's
+    reflection manager expects search results to have {"kind", "content"}.
+    Any malformed/non-dict search result is also coerced into an unstructured
+    Memory so one bad item cannot abort background reflection.
+    Mutating SearchItem.value is sufficient for the manager invocation and
+    preserves keys/timestamps/scores until the manager decides whether to
+    write an update.
+    """
+    for item in items:
+        value = item.value
+        if not isinstance(value, dict):
+            item.value = _memory_value(value)
+            continue
+        if "kind" in value and "content" in value:
+            continue
+        content = _legacy_memory_content(value)
+        value.clear()
+        value.update(_memory_value(content))
+    return items
+
+
+class ReflectionMemoryStore:
+    """Store wrapper that normalizes legacy memory values for reflection searches."""
+
+    def __init__(self, store: BaseStore) -> None:
+        self._store = store
+
+    def __getattr__(self, name: str):
+        return getattr(self._store, name)
+
+    async def asearch(self, namespace_prefix: tuple[str, ...], /, **kwargs):
+        items = await self._store.asearch(namespace_prefix, **kwargs)
+        return _normalize_memory_search_items(items)
+
+
 def memory_tools(bot_id: str, store: BaseStore) -> list[BaseTool]:
     ns = bot_namespace(bot_id)
     return [
-        create_manage_memory_tool(ns, store=store,
+        create_manage_memory_tool(ns, store=store, schema=str,
             instructions="Save durable facts, preferences, decisions and lessons you will need in "
                          "future conversations. Update or delete memories that became wrong."),
         create_search_memory_tool(ns, store=store),
@@ -40,7 +92,13 @@ async def relevant_memories(store: BaseStore, bot_id: str, query: str, limit: in
     out = []
     for it in items:
         v = it.value
-        out.append(str(v.get("content", v)) if isinstance(v, dict) else str(v))
+        if isinstance(v, dict):
+            content = v.get("content", v)
+            if isinstance(content, dict) and set(content) == {"content"}:
+                content = content["content"]
+            out.append(str(content))
+        else:
+            out.append(str(v))
     return out
 
 
@@ -69,7 +127,7 @@ class MemoryReflector:
     def make_manager(self, bot: Actor):
         model = self.services.model_factory(bot)
         return create_memory_store_manager(model, namespace=bot_namespace(bot.id),
-                                           store=self.services.store,
+                                           store=ReflectionMemoryStore(self.services.store),
                                            enable_inserts=True, enable_deletes=False)
 
     def schedule(self, bot: Actor, messages: list[BaseMessage]) -> None:
