@@ -35,12 +35,12 @@ webhook-driven external system all participate in the same conversation the same
 ## Quick start
 
 Prerequisites: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 24+ with
-[pnpm](https://pnpm.io/) 10, and at least one LLM provider API key (OpenAI, Anthropic,
-OpenRouter, or xAI).
+[pnpm](https://pnpm.io/) 10, and an OpenRouter API key (recommended), or another
+LLM provider API key (OpenAI, Anthropic, or xAI).
 
 ```bash
 make setup            # uv sync (backend), pnpm install (frontend), copy .env.example -> .env
-$EDITOR .env           # add at least one provider API key
+$EDITOR .env           # add OPENROUTER_API_KEY (recommended) or another provider key
 make dev               # backend on :8000, frontend dev server on :5173
 ```
 
@@ -230,7 +230,7 @@ route except `/health` requires an `X-API-Key` header.
 
 All variables live in `.env` at the repo root (also readable from `backend/.env`). Copy
 `.env.example` to `.env` and fill in what you need — everything has a sensible default except the
-provider keys.
+provider keys. By default, bot LLM calls use OpenRouter with the cost-effective `openai/gpt-4o-mini`; set `BOT_MODEL` to any OpenRouter model id to change it without editing bot records.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -240,6 +240,8 @@ provider keys.
 | `ANTHROPIC_API_KEY` | *(unset)* | Enables the `anthropic` provider. |
 | `OPENROUTER_API_KEY` | *(unset)* | Enables the `openrouter` provider. |
 | `XAI_API_KEY` | *(unset)* | Enables the `xai` provider (OpenAI-compatible). |
+| `BOT_MODEL` | `openai/gpt-4o-mini` | OpenRouter model used for bot LLM calls for seeded bots and any bot whose provider is `openrouter`. Set this in `.env` to switch the whole bot team to a different OpenRouter model; `BOT_MODEL` takes precedence over `OPENROUTER_MODEL`. |
+| `OPENROUTER_MODEL` | *(unset)* | Backward-compatible alias for `BOT_MODEL`. |
 | `EMBEDDING_MODEL` | `openai:text-embedding-3-small` | Used for semantic memory search; without a matching key, memory search degrades to non-semantic. |
 | `EMBEDDING_DIMS` | `1536` | Must match the embedding model's output size. |
 | `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing. |

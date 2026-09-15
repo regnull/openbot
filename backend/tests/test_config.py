@@ -25,6 +25,14 @@ def test_unset_frontend_dist_also_uses_default(monkeypatch):
     assert settings.frontend_dist == Path("frontend/dist")
 
 
+def test_empty_bot_model_env_uses_default_marker(monkeypatch):
+    monkeypatch.setenv("BOT_MODEL", "")
+    monkeypatch.setenv("OPENROUTER_MODEL", "")
+    settings = Settings(_env_file=None)
+    assert settings.bot_model is None
+    assert settings.openrouter_model is None
+
+
 def test_cors_origins_parses_from_csv_string(monkeypatch):
     monkeypatch.setenv("CORS_ORIGINS", "http://a,http://b")
     settings = Settings(_env_file=None)
@@ -52,15 +60,19 @@ def test_real_dotenv_file_matching_env_example_parses_correctly(tmp_path, monkey
     # os.environ wins over _env_file in pydantic-settings, so an exported CORS_ORIGINS in the
     # developer's (or CI's) shell would silently make this assert the environment, not the file.
     # conftest's autouse fixture already strips these; state it here too so the test is self-contained.
-    for name in ("CORS_ORIGINS", "WEBHOOK_RETRY_DELAYS", "FRONTEND_DIST"):
+    for name in ("CORS_ORIGINS", "WEBHOOK_RETRY_DELAYS", "FRONTEND_DIST", "BOT_MODEL", "OPENROUTER_MODEL"):
         monkeypatch.delenv(name, raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text(
         "CORS_ORIGINS=http://localhost:5173\n"
         "WEBHOOK_RETRY_DELAYS=5,30,120\n"
         "FRONTEND_DIST=\n"
+        "BOT_MODEL=\n"
+        "OPENROUTER_MODEL=\n"
     )
     settings = Settings(_env_file=env_file)
     assert settings.cors_origins == ["http://localhost:5173"]
     assert settings.webhook_retry_delays == [5.0, 30.0, 120.0]
     assert settings.frontend_dist == Path("frontend/dist")
+    assert settings.bot_model is None
+    assert settings.openrouter_model is None
