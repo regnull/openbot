@@ -14,10 +14,19 @@ A browser-based Tetris clone built with plain HTML, CSS, and JavaScript. It runs
 
 ## Run locally
 
-Open `index.html` directly in a browser, or serve the directory with any static file server:
+Install the development dependency and start the local dev server:
 
 ```bash
 cd tetris
+npm install
+npm run dev
+```
+
+Then open the URL printed by Vite, usually <http://localhost:5173>.
+
+You can also open `index.html` directly in a browser, or serve the directory with any static file server:
+
+```bash
 python3 -m http.server 8000
 ```
 

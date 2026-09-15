@@ -1,0 +1,15 @@
+{
+  "name": "browser-tetris-clone",
+  "version": "1.0.0",
+  "description": "A browser-based Tetris clone built with plain HTML, CSS, and JavaScript.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "start": "vite --host 0.0.0.0",
+    "check": "node --check script.js"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
+  }
+}
