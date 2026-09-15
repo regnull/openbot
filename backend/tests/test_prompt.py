@@ -40,9 +40,11 @@ def test_system_prompt_contents():
     off = bot_actor("off")
     off.id, off.enabled = "o", False
     p = build_system_prompt(bot=bot, all_bots=[bot, rev, off], participants=["You", "Reviewer"], memories=["prefers squash"],
-                            workspace_root="/w", older_count=12, tool_names=["run_shell"])
+                            workspace_root="/w", older_count=12, tool_names=["run_shell"],
+                            default_bot_handle="chief_of_staff")
     assert "Be terse." in p and "@rev" in p and "@off" not in p and "prefers squash" in p
     assert "12 older messages" in p and "/w" in p and "ask_human" in p and "@eng" in p and "run_shell" in p
+    assert "thread default bot" in p and "@chief_of_staff" in p
     # Bots used to @-mention other bots while merely narrating ("handing this to @reviewer"), which
     # woke them for no reason. Spell out that @ is an imperative, not a way of naming a bot.
     assert ("Only write @handle when you want that bot to act now. When merely referring to a bot, "

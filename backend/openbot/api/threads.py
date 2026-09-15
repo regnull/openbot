@@ -12,6 +12,7 @@ from openbot.api.schemas import (
     ThreadCreate,
     ThreadDetail,
     ThreadOut,
+    ThreadUpdate,
 )
 from openbot.db.models import (
     OPEN_RUN_STATUSES,
@@ -22,10 +23,29 @@ from openbot.db.models import (
     Thread,
     ThreadParticipant,
 )
-from openbot.runtime.delivery import ack_items, create_thread, human_actor
+from openbot.runtime.delivery import (
+    DEFAULT_BOT_HANDLE,
+    ack_items,
+    actor_by_handle,
+    create_thread,
+    human_actor,
+)
 from openbot.services import Services
 
 router = APIRouter(prefix="/threads", tags=["threads"])
+
+
+async def default_bot_handles_for(session: AsyncSession, thread_ids: list[str]) -> dict[str, str | None]:
+    out: dict[str, str | None] = {t: None for t in thread_ids}
+    if not thread_ids:
+        return out
+    rows = (await session.execute(select(Thread.id, Actor.handle).join(Actor, Actor.id == Thread.default_bot_actor_id)
+                                  .where(Thread.id.in_(thread_ids)))).all()
+    for thread_id, handle in rows:
+        out[thread_id] = handle
+    if any(handle is None for handle in out.values()) and await actor_by_handle(session, DEFAULT_BOT_HANDLE):
+        out = {thread_id: handle or DEFAULT_BOT_HANDLE for thread_id, handle in out.items()}
+    return out
 
 
 async def participants_for(session: AsyncSession, thread_ids: list[str]) -> dict[str, list[ParticipantOut]]:
@@ -39,8 +59,9 @@ async def participants_for(session: AsyncSession, thread_ids: list[str]) -> dict
     return out
 
 
-def thread_out(thread: Thread, parts: list[ParticipantOut]) -> ThreadOut:
+def thread_out(thread: Thread, parts: list[ParticipantOut], default_bot_handle: str | None) -> ThreadOut:
     t = ThreadOut.model_validate(thread)
+    t.default_bot_handle = default_bot_handle
     t.participants = parts
     return t
 
@@ -55,19 +76,23 @@ async def get_thread_or_404(session: AsyncSession, thread_id: str) -> Thread:
 @router.get("", response_model=list[ThreadOut])
 async def list_threads(session: AsyncSession = Depends(get_session)):
     threads = (await session.execute(select(Thread).order_by(Thread.updated_at.desc()))).scalars().all()
-    parts = await participants_for(session, [t.id for t in threads])
-    return [thread_out(t, parts[t.id]) for t in threads]
+    ids = [t.id for t in threads]
+    parts = await participants_for(session, ids)
+    default_handles = await default_bot_handles_for(session, ids)
+    return [thread_out(t, parts[t.id], default_handles[t.id]) for t in threads]
 
 
 @router.post("", response_model=ThreadOut, status_code=201)
 async def create(body: ThreadCreate, session: AsyncSession = Depends(get_session), services: Services = Depends(get_services)):
     you = await human_actor(session)
     try:
-        thread = await create_thread(services, session, title=body.title, handles=body.handles, created_by=you)
+        thread = await create_thread(services, session, title=body.title, handles=body.handles, created_by=you,
+                                     default_bot_handle=body.default_bot_handle)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     parts = await participants_for(session, [thread.id])
-    return thread_out(thread, parts[thread.id])
+    default_handles = await default_bot_handles_for(session, [thread.id])
+    return thread_out(thread, parts[thread.id], default_handles[thread.id])
 
 
 @router.get("/{thread_id}", response_model=ThreadDetail)
@@ -81,12 +106,32 @@ async def get_thread(thread_id: str, before: str | None = None, limit: int = Que
     runs = (await session.execute(select(Run).where(Run.thread_id == thread_id, Run.status.in_(OPEN_RUN_STATUSES))
                                   .order_by(Run.created_at))).scalars().all()
     parts = await participants_for(session, [thread_id])
+    default_handles = await default_bot_handles_for(session, [thread_id])
     d = ThreadDetail.model_validate(thread)
+    d.default_bot_handle = default_handles[thread_id]
     d.participants = parts[thread_id]
     d.messages = [MessageOut.model_validate(m) for m in reversed(rows[:limit])]
     d.has_more = len(rows) > limit
     d.runs = [RunOut.model_validate(r) for r in runs]
     return d
+
+
+@router.patch("/{thread_id}", response_model=ThreadOut)
+async def update_thread(thread_id: str, body: ThreadUpdate, session: AsyncSession = Depends(get_session)):
+    thread = await get_thread_or_404(session, thread_id)
+    bot = await actor_by_handle(session, body.default_bot_handle)
+    if bot is None:
+        raise HTTPException(422, f"unknown default bot: {body.default_bot_handle}")
+    if bot.kind != "bot":
+        raise HTTPException(422, f"default bot must be a bot: {body.default_bot_handle}")
+    thread.default_bot_actor_id = bot.id
+    existing = (await session.execute(select(ThreadParticipant).where(
+        ThreadParticipant.thread_id == thread_id, ThreadParticipant.actor_id == bot.id))).scalar_one_or_none()
+    if existing is None:
+        session.add(ThreadParticipant(thread_id=thread_id, actor_id=bot.id))
+    await session.commit()
+    parts = await participants_for(session, [thread_id])
+    return thread_out(thread, parts[thread_id], bot.handle)
 
 
 @router.delete("/{thread_id}", status_code=204)

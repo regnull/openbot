@@ -106,6 +106,7 @@ class Thread(TimestampMixin, Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     created_by_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    default_bot_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     external_ref: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
     hop_limit_notified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_message_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

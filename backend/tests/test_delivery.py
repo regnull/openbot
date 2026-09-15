@@ -46,7 +46,31 @@ async def test_post_creates_items_for_bots_and_notifies_humans(services):
     assert (await services.store.asearch(("threads", t.id, "messages"), query="hi"))[0].key == res.message.id
 
 
-async def test_single_bot_default_and_unaddressed(services):
+async def test_default_bot_routes_unmentioned_human_messages(services):
+    chief, _eng, _rev = await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"), bot_actor("rev"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng", "rev"], created_by=you)
+        assert t.default_bot_actor_id == chief.id
+        res = await post_message(services, s, thread_id=t.id, sender=you, content="hello")
+        assert [a.id for a in res.addressed] == [chief.id]
+        assert res.unaddressed is False
+
+
+async def test_changed_default_and_explicit_mention_precedence(services):
+    chief, eng, rev = await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"), bot_actor("rev"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng", "rev"], created_by=you, default_bot_handle="rev")
+        assert t.default_bot_actor_id == rev.id
+        defaulted = await post_message(services, s, thread_id=t.id, sender=you, content="hello")
+        assert [a.id for a in defaulted.addressed] == [rev.id]
+        explicit = await post_message(services, s, thread_id=t.id, sender=you, content="@eng please handle")
+        assert [a.id for a in explicit.addressed] == [eng.id]
+        assert chief.id not in [a.id for a in explicit.addressed]
+
+
+async def test_single_bot_legacy_default_and_unaddressed_without_default(services):
     eng, _rev = await seed(services, bot_actor("eng"), bot_actor("rev"))
     async with services.session_factory() as s:
         you = await human_actor(s)

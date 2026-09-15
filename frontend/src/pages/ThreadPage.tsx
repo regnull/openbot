@@ -28,13 +28,20 @@ export default function ThreadPage() {
   });
   const send = useMutation({
     mutationFn: (content: string) => Api.postMessage(id, { content }),
-    onSuccess: (r) => setNotice(r.unaddressed ? "No bot was addressed. Mention a bot with @handle to wake it up." : null),
+    onSuccess: (r) => setNotice(r.unaddressed ? "No bot was addressed. Mention a bot with @handle or set a default bot to wake one up." : null),
   });
   const loadOlder = useMutation({
     mutationFn: () => Api.getThread(id, state.messages[0].id),
     onSuccess: (older) => { setState((s) => hydrate(s, older)); setHasMore(older.has_more); },
   });
   const del = useMutation({ mutationFn: () => Api.deleteThread(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["threads"] }); nav("/threads"); } });
+  const updateDefault = useMutation({
+    mutationFn: (default_bot_handle: string) => Api.updateThread(id, { default_bot_handle }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["thread", id] });
+      qc.invalidateQueries({ queryKey: ["threads"] });
+    },
+  });
   if (detail.isLoading) return <Spinner />;
   if (!detail.data) return <ErrorText error={detail.error} />;
   const t = detail.data;
@@ -47,7 +54,14 @@ export default function ThreadPage() {
       <div className="flex items-center gap-3 border-b border-zinc-200 pb-3 dark:border-zinc-800">
         <Link to="/threads" className="text-sm text-zinc-500">← Threads</Link>
         <h1 className="truncate text-lg font-semibold">{t.title || "Untitled thread"}</h1>
-        <div className="ml-auto truncate text-xs text-zinc-500">{t.participants.map((p) => `@${p.handle}`).join(" ")}</div>
+        <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-zinc-500">
+          <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
+          <label className="shrink-0">Default {" "}
+            <select className="rounded border border-zinc-300 bg-white px-1 py-0.5 dark:border-zinc-700 dark:bg-zinc-950" value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>
+              {handles.map((h) => <option key={h} value={h}>@{h}</option>)}
+            </select>
+          </label>
+        </div>
         <Button variant="secondary" onClick={() => window.confirm("Delete thread?") && del.mutate()}>Delete</Button>
       </div>
       <div className="flex-1 overflow-y-auto py-4">

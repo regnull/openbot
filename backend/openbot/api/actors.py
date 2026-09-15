@@ -15,7 +15,7 @@ from openbot.api.schemas import (
     MessageOut,
     actor_out,
 )
-from openbot.api.threads import participants_for, thread_out
+from openbot.api.threads import default_bot_handles_for, participants_for, thread_out
 from openbot.db.models import Actor, ExternalProfile, Thread
 from openbot.runtime.delivery import actor_by_handle, create_thread, post_message
 from openbot.services import Services
@@ -103,5 +103,6 @@ async def message_actor(handle: str, body: ActorMessageCreate, session: AsyncSes
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     parts = await participants_for(session, [thread.id])
-    return ActorMessageOut(thread=thread_out(thread, parts[thread.id]), message=MessageOut.model_validate(res.message),
+    default_handles = await default_bot_handles_for(session, [thread.id])
+    return ActorMessageOut(thread=thread_out(thread, parts[thread.id], default_handles[thread.id]), message=MessageOut.model_validate(res.message),
                            addressed=[a.handle for a in res.addressed])
