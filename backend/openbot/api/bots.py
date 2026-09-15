@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openbot.api.actors import handle_taken
 from openbot.api.deps import get_services, get_session
 from openbot.api.schemas import BotCreate, BotOut, BotUpdate, bot_out
-from openbot.db.models import OPEN_RUN_STATUSES, Actor, BotProfile, Run, Thread
+from openbot.db.models import ACTIVE_RUN_STATUSES, OPEN_RUN_STATUSES, Actor, BotProfile, Run, Thread
 from openbot.services import Services
 
 router = APIRouter(prefix="/bots", tags=["bots"])
@@ -35,7 +35,8 @@ async def _get_bot_or_404(session: AsyncSession, bot_id: str) -> Actor:
 @router.get("", response_model=list[BotOut])
 async def list_bots(session: AsyncSession = Depends(get_session)):
     actors = (await session.execute(select(Actor).where(Actor.kind == "bot").order_by(Actor.created_at))).scalars().all()
-    return [bot_out(a) for a in actors]
+    active_ids = set((await session.execute(select(Run.actor_id).where(Run.status.in_(ACTIVE_RUN_STATUSES)).distinct())).scalars().all())
+    return [bot_out(a, active=a.id in active_ids) for a in actors]
 
 
 @router.post("", response_model=BotOut, status_code=201)
@@ -48,12 +49,15 @@ async def create_bot(body: BotCreate, session: AsyncSession = Depends(get_sessio
     actor = Actor(kind="bot", **{k: data.pop(k) for k in ACTOR_FIELDS}, bot=BotProfile(**data))
     session.add(actor)
     await session.commit()
+    await services.bus.publish("bots.updated", None, bot_out(actor).model_dump(mode="json"))
     return bot_out(actor)
 
 
 @router.get("/{bot_id}", response_model=BotOut)
 async def get_bot(bot_id: str, session: AsyncSession = Depends(get_session)):
-    return bot_out(await _get_bot_or_404(session, bot_id))
+    actor = await _get_bot_or_404(session, bot_id)
+    active = (await session.execute(select(Run.id).where(Run.actor_id == bot_id, Run.status.in_(ACTIVE_RUN_STATUSES)).limit(1))).first() is not None
+    return bot_out(actor, active=active)
 
 
 @router.patch("/{bot_id}", response_model=BotOut)
@@ -67,11 +71,15 @@ async def update_bot(bot_id: str, body: BotUpdate, session: AsyncSession = Depen
     for k, v in data.items():
         setattr(actor if k in ACTOR_FIELDS else actor.bot, k, v)
     await session.commit()
-    return bot_out(actor)
+    active = (await session.execute(select(Run.id).where(Run.actor_id == bot_id, Run.status.in_(ACTIVE_RUN_STATUSES)).limit(1))).first() is not None
+    out = bot_out(actor, active=active)
+    await services.bus.publish("bots.updated", None, out.model_dump(mode="json"))
+    return out
 
 
 @router.delete("/{bot_id}", status_code=204)
-async def delete_bot(bot_id: str, session: AsyncSession = Depends(get_session)):
+async def delete_bot(bot_id: str, session: AsyncSession = Depends(get_session),
+                     services: Services = Depends(get_services)):
     actor = await _get_bot_or_404(session, bot_id)
     if (await session.execute(select(Run.id).where(Run.actor_id == bot_id, Run.status.in_(OPEN_RUN_STATUSES)))).first():
         raise HTTPException(409, "bot has open runs")
@@ -79,3 +87,4 @@ async def delete_bot(bot_id: str, session: AsyncSession = Depends(get_session)):
         thread.default_bot_actor_id = None
     await session.delete(actor)
     await session.commit()
+    await services.bus.publish("bots.updated", None, {"id": bot_id, "deleted": True})

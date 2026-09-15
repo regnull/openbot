@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from openbot.bot_icons import DEFAULT_BOT_ICON, validate_bot_icon
 
 Provider = Literal["openai", "anthropic", "openrouter", "xai"]
 HANDLE_RE = r"^[a-z0-9_-]{2,32}$"
@@ -41,6 +43,7 @@ class BotCreate(BaseModel):
     handle: str = Field(pattern=HANDLE_RE)
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
+    icon: str = DEFAULT_BOT_ICON
     instructions: str = ""
     provider: Provider
     model: str = Field(min_length=1)
@@ -50,11 +53,17 @@ class BotCreate(BaseModel):
     memory_enabled: bool = True
     enabled: bool = True
 
+    @field_validator("icon")
+    @classmethod
+    def validate_icon(cls, value: str) -> str:
+        return validate_bot_icon(value)
+
 
 class BotUpdate(BaseModel):
     handle: str | None = Field(default=None, pattern=HANDLE_RE)
     name: str | None = None
     description: str | None = None
+    icon: str | None = None
     instructions: str | None = None
     provider: Provider | None = None
     model: str | None = None
@@ -64,13 +73,20 @@ class BotUpdate(BaseModel):
     memory_enabled: bool | None = None
     enabled: bool | None = None
 
+    @field_validator("icon")
+    @classmethod
+    def validate_icon(cls, value: str | None) -> str | None:
+        return validate_bot_icon(value) if value is not None else None
+
 
 class BotOut(BaseModel):
     id: str
     handle: str
     name: str
     description: str
+    icon: str
     enabled: bool
+    active: bool = False
     instructions: str
     provider: str
     model: str
@@ -223,9 +239,10 @@ def actor_out(actor) -> ActorOut:
                     created_at=actor.created_at, updated_at=actor.updated_at)
 
 
-def bot_out(actor) -> BotOut:
+def bot_out(actor, *, active: bool = False) -> BotOut:
     p = actor.bot
-    return BotOut(id=actor.id, handle=actor.handle, name=actor.name, description=actor.description, enabled=actor.enabled,
+    return BotOut(id=actor.id, handle=actor.handle, name=actor.name, description=actor.description,
+                  icon=p.icon or DEFAULT_BOT_ICON, enabled=actor.enabled, active=active,
                   instructions=p.instructions, provider=p.provider, model=p.model, model_settings=p.model_settings,
                   tool_names=p.tool_names, approval_tools=p.approval_tools, memory_enabled=p.memory_enabled,
                   created_at=actor.created_at, updated_at=actor.updated_at)

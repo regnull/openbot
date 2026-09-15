@@ -1,0 +1,14 @@
+import { botIconFor } from "../lib/botIcons";
+
+export default function BotIcon({ icon, className = "" }: { icon: string | null | undefined; className?: string }) {
+  const option = botIconFor(icon);
+  return (
+    <span
+      aria-label={option.label}
+      title={option.label}
+      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-base ring-1 ring-zinc-200 dark:bg-zinc-800 dark:ring-zinc-700 ${className}`}
+    >
+      {option.glyph}
+    </span>
+  );
+}

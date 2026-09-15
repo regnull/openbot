@@ -111,6 +111,7 @@ class BotActor(_Worker):
                 i.status, i.run_id = "processing", run.id
             await session.commit()
             await s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
+            await s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": True})
             return Batch(run_id=run.id, items=group)
 
     async def _process(self, batch: Batch) -> None:
@@ -290,6 +291,7 @@ class ActorSystem:
                 i.status, i.processed_at = "cancelled", utcnow()
             await session.commit()
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
+            await self.s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": False})
         await self.notify(run.actor_id)     # parked thread may now have waiting mail
         return True
 

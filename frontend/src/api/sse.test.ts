@@ -45,6 +45,12 @@ describe("subscribeBusEvents", () => {
     expect(onEvent).toHaveBeenCalledTimes(1);
   });
 
+  it("subscribes to bot updates for sidebar activity", () => {
+    const { es, onEvent } = subscribe();
+    es.emit("bots.updated", { event: "bots.updated", data: { id: "b1", active: true } });
+    expect(onEvent).toHaveBeenCalledWith({ event: "bots.updated", data: { id: "b1", active: true } });
+  });
+
   it("closes the stream on unsubscribe", () => {
     const { es, stop } = subscribe();
     stop();

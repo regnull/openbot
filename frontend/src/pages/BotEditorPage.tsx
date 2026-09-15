@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
 import type { BotInput } from "../api/types";
+import BotIcon from "../components/BotIcon";
 import { Button, Card, ErrorText, Field, Input, Select, Spinner, Textarea } from "../components/ui";
+import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
 
-const empty: BotInput = { handle: "", name: "", description: "", instructions: "", provider: "openai", model: "", model_settings: {},
+const empty: BotInput = { handle: "", name: "", description: "", icon: DEFAULT_BOT_ICON, instructions: "", provider: "openai", model: "", model_settings: {},
   tool_names: [], approval_tools: [], memory_enabled: true, enabled: true };
 
 export default function BotEditorPage() {
@@ -52,6 +54,14 @@ export default function BotEditorPage() {
         <Field label="Name"><Input value={form.name} onChange={(e) => set("name", e.target.value)} required /></Field>
         <Field label="Handle" hint="lowercase, digits, _ or -; used as @handle"><Input value={form.handle} onChange={(e) => set("handle", e.target.value)} pattern="[a-z0-9_\-]{2,32}" required /></Field>
         <div className="sm:col-span-2"><Field label="Description" hint="Shown to other bots so they know when to hand work to this one"><Input value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
+        <Field label="Icon" hint="Choose from the standard bot icons">
+          <div className="flex items-center gap-3">
+            <BotIcon icon={form.icon} />
+            <Select value={form.icon} onChange={(e) => set("icon", e.target.value)}>
+              {BOT_ICONS.map((icon) => <option key={icon.key} value={icon.key}>{icon.glyph} {icon.label}</option>)}
+            </Select>
+          </div>
+        </Field>
         <div className="sm:col-span-2"><Field label="Instructions"><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field></div>
         <Field label="Provider">
           <Select value={form.provider} onChange={(e) => { const p = providers.data?.providers.find((x) => x.id === e.target.value); set("provider", e.target.value); if (p) set("model", p.default_model); }}>

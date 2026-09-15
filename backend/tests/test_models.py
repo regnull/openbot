@@ -81,7 +81,9 @@ async def test_migrations_create_schema(tmp_path):
     async with engine.connect() as conn:
         names = await conn.run_sync(lambda c: inspect(c).get_table_names())
         cols = await conn.run_sync(lambda c: {col["name"] for col in inspect(c).get_columns("threads")})
+        bot_cols = await conn.run_sync(lambda c: {col["name"] for col in inspect(c).get_columns("bot_profiles")})
     assert {"actors", "bot_profiles", "external_profiles", "threads", "thread_participants", "messages",
             "inbox_items", "runs", "run_events"} <= set(names)
     assert "default_bot_actor_id" in cols
     assert "working_directory" in cols
+    assert "icon" in bot_cols
