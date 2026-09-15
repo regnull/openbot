@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Api } from "../api/client";
 import type { Participant, RunDetail, RunEvent } from "../api/types";
 import type { ThreadState } from "../lib/threadState";
@@ -12,7 +12,6 @@ const ACTIVE = ["queued", "running", "waiting_human"];
 
 export default function MessageList({ state, participants, onRunLoaded }: { state: ThreadState; participants: Participant[]; onRunLoaded: (run: RunDetail) => void }) {
   const byActor = new Map(participants.map((p) => [p.actor_id, p]));
-  const bottom = useRef<HTMLDivElement>(null);
   // Runs referenced by a message whose events we do not have yet: fetch them lazily.
   // `onRunLoaded` folds the result into thread state, which drops the id from `missing`
   // and ends the fetch — the run itself must land in `state.runs`, because a completed
@@ -23,8 +22,6 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
     loaded.forEach((q) => { const d = q.data as RunDetail | undefined; if (d) onRunLoaded(d); });
   });
 
-  const streamedChars = Object.values(state.streaming).reduce((a, s) => a + s.length, 0);
-  useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [state.messages.length, streamedChars]);
 
   const eventsFor = (id: string): RunEvent[] => state.runEvents[id] ?? [];
   // A run whose reply message already exists is rendered under that message; keep it out
@@ -60,7 +57,6 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
         </div>
       ))}
       {state.messages.length === 0 && active.length === 0 && <p className="text-sm text-zinc-500">No messages yet. Say hello; unmentioned messages go to the thread default bot.</p>}
-      <div ref={bottom} />
     </div>
   );
 }
