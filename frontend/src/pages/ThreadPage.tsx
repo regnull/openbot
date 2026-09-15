@@ -69,7 +69,10 @@ export default function ThreadPage() {
     <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-4xl flex-col">
       <div className="flex items-center gap-3 border-b border-zinc-200 pb-3 dark:border-zinc-800">
         <Link to="/threads" className="text-sm text-zinc-500">← Threads</Link>
-        <h1 className="truncate text-lg font-semibold">{t.title || "Untitled thread"}</h1>
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold">{t.title || "Untitled thread"}</h1>
+          <div className="truncate text-xs text-zinc-500">cwd {t.working_directory ?? "."}</div>
+        </div>
         <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-zinc-500">
           <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
           <label className="shrink-0">Default {" "}

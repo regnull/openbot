@@ -27,6 +27,7 @@ from openbot.runtime import memory
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt
 from openbot.tools.builtin.core import CORE_TOOLS
+from openbot.tools.builtin.workspace import thread_workspace_root
 from openbot.tools.context import RunContext
 
 log = logging.getLogger(__name__)
@@ -108,8 +109,9 @@ class Runner:
             default_bot_handle = DEFAULT_BOT_HANDLE
         query = "\n".join(m.content for m in triggers)
         memories = await memory.relevant_memories(self.s.store, bot.id, query) if self.s.store is not None else []
+        workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
         prompt = build_system_prompt(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
-                                     workspace_root=str(st.workspace_root), older_count=older,
+                                     workspace_root=str(workspace_root), older_count=older,
                                      tool_names=list(bot.bot.tool_names), default_bot_handle=default_bot_handle)
         hop = max([m.hop for m in triggers], default=0) + 1
         return prompt, {"messages": history}, hop
@@ -173,7 +175,9 @@ class Runner:
                   "run_name": f"bot:{bot.handle}", "run_id": trace_id}
         try:
             system_prompt, inputs, hop = await self._prepare(bot, thread, run)
-            ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, self.s.settings.workspace_root, self.s, hop)
+            workspace_root = thread_workspace_root(self.s.settings.workspace_root, thread.working_directory)
+            ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
+                             thread.working_directory, hop)
             agent = self._build_agent(bot, system_prompt)
             with collect_runs() as cb:
                 final_text, interrupt, seq = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq)

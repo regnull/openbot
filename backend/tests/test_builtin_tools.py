@@ -8,7 +8,7 @@ from langchain.tools import ToolRuntime
 from openbot.tools.builtin import SELECTABLE_TOOLS
 from openbot.tools.builtin.files import list_files, read_file, write_file
 from openbot.tools.builtin.shell import run_shell
-from openbot.tools.builtin.workspace import resolve_in_workspace
+from openbot.tools.builtin.workspace import resolve_in_workspace, validate_workspace_directory
 from openbot.tools.context import RunContext
 
 
@@ -29,6 +29,21 @@ def test_resolve_in_workspace(tmp_path):
         resolve_in_workspace(root, "../x")
     with pytest.raises(ValueError):
         resolve_in_workspace(root, "/etc/passwd")
+
+
+def test_validate_workspace_directory(tmp_path):
+    root = tmp_path.resolve()
+    (root / "repo" / "src").mkdir(parents=True)
+    (root / "repo" / "file.txt").write_text("hi")
+
+    assert validate_workspace_directory(root, None) is None
+    assert validate_workspace_directory(root, "") is None
+    assert validate_workspace_directory(root, ".") is None
+    assert validate_workspace_directory(root, "repo/../repo/src") == "repo/src"
+
+    for bad in ("../x", "/tmp", "repo/missing", "repo/file.txt", "repo\nname"):
+        with pytest.raises(ValueError):
+            validate_workspace_directory(root, bad)
 
 
 async def test_files_roundtrip(tmp_path):

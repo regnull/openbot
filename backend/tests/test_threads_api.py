@@ -9,6 +9,7 @@ async def test_thread_flow(client, services):
     r = await client.post("/api/v1/threads", json={"title": "Work", "handles": ["eng"]})
     assert r.status_code == 201, r.text
     t = r.json()
+    assert t["working_directory"] is None
     assert sorted(p["handle"] for p in t["participants"]) == ["chief_of_staff", "eng", "you"]
     assert t["default_bot_handle"] == "chief_of_staff"
     r = await client.post(f"/api/v1/threads/{t['id']}/messages", json={"content": "hello"})
@@ -26,6 +27,34 @@ async def test_thread_flow(client, services):
     assert (await client.post("/api/v1/threads", json={"handles": ["ghost"]})).status_code == 422
     assert (await client.delete(f"/api/v1/threads/{t['id']}")).status_code == 204
     assert (await client.get(f"/api/v1/threads/{t['id']}")).status_code == 404
+
+
+async def test_create_thread_with_custom_working_directory(client, services):
+    services.settings.workspace_root.mkdir(parents=True)
+    (services.settings.workspace_root / "project" / "src").mkdir(parents=True)
+    await client.post("/api/v1/bots", json=CHIEF)
+
+    r = await client.post("/api/v1/threads", json={"title": "Project", "working_directory": "project/../project/src"})
+    assert r.status_code == 201, r.text
+    t = r.json()
+    assert t["working_directory"] == "project/src"
+
+    d = (await client.get(f"/api/v1/threads/{t['id']}")).json()
+    assert d["working_directory"] == "project/src"
+    listed = (await client.get("/api/v1/threads")).json()[0]
+    assert listed["working_directory"] == "project/src"
+
+
+async def test_create_thread_rejects_invalid_working_directory(client, services):
+    services.settings.workspace_root.mkdir(parents=True)
+    (services.settings.workspace_root / "file.txt").write_text("not a dir")
+    await client.post("/api/v1/bots", json=CHIEF)
+
+    cases = ["../escape", "/tmp", "missing", "file.txt", "bad\npath"]
+    for directory in cases:
+        r = await client.post("/api/v1/threads", json={"working_directory": directory})
+        assert r.status_code == 422, (directory, r.text)
+        assert "working_directory" in r.text
 
 
 async def test_change_thread_default_and_explicit_mention_precedence(client, services):

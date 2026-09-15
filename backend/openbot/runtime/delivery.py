@@ -10,6 +10,7 @@ from openbot.api.schemas import InboxItemOut, MessageOut, to_json
 from openbot.db.models import Actor, InboxItem, Message, Run, Thread, ThreadParticipant, utcnow
 from openbot.runtime import memory
 from openbot.runtime.router import parse_mentions, resolve_targets
+from openbot.tools.builtin.workspace import validate_workspace_directory
 
 HOP_LIMIT_NOTICE = "Bot-to-bot hop limit reached; a human message resets it."
 HUMAN_HANDLE = "you"
@@ -57,7 +58,7 @@ async def _publish_items(services, items: list[InboxItem]) -> None:
 
 async def create_thread(services, session: AsyncSession, *, title: str, handles: list[str], created_by: Actor | None,
                         external_ref: str | None = None, include_human: bool = True,
-                        default_bot_handle: str | None = None) -> Thread:
+                        default_bot_handle: str | None = None, working_directory: str | None = None) -> Thread:
     by_handle = await _actors_by_handle(session)
     unknown = [h for h in handles if h not in by_handle]
     if unknown:
@@ -68,8 +69,16 @@ async def create_thread(services, session: AsyncSession, *, title: str, handles:
         raise ValueError(f"default bot must be a bot: {effective_default}")
     if default_bot_handle is not None and default_bot is None:
         raise ValueError(f"unknown default bot: {effective_default}")
+    try:
+        normalized_working_directory = validate_workspace_directory(services.settings.workspace_root, working_directory)
+    except ValueError as e:
+        msg = str(e)
+        if "working_directory" not in msg:
+            msg = f"invalid working_directory: {msg}"
+        raise ValueError(msg) from e
     thread = Thread(title=title, created_by_actor_id=created_by.id if created_by else None,
-                    default_bot_actor_id=default_bot.id if default_bot else None, external_ref=external_ref)
+                    default_bot_actor_id=default_bot.id if default_bot else None,
+                    working_directory=normalized_working_directory, external_ref=external_ref)
     session.add(thread)
     await session.flush()
     ids = {by_handle[h].id for h in handles}

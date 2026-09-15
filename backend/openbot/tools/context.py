@@ -14,4 +14,5 @@ class RunContext:
     run_id: str
     workspace_root: Path
     services: Any
+    working_directory: str | None = None
     hop: int = 0

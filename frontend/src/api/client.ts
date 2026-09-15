@@ -35,7 +35,7 @@ export const Api = {
   createActor: (a: { handle: string; name: string; description?: string; webhook_url?: string | null; webhook_secret?: string | null }) => api<Actor>("/actors", { method: "POST", json: a }),
   deleteActor: (id: string) => api<void>(`/actors/${id}`, { method: "DELETE" }),
   listThreads: () => api<Thread[]>("/threads"),
-  createThread: (t: { title?: string; handles: string[]; default_bot_handle?: string }) => api<Thread>("/threads", { method: "POST", json: t }),
+  createThread: (t: { title?: string; handles: string[]; default_bot_handle?: string; working_directory?: string | null }) => api<Thread>("/threads", { method: "POST", json: t }),
   getThread: (id: string, before?: string) => api<ThreadDetail>(`/threads/${id}?limit=50${before ? `&before=${before}` : ""}`),
   deleteThread: (id: string) => api<void>(`/threads/${id}`, { method: "DELETE" }),
   updateThread: (id: string, body: { default_bot_handle: string }) => api<Thread>(`/threads/${id}`, { method: "PATCH", json: body }),
