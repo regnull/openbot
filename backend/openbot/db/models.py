@@ -17,6 +17,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from openbot.bot_icons import DEFAULT_BOT_ICON
+
 ACTIVE_RUN_STATUSES = ("running", "waiting_human")
 OPEN_RUN_STATUSES = ("queued", "running", "waiting_human")
 
@@ -83,6 +85,7 @@ class Actor(TimestampMixin, Base):
 class BotProfile(Base):
     __tablename__ = "bot_profiles"
     actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), primary_key=True)
+    icon: Mapped[str] = mapped_column(String(32), default=DEFAULT_BOT_ICON, nullable=False)
     instructions: Mapped[str] = mapped_column(Text, default="", nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str] = mapped_column(String(120), nullable=False)

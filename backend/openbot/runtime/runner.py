@@ -70,6 +70,8 @@ class Runner:
                 run.finished_at = utcnow()
             await session.commit()
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
+            if status in ("running", "waiting_human", "completed", "failed", "cancelled"):
+                await self.s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": status in ("running", "waiting_human")})
             return run
 
     async def _record(self, run: Run, seq: int, type_: str, payload: dict) -> int:
