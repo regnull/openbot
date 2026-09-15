@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
 import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
 import MessageList from "../components/MessageList";
 import { Button, ErrorText, Spinner } from "../components/ui";
+import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
 import { emptyThreadState, hydrate, mergeRun, reduceThreadEvent, type ThreadState } from "../lib/threadState";
 
 export default function ThreadPage() {
@@ -17,7 +18,13 @@ export default function ThreadPage() {
   const [state, setState] = useState<ThreadState>(emptyThreadState());
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  useEffect(() => { setState(emptyThreadState()); setHasMore(false); }, [id]);
+  const scrollContainer = useRef<HTMLDivElement>(null);
+  const shouldStickToBottom = useRef(true);
+  const updateScrollStickiness = useCallback(() => {
+    const el = scrollContainer.current;
+    if (el) shouldStickToBottom.current = isNearBottom(el);
+  }, []);
+  useEffect(() => { setState(emptyThreadState()); setHasMore(false); shouldStickToBottom.current = true; }, [id]);
   useEffect(() => { if (detail.data) { setState((s) => hydrate(s, detail.data)); setHasMore(detail.data.has_more); } }, [id, detail.data]);
   // Ack on open and whenever new messages land, so the inbox badge stays honest.
   useEffect(() => { Api.ackThread(id).then(() => qc.invalidateQueries({ queryKey: ["inbox"] })).catch(() => {}); }, [id, qc, state.messages.length]);
@@ -42,6 +49,15 @@ export default function ThreadPage() {
       qc.invalidateQueries({ queryKey: ["threads"] });
     },
   });
+  const latestMessageId = state.messages.at(-1)?.id;
+  const streamedChars = Object.values(state.streaming).reduce((a, s) => a + s.length, 0);
+  const runEventCount = Object.values(state.runEvents).reduce((a, events) => a + events.length, 0);
+  const runStatuses = Object.values(state.runs).map((r) => `${r.id}:${r.status}`).join("|");
+  useLayoutEffect(() => {
+    const el = scrollContainer.current;
+    if (el && shouldStickToBottom.current) scrollToBottom(el);
+  }, [id, latestMessageId, streamedChars, runEventCount, runStatuses]);
+
   if (detail.isLoading) return <Spinner />;
   if (!detail.data) return <ErrorText error={detail.error} />;
   const t = detail.data;
@@ -64,7 +80,7 @@ export default function ThreadPage() {
         </div>
         <Button variant="secondary" onClick={() => window.confirm("Delete thread?") && del.mutate()}>Delete</Button>
       </div>
-      <div className="flex-1 overflow-y-auto py-4">
+      <div ref={scrollContainer} onScroll={updateScrollStickiness} className="flex-1 overflow-y-auto py-4">
         {hasMore && state.messages.length > 0 && (
           <div className="mb-3 space-y-1 text-center">
             <Button variant="secondary" onClick={() => loadOlder.mutate()} disabled={loadOlder.isPending}>Load older</Button>
