@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Tetris</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Browser Arcade</p>
+      <h1>Neon Tetris</h1>
+      <p class="tagline">Stack, clear, and survive as the board speeds up.</p>
+    </section>
+
+    <section class="game-layout" aria-label="Tetris game">
+      <aside class="panel stats-panel">
+        <h2>Stats</h2>
+        <div class="stat"><span>Score</span><strong id="score">0</strong></div>
+        <div class="stat"><span>Lines</span><strong id="lines">0</strong></div>
+        <div class="stat"><span>Level</span><strong id="level">1</strong></div>
+        <div class="stat"><span>Status</span><strong id="status">Ready</strong></div>
+        <button id="restart" type="button">Start / Restart</button>
+      </aside>
+
+      <div class="board-wrap">
+        <canvas id="board" width="300" height="600" aria-label="Tetris board"></canvas>
+        <div id="overlay" class="overlay">
+          <div>
+            <h2>Neon Tetris</h2>
+            <p>Press Start or Space to play</p>
+          </div>
+        </div>
+      </div>
+
+      <aside class="panel side-panel">
+        <h2>Next</h2>
+        <canvas id="next" width="120" height="120" aria-label="Next piece preview"></canvas>
+        <h2>Controls</h2>
+        <ul class="controls">
+          <li><kbd>←</kbd>/<kbd>→</kbd> Move</li>
+          <li><kbd>↑</kbd> or <kbd>X</kbd> Rotate</li>
+          <li><kbd>↓</kbd> Soft drop</li>
+          <li><kbd>Space</kbd> Hard drop / start</li>
+          <li><kbd>P</kbd> Pause</li>
+        </ul>
+      </aside>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
