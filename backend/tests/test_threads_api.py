@@ -51,6 +51,24 @@ async def test_change_thread_default_and_explicit_mention_precedence(client, ser
     assert (await client.patch(f"/api/v1/threads/{t['id']}", json={"default_bot_handle": "ghost"})).status_code == 422
 
 
+async def test_deleted_default_bot_falls_back_to_chief(client, services):
+    await client.post("/api/v1/bots", json=CHIEF)
+    await client.post("/api/v1/bots", json=BOT)
+    reviewer = (await client.post("/api/v1/bots", json=REVIEWER)).json()
+    t = (await client.post("/api/v1/threads", json={"handles": ["eng"], "default_bot_handle": "reviewer"})).json()
+    assert t["default_bot_handle"] == "reviewer"
+
+    r = await client.delete(f"/api/v1/bots/{reviewer['id']}")
+    assert r.status_code == 204, r.text
+
+    d = (await client.get(f"/api/v1/threads/{t['id']}")).json()
+    assert d["default_bot_actor_id"] is None
+    assert d["default_bot_handle"] == "chief_of_staff"
+    r = await client.post(f"/api/v1/threads/{t['id']}/messages", json={"content": "hello"})
+    assert r.status_code == 201, r.text
+    assert r.json()["addressed"] == ["chief_of_staff"]
+
+
 async def test_pagination(client, services):
     await client.post("/api/v1/bots", json={**BOT, "enabled": False})
     t = (await client.post("/api/v1/threads", json={"handles": ["eng"]})).json()

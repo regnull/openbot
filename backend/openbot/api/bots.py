@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openbot.api.actors import handle_taken
 from openbot.api.deps import get_services, get_session
 from openbot.api.schemas import BotCreate, BotOut, BotUpdate, bot_out
-from openbot.db.models import OPEN_RUN_STATUSES, Actor, BotProfile, Run
+from openbot.db.models import OPEN_RUN_STATUSES, Actor, BotProfile, Run, Thread
 from openbot.services import Services
 
 router = APIRouter(prefix="/bots", tags=["bots"])
@@ -75,5 +75,7 @@ async def delete_bot(bot_id: str, session: AsyncSession = Depends(get_session)):
     actor = await _get_bot_or_404(session, bot_id)
     if (await session.execute(select(Run.id).where(Run.actor_id == bot_id, Run.status.in_(OPEN_RUN_STATUSES)))).first():
         raise HTTPException(409, "bot has open runs")
+    for thread in (await session.execute(select(Thread).where(Thread.default_bot_actor_id == bot_id))).scalars():
+        thread.default_bot_actor_id = None
     await session.delete(actor)
     await session.commit()

@@ -101,10 +101,16 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
     parts = await _participants(session, thread_id)
     part_ids = [p.actor_id for p in parts]
     thread_bot_ids = [aid for aid in part_ids if aid in by_id and by_id[aid].kind == "bot"]
+    default_bot_id = thread.default_bot_actor_id
+    if default_bot_id is not None:
+        default_bot = by_id.get(default_bot_id)
+        if default_bot is None or default_bot.kind != "bot":
+            default_bot_id = None
+    if default_bot_id is None and DEFAULT_BOT_HANDLE in by_handle:
+        default_bot_id = by_handle[DEFAULT_BOT_HANDLE].id
     targets = resolve_targets(sender=sender, mentioned_handles=mentioned, to_handles=to_handles,
                               actors_by_handle=by_handle, thread_bot_ids=thread_bot_ids,
-                              default_bot_id=thread.default_bot_actor_id
-                              or (by_handle[DEFAULT_BOT_HANDLE].id if DEFAULT_BOT_HANDLE in by_handle else None))
+                              default_bot_id=default_bot_id)
     unaddressed = sender is not None and not targets and not (mentioned or to_handles)
     now = utcnow()
     msg = Message(thread_id=thread_id, sender_actor_id=sender.id if sender else None,
