@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -32,6 +34,14 @@ from openbot.tools.context import RunContext
 
 log = logging.getLogger(__name__)
 TOOL_RESULT_CAP = 4000
+LOG_PREVIEW_CAP = 500
+
+
+def _preview(value: Any, cap: int = LOG_PREVIEW_CAP) -> str:
+    """Single-line, size-capped rendering of tool args/results for the diagnostic log."""
+    text = value if isinstance(value, str) else json.dumps(value, default=str, ensure_ascii=False)
+    text = text.replace("\n", "\\n")
+    return text if len(text) <= cap else text[:cap] + f"... [{len(text) - cap} more chars]"
 
 
 def normalize_interrupt(value: Any) -> dict:
@@ -146,6 +156,7 @@ class Runner:
                         if not isinstance(m, AIMessage):
                             continue
                         for tc in m.tool_calls:
+                            log.info("run %s tool_call %s(%s)", run.id, tc["name"], _preview(tc["args"]))
                             seq = await self._record(run, seq, "tool_call", {"id": tc["id"], "name": tc["name"], "args": tc["args"]})
                         if _text(m):
                             final_text = _text(m)
@@ -153,6 +164,7 @@ class Runner:
                 elif source == "tools" and isinstance(update, dict):
                     for m in update.get("messages", []):
                         if isinstance(m, ToolMessage):
+                            log.info("run %s tool_result %s status=%s len=%d: %s", run.id, m.name, m.status, len(_text(m)), _preview(_text(m)))
                             seq = await self._record(run, seq, "tool_result", {"tool_call_id": m.tool_call_id, "name": m.name,
                                                                               "status": m.status, "content": _text(m)[:TOOL_RESULT_CAP]})
         return final_text, interrupt, seq
@@ -175,9 +187,14 @@ class Runner:
         trace_id = uuid.uuid4()
         config = {"configurable": {"thread_id": run.id}, "metadata": {"bot": bot.handle, "thread_id": thread.id, "run_id": run.id},
                   "run_name": f"bot:{bot.handle}", "run_id": trace_id}
+        started = time.monotonic()
         try:
             system_prompt, inputs, hop = await self._prepare(bot, thread, run)
             workspace_root = thread_workspace_root(self.s.settings.workspace_root, thread.working_directory)
+            log.info("run %s started: bot=@%s thread=%s hop=%d resume=%s working_directory=%s tool_root=%s model=%s/%s tools=%s",
+                     run.id, bot.handle, thread.id, hop, resume is not None, thread.working_directory or ".",
+                     workspace_root, bot.bot.provider, bot.bot.model, ",".join(bot.bot.tool_names) or "-")
+            log.debug("run %s system prompt:\n%s", run.id, system_prompt)
             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
                              thread.working_directory, hop)
             agent = self._build_agent(bot, system_prompt)
@@ -185,6 +202,7 @@ class Runner:
                 final_text, interrupt, seq = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq)
             ls_id = str(trace_id) if cb.traced_runs else None
             if interrupt is not None:
+                log.info("run %s waiting_human after %.1fs: %s", run.id, time.monotonic() - started, _preview(interrupt))
                 run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id)
                 await deliver_question(self.s, run, interrupt)
                 return
@@ -193,6 +211,8 @@ class Runner:
                     res = await post_message(self.s, session, thread_id=thread.id, sender=bot, content=final_text, hop=hop, run_id=run.id)
                 seq = await self._record(run, seq, "message", {"message_id": res.message.id})
             await self._set_status(run.id, "completed", langsmith_run_id=ls_id)
+            log.info("run %s completed in %.1fs: reply=%d chars langsmith_run_id=%s", run.id, time.monotonic() - started,
+                     len(final_text), ls_id)
             if bot.bot.memory_enabled and self.s.reflector is not None:
                 # The run is already complete and its reply posted; reflection must never undo that.
                 try:
@@ -201,6 +221,7 @@ class Runner:
                 except Exception:
                     log.exception("could not schedule memory reflection for run %s", run.id)
         except asyncio.CancelledError:
+            log.info("run %s cancelled after %.1fs", run.id, time.monotonic() - started)
             await self._set_status(run.id, "cancelled")
             await self._system_message(thread.id, f"@{bot.handle} run was cancelled.")
             raise

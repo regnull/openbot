@@ -62,7 +62,8 @@ def settings(tmp_path) -> Settings:
     # connection shared by every session, so once the actor system runs bots concurrently one
     # session's close (ROLLBACK) silently discards another's uncommitted writes.
     return Settings(database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db", workspace_root=tmp_path / "workspace",
-                    tools_dir=tmp_path / "tools", seed_demo_bots=False, memory_reflection_delay=0.01,
+                    tools_dir=tmp_path / "tools", log_file=tmp_path / "logs" / "openbot.log",
+                    seed_demo_bots=False, memory_reflection_delay=0.01,
                     webhook_retry_delays=[0.01, 0.01, 0.01], _env_file=None)
 
 

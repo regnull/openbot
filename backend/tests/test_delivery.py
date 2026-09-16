@@ -134,3 +134,16 @@ async def test_unknown_handles(services):
             await post_message(services, s, thread_id=t.id, sender=you, content="x", to_handles=["ghost"])
         with pytest.raises(LookupError):
             await post_message(services, s, thread_id="nope", sender=you, content="x")
+
+
+async def test_create_thread_logs_resolved_working_directory(services, caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="openbot")
+    (services.settings.workspace_root / "proj").mkdir(parents=True)
+    await seed(services, bot_actor("eng"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you, working_directory="proj")
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith(f"thread {t.id} created"))
+    assert "working_directory=proj" in line
+    assert f"tool_root={(services.settings.workspace_root / 'proj').resolve()}" in line

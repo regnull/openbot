@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     # `_split_csv` validator runs.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     frontend_dist: Path | None = Path("frontend/dist")
+    log_level: str = "INFO"
+    log_file: Path = Path("logs/openbot.log")
     webhook_retry_delays: Annotated[list[float], NoDecode] = [5.0, 30.0, 120.0]
 
     @field_validator("cors_origins", "webhook_retry_delays", mode="before")
@@ -55,6 +57,20 @@ class Settings(BaseSettings):
     def _empty_model_env_means_default(cls, v):
         if v == "":
             return None
+        return v
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _empty_log_level_means_default(cls, v):
+        if v == "":
+            return cls.model_fields["log_level"].default
+        return v
+
+    @field_validator("log_file", mode="before")
+    @classmethod
+    def _empty_log_file_means_default(cls, v):
+        if v == "":
+            return cls.model_fields["log_file"].default
         return v
 
     @field_validator("frontend_dist", mode="before")

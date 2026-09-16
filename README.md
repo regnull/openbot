@@ -258,6 +258,8 @@ provider keys. By default, bot LLM calls use OpenRouter with the cost-effective 
 | `SEED_DEMO_BOTS` | `true` | Seed `chief_of_staff`, `engineer`, `reviewer`, `qa` on first start if the bot table is empty. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed origins. |
 | `WEBHOOK_RETRY_DELAYS` | `5,30,120` | Comma-separated seconds between webhook delivery retries before an item is marked `failed`. |
+| `LOG_LEVEL` | `INFO` | Console verbosity (`DEBUG`, `INFO`, `WARNING`, ...). Does not affect the log file, which always records `DEBUG` detail. |
+| `LOG_FILE` | `logs/openbot.log` | Rotating diagnostic log (10 MB x 5). See [Troubleshooting](#troubleshooting). |
 | `FRONTEND_DIST` | `frontend/dist` | Directory of the built frontend to serve at `/` when it exists. Leave empty in `.env` to use this default; set to a blank value explicitly resolves to the same default, not "disabled". |
 
 ## Database
@@ -267,6 +269,27 @@ and demo walkthrough use. All application code goes through SQLAlchemy 2 async a
 no SQLite-only SQL, so a `postgresql+asyncpg://...` URL should work as a drop-in replacement —
 this path is untested in v1 but is the intended upgrade route. Alembic migrations run
 automatically at startup against any non-`:memory:` database; nothing to run by hand.
+
+## Troubleshooting
+
+Every process writes a timestamped diagnostic log to `LOG_FILE` (`logs/openbot.log` by default,
+rotating at 10 MB, five backups kept). It always contains `DEBUG` detail regardless of `LOG_LEVEL`,
+so it is the place to look when a bot misbehaves:
+
+- `startup: cwd=... workspace_root=... (WORKSPACE_ROOT=...) tools_dir=... database_url=...` -- the
+  paths the process actually resolved. Relative settings such as `WORKSPACE_ROOT=./workspace`
+  depend on the directory the server was started from; `make dev` and `make run` both start it from
+  the repo root, so bots see `<repo>/workspace`, not the repo itself. Clone the project you want
+  them to work on into `workspace/` or point `WORKSPACE_ROOT` elsewhere.
+- `thread <id> created: ... working_directory=... tool_root=...` -- where a new thread's file and
+  shell tools are rooted.
+- `run <id> started: bot=@... thread=... working_directory=... tool_root=... model=...` followed
+  by one `tool_call` / `tool_result` line per tool invocation (arguments and a preview of the
+  result) and a `completed` / `waiting_human` / `failed` line with the elapsed time.
+- At `DEBUG`, the full system prompt each run was given.
+
+A bot that reports `frontend does not exist` while listing only a handful of files is almost always
+looking at the wrong `tool_root`; the `startup:` and `run ... started:` lines show which one.
 
 ## Development
 

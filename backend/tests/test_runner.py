@@ -226,3 +226,23 @@ def _collecting(traced):
         yield type("CB", (), {"traced_runs": traced})()
 
     return fake
+
+
+async def test_runner_logs_run_context_and_tool_activity(settings, caplog):
+    import logging
+    caplog.set_level(logging.DEBUG, logger="openbot")
+    (settings.workspace_root / "project").mkdir(parents=True)
+    services, eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("list_files", path=".")]), ai("done")]},
+                                        working_directory="project", tool_names=["list_files"])
+    await services.runner.execute(run.id)
+
+    lines = [r.getMessage() for r in caplog.records if r.name.startswith("openbot.runtime.runner")]
+    start = next(l for l in lines if l.startswith(f"run {run.id} started"))
+    assert "bot=@eng" in start and "working_directory=project" in start
+    assert f"tool_root={(settings.workspace_root / 'project').resolve()}" in start
+    assert f"model={eng.bot.provider}/{eng.bot.model}" in start
+    assert any(l.startswith(f"run {run.id} tool_call list_files") and '"path": "."' in l for l in lines)
+    assert any(l.startswith(f"run {run.id} tool_result list_files") and "status=success" in l for l in lines)
+    assert any(l.startswith(f"run {run.id} completed") for l in lines)
+    debug = [r for r in caplog.records if r.levelno == logging.DEBUG and "system prompt" in r.getMessage()]
+    assert debug and str((settings.workspace_root / "project").resolve()) in debug[0].getMessage()
