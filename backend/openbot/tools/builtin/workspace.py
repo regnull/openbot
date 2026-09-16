@@ -1,6 +1,7 @@
 from pathlib import Path
 
-OUTPUT_CAP = 20000
+OUTPUT_CAP = 8000
+HEAD_SHARE = 0.7
 
 
 def resolve_in_workspace(root: Path, path: str | None) -> Path:
@@ -11,10 +12,18 @@ def resolve_in_workspace(root: Path, path: str | None) -> Path:
     return target
 
 
-def cap(text: str, limit: int = OUTPUT_CAP) -> str:
+def cap(text: str, limit: int = OUTPUT_CAP, hint: str = "narrow the command or read a smaller range") -> str:
+    """Bound a tool result to `limit` chars, keeping the head and the tail.
+
+    Everything a tool returns is re-sent to the model on every later turn of the run, so a single
+    oversized result is paid for many times over. The tail is kept because test runners, diffs and
+    build tools put the verdict at the end."""
     if len(text) <= limit:
         return text
-    return text[:limit] + f"\n... [truncated {len(text) - limit} chars]"
+    head = int(limit * HEAD_SHARE)
+    tail = limit - head
+    dropped = len(text) - head - tail
+    return (text[:head] + f"\n... [truncated {dropped} chars of {len(text)}; {hint}] ...\n" + text[-tail:])
 
 
 def validate_workspace_directory(root: Path, directory: str | None) -> str | None:

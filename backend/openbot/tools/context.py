@@ -16,3 +16,4 @@ class RunContext:
     services: Any
     working_directory: str | None = None
     hop: int = 0
+    tool_output_cap: int = 8000

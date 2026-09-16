@@ -162,6 +162,11 @@ class RunOut(BaseModel):
     interrupt: dict[str, Any] | None
     error: str | None
     langsmith_run_id: str | None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    total_tokens: int | None = None
+    model_calls: int | None = None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

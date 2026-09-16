@@ -9,6 +9,16 @@ const ACTIVE = ["queued", "running", "waiting_human"];
 type Tone = "green" | "red" | "amber" | "blue";
 const tone = (s: string): Tone => (s === "completed" ? "green" : s === "failed" || s === "cancelled" ? "red" : s === "waiting_human" ? "amber" : "blue");
 
+const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+/** "12.3k tok (78% cached)" — prompt + completion tokens over the run, with the cached share of the prompt. */
+export function usageLabel(run: Pick<Run, "prompt_tokens" | "completion_tokens" | "cache_read_tokens" | "model_calls">): string | null {
+  if (run.model_calls == null || run.prompt_tokens == null) return null;
+  const total = run.prompt_tokens + (run.completion_tokens ?? 0);
+  const cached = run.cache_read_tokens && run.prompt_tokens > 0 ? Math.round((run.cache_read_tokens / run.prompt_tokens) * 100) : 0;
+  return `${compact(total)} tok${cached > 0 ? ` (${cached}% cached)` : ""} · ${run.model_calls} model call${run.model_calls === 1 ? "" : "s"}`;
+}
+
 export default function RunCard({ run, events, streaming }: { run: Run; events: RunEvent[]; streaming?: string }) {
   // Runs arrive as `queued` before they run, so "open while active" has to react to the
   // status changing, not just to its value at mount — otherwise a live card mounts
@@ -32,6 +42,7 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
         <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={toggle}>
           <Badge tone={tone(run.status)}>{run.status}</Badge>
           <span className="text-zinc-500">{calls.length} tool call{calls.length === 1 ? "" : "s"}</span>
+          {usageLabel(run) && <span className="truncate text-zinc-500" title="prompt + completion tokens for this run">· {usageLabel(run)}</span>}
           <span className="ml-auto">{open ? "▾" : "▸"}</span>
         </button>
         {run.langsmith_run_id && (
