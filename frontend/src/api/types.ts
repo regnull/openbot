@@ -18,3 +18,4 @@ export interface ToolInfo { name: string; description: string; source: string; a
 export interface ProviderInfo { id: string; configured: boolean; models: string[]; default_model: string; }
 export interface ProvidersOut { providers: ProviderInfo[]; embedding_model: string; embeddings_configured: boolean; }
 export interface BusEvent { event: string; thread_id: string | null; data: any; }
+export interface AppSetting { key: string; group: string; label: string; description: string; type: "int" | "float" | "bool" | "str" | "list"; value: unknown; default: unknown; overridden: boolean; }

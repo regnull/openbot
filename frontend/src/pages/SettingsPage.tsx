@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Api, getApiKey, setApiKey } from "../api/client";
+import type { AppSetting } from "../api/types";
 import { Badge, Button, Card, ErrorText, Field, Input } from "../components/ui";
+import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
 
 const emptyExt = { handle: "", name: "", webhook_url: "", webhook_secret: "" };
 
@@ -21,6 +23,8 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-xl font-semibold">Settings</h1>
+
+      <RuntimeSettings />
 
       <Card className="space-y-2">
         <h2 className="font-medium">Providers</h2>
@@ -76,5 +80,87 @@ export default function SettingsPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+
+function RuntimeSettings() {
+  const settings = useQuery({ queryKey: ["settings"], queryFn: Api.getSettings });
+  if (settings.isLoading) return null;
+  if (!settings.data) return <ErrorText error={settings.error} />;
+  return (
+    <>
+      {groupSettings(settings.data).map((g) => <SettingsGroupCard key={g.name} group={g} />)}
+    </>
+  );
+}
+
+function SettingsGroupCard({ group }: { group: SettingGroup }) {
+  const qc = useQueryClient();
+  // Local edits keyed by setting; a key is present only while it differs from what the server has.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const refresh = (rows: AppSetting[]) => { qc.setQueryData(["settings"], rows); setDrafts({}); setErrors({}); };
+  const save = useMutation({ mutationFn: (updates: Record<string, unknown>) => Api.patchSettings(updates), onSuccess: refresh });
+  const reset = useMutation({ mutationFn: (key: string) => Api.resetSetting(key), onSuccess: refresh });
+  const dirty = Object.keys(drafts).length > 0;
+  const submit = () => {
+    const updates: Record<string, unknown> = {};
+    const errs: Record<string, string> = {};
+    for (const item of group.items) {
+      if (!(item.key in drafts)) continue;
+      const parsed = parseSettingInput(item.type, drafts[item.key]);
+      if ("error" in parsed) errs[item.key] = parsed.error; else updates[item.key] = parsed.value;
+    }
+    setErrors(errs);
+    if (Object.keys(errs).length === 0 && Object.keys(updates).length > 0) save.mutate(updates);
+  };
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-medium">{group.name}</h2>
+        <span className="text-xs text-zinc-500">Takes effect on the next run. Environment values are the defaults.</span>
+      </div>
+      <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+        {group.items.map((item) => {
+          const current = formatSettingValue(item.type, item.value);
+          const draft = item.key in drafts ? drafts[item.key] : current;
+          const setDraft = (v: string) => setDrafts((d) => { const n = { ...d }; if (v === current) delete n[item.key]; else n[item.key] = v; return n; });
+          return (
+            <div key={item.key} className="grid gap-2 py-3 sm:grid-cols-[1fr_14rem]">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium">{item.label}</span>
+                  {item.overridden && <Badge tone="amber">overridden</Badge>}
+                  {item.overridden && (
+                    <button type="button" className="text-xs text-zinc-500 underline" disabled={reset.isPending} onClick={() => reset.mutate(item.key)}>
+                      reset to {formatSettingValue(item.type, item.default) || "empty"}
+                    </button>
+                  )}
+                </div>
+                <div className="text-xs text-zinc-500">{item.description}</div>
+                {errors[item.key] && <div className="text-xs text-red-600">{errors[item.key]}</div>}
+              </div>
+              <div className="flex items-center">
+                {item.type === "bool" ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={draft === "true"} onChange={(e) => setDraft(String(e.target.checked))} /> {draft === "true" ? "on" : "off"}
+                  </label>
+                ) : (
+                  <Input value={draft} inputMode={item.type === "int" || item.type === "float" ? "decimal" : undefined}
+                    className={item.key in drafts ? "border-amber-400" : ""} onChange={(e) => setDraft(e.target.value)}
+                    placeholder={item.type === "list" ? "comma-separated" : ""} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <ErrorText error={save.error ?? reset.error} />
+      <div className="flex gap-2">
+        <Button onClick={submit} disabled={!dirty || save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        {dirty && <Button variant="secondary" onClick={() => { setDrafts({}); setErrors({}); }}>Discard</Button>}
+      </div>
+    </Card>
   );
 }
