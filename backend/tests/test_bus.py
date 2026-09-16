@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import pytest
 from fastapi.responses import StreamingResponse
 
 from openbot.api.events import event_stream, events
@@ -60,3 +61,38 @@ async def test_events_route_is_sse(services):
     assert resp.headers["cache-control"] == "no-cache"
     assert resp.headers["x-accel-buffering"] == "no"
     await resp.body_iterator.aclose()
+
+
+async def test_closing_the_bus_ends_open_streams_and_refuses_new_ones():
+    """On shutdown uvicorn waits for open connections before it even reaches the lifespan hook, and a
+    browser's event stream never closes on its own, so Ctrl+C used to hang until a second Ctrl+C
+    force-cancelled everything (logged as "Exception in ASGI application"). Closing the bus ends every
+    stream, so the connections drain and shutdown completes on the first signal."""
+    bus = EventBus()
+    gen = event_stream(bus, None)
+    assert await asyncio.wait_for(gen.__anext__(), timeout=1) == ": connected\n\n"
+    waiter = asyncio.ensure_future(gen.__anext__())
+    await asyncio.sleep(0.01)
+    bus.close()
+    with pytest.raises(StopAsyncIteration):
+        await asyncio.wait_for(waiter, timeout=1)
+    # A stream opened after close (a reconnecting browser) ends at once instead of waiting 15s for a ping.
+    late = event_stream(bus, None)
+    frames = [f async for f in late]
+    assert frames == [": connected\n\n"] or frames == []
+
+
+def test_uvicorn_exit_hook_closes_registered_buses():
+    from uvicorn.config import Config
+    from uvicorn.server import Server
+
+    from openbot.main import close_buses_on_uvicorn_exit
+    bus = EventBus()
+    unregister = close_buses_on_uvicorn_exit(bus)
+    try:
+        server = Server(Config(app="openbot.main:app"))
+        server.handle_exit(2, None)              # SIGINT
+        assert server.should_exit is True        # uvicorn's own behaviour is preserved
+        assert bus.closed is True
+    finally:
+        unregister()

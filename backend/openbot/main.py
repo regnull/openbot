@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 
@@ -101,6 +102,50 @@ async def stop_background(services: Services) -> None:
         await services.reflector.shutdown()
 
 
+_BUSES_TO_CLOSE: list = []
+
+
+def _install_uvicorn_exit_hook() -> None:
+    """Wrap `uvicorn.Server.handle_exit` so the first shutdown signal also closes every registered bus.
+
+    uvicorn's shutdown order is: stop accepting, wait for open connections to drain, then run the
+    lifespan shutdown. An event-stream connection never drains on its own, so the lifespan hook is
+    too late to end it and Ctrl+C hangs until a second Ctrl+C force-cancels the connections (logged
+    as "Exception in ASGI application"). The same approach sse-starlette takes. It must run at import:
+    uvicorn loads the app module *before* it installs its signal handlers, and those handlers bind
+    `handle_exit` at that moment, so a patch applied any later is never called.
+    """
+    try:
+        from uvicorn.server import Server
+    except ImportError:                     # not running under uvicorn (other servers, tooling)
+        return
+    if getattr(Server.handle_exit, "_openbot_closes_buses", False):
+        return
+    original = Server.handle_exit
+
+    def handle_exit(self, sig, frame):
+        original(self, sig, frame)
+        for bus in _BUSES_TO_CLOSE:
+            bus.close()
+
+    handle_exit._openbot_closes_buses = True  # type: ignore[attr-defined]
+    Server.handle_exit = handle_exit
+
+
+def close_buses_on_uvicorn_exit(bus) -> Callable[[], None]:
+    """Register `bus` to be closed on uvicorn's first shutdown signal; returns an unregister function."""
+    _BUSES_TO_CLOSE.append(bus)
+
+    def unregister() -> None:
+        if bus in _BUSES_TO_CLOSE:
+            _BUSES_TO_CLOSE.remove(bus)
+
+    return unregister
+
+
+_install_uvicorn_exit_hook()
+
+
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
     load_dotenv()
     settings = settings or get_settings()
@@ -112,9 +157,11 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         if owned:
             app.state.services = await build_services(settings)
         await start_background(app.state.services)
+        unregister_bus = close_buses_on_uvicorn_exit(app.state.services.bus)
         try:
             yield
         finally:
+            unregister_bus()
             await stop_background(app.state.services)
             if owned:
                 await close_services(app.state.services)
