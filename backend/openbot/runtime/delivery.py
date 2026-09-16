@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
@@ -10,7 +11,9 @@ from openbot.api.schemas import InboxItemOut, MessageOut, to_json
 from openbot.db.models import Actor, InboxItem, Message, Run, Thread, ThreadParticipant, utcnow
 from openbot.runtime import memory
 from openbot.runtime.router import parse_mentions, resolve_targets
-from openbot.tools.builtin.workspace import validate_workspace_directory
+from openbot.tools.builtin.workspace import thread_workspace_root, validate_workspace_directory
+
+log = logging.getLogger(__name__)
 
 HOP_LIMIT_NOTICE = "Bot-to-bot hop limit reached; a human message resets it."
 HUMAN_HANDLE = "you"
@@ -81,6 +84,9 @@ async def create_thread(services, session: AsyncSession, *, title: str, handles:
                     working_directory=normalized_working_directory, external_ref=external_ref)
     session.add(thread)
     await session.flush()
+    log.info("thread %s created: title=%r handles=%s default_bot=%s working_directory=%s tool_root=%s",
+             thread.id, title, handles, effective_default if default_bot else None, normalized_working_directory or ".",
+             thread_workspace_root(services.settings.workspace_root, normalized_working_directory))
     ids = {by_handle[h].id for h in handles}
     if created_by:
         ids.add(created_by.id)

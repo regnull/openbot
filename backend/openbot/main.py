@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 
 import httpx
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +16,7 @@ from openbot.api import actors, bots, events, inbox, messages, providers, runs, 
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
+from openbot.logsetup import configure_logging
 from openbot.runtime.actors import ActorSystem
 from openbot.runtime.bus import EventBus
 from openbot.runtime.memory import MemoryReflector
@@ -50,7 +52,21 @@ async def build_services(settings: Settings) -> Services:
     services.actors = ActorSystem(services, settings.max_concurrent_runs)
     services._owned_resources = [engine, stack, services.http_client]
     Path(settings.workspace_root).mkdir(parents=True, exist_ok=True)
+    _log_startup(settings, services)
     return services
+
+
+def _log_startup(settings: Settings, services: Services) -> None:
+    """One line with every path the process actually resolved. Relative settings such as
+    WORKSPACE_ROOT=./workspace depend on the cwd the server was started from, so this is the first
+    thing to check when a bot reports files that "do not exist"."""
+    dotenv = find_dotenv(usecwd=True)
+    log.info("startup: cwd=%s dotenv=%s workspace_root=%s (WORKSPACE_ROOT=%s) tools_dir=%s database_url=%s "
+             "bot_model=%s frontend_dist=%s log_file=%s log_level=%s tools=%d",
+             os.getcwd(), dotenv or "<none>", Path(settings.workspace_root).resolve(), settings.workspace_root,
+             Path(settings.tools_dir).resolve(), settings.database_url, settings.bot_model or settings.openrouter_model or "<default>",
+             settings.frontend_dist, Path(settings.log_file).resolve(), settings.log_level,
+             len(services.registry.specs()) if services.registry is not None else 0)
 
 
 async def close_services(services: Services) -> None:
@@ -85,22 +101,10 @@ async def stop_background(services: Services) -> None:
         await services.reflector.shutdown()
 
 
-def _configure_logging() -> None:
-    """uvicorn configures only its own loggers, so openbot's own INFO lines (demo bot seeding, the
-    missing-embedding-provider warning) never reach the console. Attach one handler to the openbot
-    logger — scoped, and only once, so repeated create_app() calls do not stack handlers."""
-    logger = logging.getLogger("openbot")
-    if not logger.handlers:
-        logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
-        logger.addHandler(handler)
-
-
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
     load_dotenv()
-    _configure_logging()
     settings = settings or get_settings()
+    configure_logging(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
