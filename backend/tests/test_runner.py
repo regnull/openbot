@@ -179,9 +179,9 @@ async def test_reflection_failure_does_not_fail_a_completed_run(settings):
 async def test_memory_reflection_scheduled(settings):
     services, _eng, _t, run = await make(settings, {"eng": [ai("ok")]})
     scheduled = []
-    services.reflector.schedule = lambda bot, msgs: scheduled.append((bot.handle, len(msgs)))
+    services.reflector.schedule = lambda bot, msgs, *, thread_id: scheduled.append((bot.handle, len(msgs), thread_id))
     await services.runner.execute(run.id)
-    assert scheduled and scheduled[0][0] == "eng" and scheduled[0][1] >= 2
+    assert scheduled and scheduled[0][0] == "eng" and scheduled[0][1] >= 2 and scheduled[0][2] == _t.id
 
 
 

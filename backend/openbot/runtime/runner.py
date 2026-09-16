@@ -283,7 +283,7 @@ class Runner:
                 # The run is already complete and its reply posted; reflection must never undo that.
                 try:
                     state = await agent.aget_state(config)
-                    self.s.reflector.schedule(bot, list(state.values.get("messages", [])))
+                    self.s.reflector.schedule(bot, list(state.values.get("messages", [])), thread_id=thread.id)
                 except Exception:
                     log.exception("could not schedule memory reflection for run %s", run.id)
         except asyncio.CancelledError:
