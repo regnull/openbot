@@ -159,6 +159,9 @@ def test_seeded_division_of_labour():
     assert "--name-only" in bots["reviewer"]["instructions"]
     assert "own running the tests" in bots["qa"]["instructions"]
     assert "start_line/end_line" in bots["engineer"]["instructions"]
+    for h in ("engineer", "reviewer", "qa"):
+        assert "search_code" in bots[h]["tool_names"], h
+    assert "search_code" in bots["engineer"]["instructions"] and "search_code" in bots["reviewer"]["instructions"]
 
 
 async def test_seed_persists_model_settings(services):

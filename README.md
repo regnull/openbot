@@ -131,7 +131,7 @@ locally, and run it as a dedicated low-privilege user (or in a VM/container) if 
 ## Tools and plugins
 
 Bots select from a registry of built-in tools (`run_shell`, `read_file`, `write_file`,
-`list_files`, `http_request`, `fetch_url`) plus a handful of
+`list_files`, `search_code`, `http_request`, `fetch_url`) plus a handful of
 core tools every bot always has (`list_bots`, `start_thread`, `ask_human`, `read_history`,
 `recall_messages`, and LangMem's `manage_memory`/`search_memory`).
 
@@ -152,7 +152,7 @@ def get_time() -> str:
 
 `GET /api/v1/tools` lists every loaded tool and any load errors.
 
-Only `read_file`, `write_file` and `list_files` are path-confined to the thread working directory,
+Only `read_file`, `write_file`, `list_files` and `search_code` are path-confined to the thread working directory,
 which defaults to `WORKSPACE_ROOT` and can be set to an existing relative subdirectory when the
 thread is created. `run_shell` starts in that directory but is otherwise unrestricted, and
 `http_request`/`fetch_url` can reach any URL. Read [Trust model / security](#trust-model--security)
