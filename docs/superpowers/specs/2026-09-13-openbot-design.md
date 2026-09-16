@@ -147,15 +147,21 @@ and messages. Checkpointer thread_id = run id.
 5. Events `message.created`, `inbox.updated` are published; the message is indexed into the store;
    the actor system is woken for each actor that received an item.
 
-**Bot actor worker** (one per bot, sequential):
-- Picks the oldest `queued` item, skipping `message` items whose thread has a `waiting_human` run
-  of this bot (that thread waits for the answer). A `resume` item is processed alone. A `message`
-  item is batched with every other queued `message` item in the same thread.
+**Bot actor worker** (one per bot, sequential). A bot has at most one run in flight; a run serves
+exactly one thread; the bot interleaves threads in arrival order (thread 1, thread 2, thread 1, ...).
+- Acquires a slot on the global semaphore (`MAX_CONCURRENT_RUNS`, default 4, across all bots) first,
+  so a bot waiting for a slot owns no run row and its items stay `queued`.
+- Then picks the oldest `queued` item, skipping `message` items whose thread has a `waiting_human`
+  run of this bot (that thread is parked until the answer). A `resume` item is processed alone.
+- Every queued `message` item for the picked thread joins the same run. This is "one thread's
+  pending messages at a time", not "one message at a time": the run unrolls the whole thread anyway,
+  so a run per message would only re-answer messages already seen. Trigger messages are marked
+  "(new)" in the history so the model knows which ones it is answering.
 - For a message batch it creates a run (`queued`) and links the items, marks them `processing`,
   and calls the runner. For a resume item it calls the runner with the resume command.
 - On completion the items become `done`; on cancellation `cancelled`; on run failure `done`
-  (the failure is visible as a system message).
-- A global semaphore (`MAX_CONCURRENT_RUNS`, default 4) caps runs across all bots.
+  (the failure is visible as a system message). The run's checkpoint is deleted once the run is
+  terminal; only `waiting_human` runs keep theirs.
 
 **External actor worker** (one per external actor with a webhook URL): delivers `queued`
 `message` and `question` items in order by POST, retrying after `WEBHOOK_RETRY_DELAYS` (5s, 30s,
