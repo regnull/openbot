@@ -1,15 +1,17 @@
 """Controls that keep a run's token bill bounded: capped tool output with line-range reads, a per-run
 model-call limit, clearing of old tool results, per-run usage accounting, and the seeded team's
 division of labour."""
+import json
 import logging
 from pathlib import Path
 
 from langchain.tools import ToolRuntime
+from langchain_core.messages import AIMessage
 from sqlalchemy import inspect, select
 
 from openbot.db.models import Actor, Run
 from openbot.db.session import make_engine, run_migrations
-from openbot.runtime.runner import CLEARED_TOOL_RESULT
+from openbot.runtime.runner import CLEARED_TOOL_RESULT, Runner
 from openbot.seed import DEMO_BOTS, seed_demo_bots
 from openbot.tools.builtin.files import read_file
 from openbot.tools.builtin.shell import run_shell
@@ -19,9 +21,10 @@ from tests.fakes import ScriptedChatModel, ai, call
 from tests.test_runner import events, get, make, messages
 
 
-def rt(root: Path, cap_chars: int = 8000) -> ToolRuntime:
+def rt(root: Path, cap_chars: int = 8000, shell_cap_chars: int | None = None) -> ToolRuntime:
     root.mkdir(parents=True, exist_ok=True)
-    ctx = RunContext("b", "bot", "Bot", "t", "r", root.resolve(), None, tool_output_cap=cap_chars)
+    ctx = RunContext("b", "bot", "Bot", "t", "r", root.resolve(), None, tool_output_cap=cap_chars,
+                     shell_output_cap=shell_cap_chars if shell_cap_chars is not None else cap_chars)
     return ToolRuntime(context=ctx, store=None, state={}, tool_call_id="c", config={}, stream_writer=lambda *_: None)
 
 
@@ -156,6 +159,9 @@ def test_seeded_division_of_labour():
     assert "--name-only" in bots["reviewer"]["instructions"]
     assert "own running the tests" in bots["qa"]["instructions"]
     assert "start_line/end_line" in bots["engineer"]["instructions"]
+    for h in ("engineer", "reviewer", "qa"):
+        assert "search_code" in bots[h]["tool_names"], h
+    assert "search_code" in bots["engineer"]["instructions"] and "search_code" in bots["reviewer"]["instructions"]
 
 
 async def test_seed_persists_model_settings(services):
@@ -225,3 +231,122 @@ async def test_whole_file_read_over_the_cap_returns_an_outline_not_a_dump(tmp_pa
 def test_context_editing_triggers_before_a_long_exploration_ends():
     from openbot.config import Settings
     assert Settings(_env_file=None).context_trigger_tokens <= 25000
+
+
+# --- context editing: defaults that fire, and written content that goes away --------------------------
+
+def test_context_editing_defaults_fire_inside_a_normal_run():
+    """The engineer's transcript peaks near 24k tokens, so a 25k trigger never fired. The trigger sits
+    well inside that range and each clearing reclaims a big chunk, so clearings are rare (cache stays
+    warm) but real."""
+    from openbot.config import Settings
+    s = Settings(_env_file=None)
+    assert s.context_trigger_tokens <= 12000
+    assert 4000 <= s.context_clear_at_least <= s.context_trigger_tokens
+
+
+async def test_clearing_also_drops_write_file_contents_from_the_transcript(settings):
+    """Half the transcript growth was the bot's own write_file arguments: every file it wrote stayed in
+    context in full. Once the tool succeeded that content is on disk; the call parameters go too."""
+    settings.context_trigger_tokens = 50
+    settings.context_clear_at_least = 0
+    ScriptedChatModel.seen.clear()
+    body = "x" * 600
+    script = [ai(tool_calls=[call("write_file", cid=f"w{i}", path=f"f{i}.txt", content=body)]) for i in range(5)] + [ai("done")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["write_file"])
+    await services.runner.execute(run.id)
+    final_prompt = ScriptedChatModel.seen[-1]
+    first_ai = next(m for m in final_prompt if m.type == "ai")
+    assert first_ai.tool_calls and body not in json.dumps(first_ai.tool_calls[0]["args"])   # oldest args cleared
+    last_ai = [m for m in final_prompt if m.type == "ai"][-1]
+    assert body in json.dumps(last_ai.tool_calls[0]["args"])                                  # recent ones kept
+
+
+async def test_ask_human_and_memory_results_are_never_cleared(settings):
+    settings.context_trigger_tokens = 50
+    settings.context_clear_at_least = 0
+    ScriptedChatModel.seen.clear()
+    script = [ai(tool_calls=[call("manage_memory", cid="m1", content="always wait for CI")])] + _shell_loop(5) + [ai("done")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    final_prompt = ScriptedChatModel.seen[-1]
+    mem = next(m for m in final_prompt if m.type == "tool" and m.name == "manage_memory")
+    assert mem.content != CLEARED_TOOL_RESULT
+
+
+# --- summarization: the second tier -------------------------------------------------------------------
+
+class SummarizingScriptedModel(ScriptedChatModel):
+    """Answers the summarization middleware's request with a fixed summary; everything else follows the script."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if any("Messages to summarize" in str(m.content) for m in messages):
+            ScriptedChatModel.seen.append(list(messages))
+            from langchain_core.outputs import ChatGeneration, ChatResult
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="SUMMARY: ran steps 0-3; nothing left but to finish"))])
+        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+
+def test_middleware_order_is_limit_then_summarize_then_clear(settings):
+    """LangChain's guidance: context editing after summarization, so clearing respects what was summarized."""
+    from langchain.agents.middleware import (
+        ContextEditingMiddleware,
+        ModelCallLimitMiddleware,
+        SummarizationMiddleware,
+    )
+
+    from tests.factories import bot_actor
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    runner = Runner(services)
+    mw = runner.build_middleware(bot_actor("eng"), ScriptedChatModel(messages=iter([])))
+    kinds = [type(m) for m in mw]
+    assert kinds.index(ModelCallLimitMiddleware) < kinds.index(SummarizationMiddleware) < kinds.index(ContextEditingMiddleware)
+
+
+def test_summarization_defaults_sit_above_the_clearing_trigger():
+    from openbot.config import Settings
+    s = Settings(_env_file=None)
+    assert s.context_trigger_tokens < s.summary_trigger_tokens <= 20000
+    assert 6 <= s.summary_keep_messages <= 20
+
+
+async def test_long_runs_get_their_history_summarized(settings):
+    settings.summary_trigger_tokens = 300
+    settings.summary_keep_messages = 4
+    settings.context_trigger_tokens = 10_000       # keep clearing out of this test
+    ScriptedChatModel.seen.clear()
+    script = [ai(tool_calls=[call("run_shell", cid=f"c{i}", command=f"python3 -c \"print('step{i} ' + 'y'*400)\"")]) for i in range(6)] + [ai("done")]
+    services, _eng, t, run = await make(settings, {"eng": []}, tool_names=["run_shell"])
+    services.model_factory = lambda actor: SummarizingScriptedModel(messages=iter(script))
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "completed"
+    assert (await messages(services, t.id))[-1].content == "done"
+    final_prompt = ScriptedChatModel.seen[-1]
+    assert any("SUMMARY: ran steps" in str(m.content) for m in final_prompt), "summary should replace the old history"
+    assert not any("step0 " in str(m.content) for m in final_prompt if m.type == "tool"), "the summarized tool output is gone"
+    assert len(final_prompt) < 12
+
+
+# --- shell bypass: cat/git show around read_file's outline ---------------------------------------------
+
+def test_shell_output_cap_is_tighter_than_the_file_cap():
+    """Bots route around read_file's outline with `cat` and `git show`, which used the same 8k cap. A
+    tighter shell cap makes dumping a file through the shell worse than reading a range."""
+    from openbot.config import Settings
+    st = Settings(_env_file=None)
+    assert st.shell_output_cap <= 4000 < st.tool_output_cap
+
+
+async def test_run_shell_uses_its_own_cap(tmp_path):
+    r = rt(tmp_path, cap_chars=8000, shell_cap_chars=1000)
+    out = await run_shell.ainvoke({"command": "python3 -c \"print('y'*5000)\"", "runtime": r})
+    assert len(out) < 1200 and "[truncated" in out
+
+
+def test_engineer_reviewer_and_qa_are_told_not_to_dump_files_through_the_shell():
+    bots = {b["handle"]: b for b in DEMO_BOTS}
+    for h in ("engineer", "reviewer"):
+        text = bots[h]["instructions"]
+        assert "cat" in text and "git show" in text and "start_line/end_line" in text, h
+    assert "gh pr diff <n> -- <path>" in bots["reviewer"]["instructions"]
+    assert "tail" in bots["qa"]["instructions"]

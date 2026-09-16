@@ -131,7 +131,7 @@ locally, and run it as a dedicated low-privilege user (or in a VM/container) if 
 ## Tools and plugins
 
 Bots select from a registry of built-in tools (`run_shell`, `read_file`, `write_file`,
-`list_files`, `http_request`, `fetch_url`) plus a handful of
+`list_files`, `search_code`, `http_request`, `fetch_url`) plus a handful of
 core tools every bot always has (`list_bots`, `start_thread`, `ask_human`, `read_history`,
 `recall_messages`, and LangMem's `manage_memory`/`search_memory`).
 
@@ -152,7 +152,7 @@ def get_time() -> str:
 
 `GET /api/v1/tools` lists every loaded tool and any load errors.
 
-Only `read_file`, `write_file` and `list_files` are path-confined to the thread working directory,
+Only `read_file`, `write_file`, `list_files` and `search_code` are path-confined to the thread working directory,
 which defaults to `WORKSPACE_ROOT` and can be set to an existing relative subdirectory when the
 thread is created. `run_shell` starts in that directory but is otherwise unrestricted, and
 `http_request`/`fetch_url` can reach any URL. Read [Trust model / security](#trust-model--security)
@@ -249,6 +249,7 @@ that bot.
 | `OLLAMA_MODEL` | `llama3.1` | Default model suggested for new `ollama` bots, and the seed model when Ollama is the only configured provider. |
 | `BOT_MODEL` | `openai/gpt-4o-mini` | OpenRouter model used for bot LLM calls for seeded bots and any bot whose provider is `openrouter`. Set this in `.env` to switch the whole bot team to a different OpenRouter model; `BOT_MODEL` takes precedence over `OPENROUTER_MODEL`. |
 | `OPENROUTER_MODEL` | *(unset)* | Backward-compatible alias for `BOT_MODEL`. |
+| `OPENROUTER_PROVIDER_ORDER` | *(unset)* | CSV of OpenRouter upstream provider slugs (e.g. `z-ai`) to pin, with fallbacks disabled. A model can be served by dozens of upstreams, each with its own prompt cache; a request routed elsewhere is a full cache miss. |
 | `EMBEDDING_MODEL` | `openai:text-embedding-3-small` | Used for semantic memory search; without a matching key, memory search degrades to non-semantic. |
 | `EMBEDDING_DIMS` | `1536` | Must match the embedding model's output size. |
 | `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing. |
@@ -262,8 +263,12 @@ that bot.
 | `PROMPT_CACHING` | `true` | Add Anthropic prompt-cache breakpoints to every model call. Direct Anthropic caches the whole growing transcript, tool results included; through OpenRouter only the system prompt and human turns can carry a breakpoint. OpenAI-style providers cache automatically and are unaffected. |
 | `DIRECT_ANTHROPIC` | `true` | When the effective model is an OpenRouter `anthropic/...` id and `ANTHROPIC_API_KEY` is set, call Anthropic directly (`anthropic/claude-opus-4.6` -> `claude-opus-4-6`) so caching fully applies and no OpenRouter fee is paid. |
 | `TOOL_OUTPUT_CAP` | `8000` | Maximum characters of any single tool result the model sees; longer output keeps its head and tail with a note on how to get the rest (`read_file` takes `start_line`/`end_line`). Everything a tool returns is re-sent on every later turn, so this bounds the quadratic part of a run's cost. |
-| `CONTEXT_TRIGGER_TOKENS` | `25000` | Once a run's context exceeds this, tool results older than the three most recent are replaced with a placeholder in the model's view. The run's event log keeps the real output. |
-| `MAX_MODEL_CALLS_PER_RUN` | `40` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). |
+| `SHELL_OUTPUT_CAP` | `4000` | Tighter cap for `run_shell` output, so dumping a file through `cat` or `git show` loses to `read_file` with a line range. |
+| `CONTEXT_TRIGGER_TOKENS` | `12000` | Once a run's context exceeds this, tool results older than the three most recent, and the arguments of the calls that produced them, are replaced with a placeholder in the model's view. The run's event log keeps the real output. |
+| `CONTEXT_CLEAR_AT_LEAST` | `6000` | Each clearing reclaims at least this many tokens, so clearings are rare and the provider's prompt cache stays warm between them. |
+| `SUMMARY_TRIGGER_TOKENS` | `18000` | Once a run's context exceeds this, older history is folded into one structured summary message (decisions, artifacts, next steps) by the bot's own model. |
+| `SUMMARY_KEEP_MESSAGES` | `12` | How many recent messages summarization keeps verbatim. |
+| `MAX_MODEL_CALLS_PER_RUN` | `40` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). `model_settings` also accepts `reasoning_effort` (e.g. `"low"`) for reasoning models on OpenAI-compatible providers, and `temperature` / `max_tokens`. |
 | `HISTORY_TOKEN_BUDGET` | `24000` | Approximate token budget (chars / 4) for conversation history included in a run. |
 | `HISTORY_MAX_MESSAGES` | `80` | Hard cap on the number of history messages included in a run. |
 | `MEMORY_REFLECTION_DELAY` | `30` | Seconds to debounce background memory reflection after a run completes. |

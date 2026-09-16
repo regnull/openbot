@@ -1,15 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Api } from "../api/client";
+import { isBackendUnavailable } from "../api/errors";
 import type { InboxItem, RunDetail } from "../api/types";
 import InterruptCard from "../components/InterruptCard";
-import { Button, Card, ErrorText, Spinner } from "../components/ui";
+import { Button, Card, ErrorText, OfflineNotice, Spinner } from "../components/ui";
 import { parseTs } from "../lib/time";
 
 export default function InboxPage() {
   const qc = useQueryClient();
   const inbox = useQuery({ queryKey: ["inbox"], queryFn: Api.listInbox });
   const questionIds = (inbox.data ?? []).filter((i) => i.kind === "question" && i.run_id).map((i) => i.run_id as string);
+  // Backend down/restarting: show a friendly notice instead of the raw response body.
+  const inboxUnavailable = isBackendUnavailable(inbox.error);
   const runs = useQuery({
     queryKey: ["inbox-runs", questionIds.join(",")],
     queryFn: async (): Promise<Record<string, RunDetail>> =>
@@ -26,7 +29,7 @@ export default function InboxPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-xl font-semibold">Inbox</h1>
-      <ErrorText error={inbox.error} />
+      {inboxUnavailable ? <OfflineNotice /> : <ErrorText error={inbox.error} />}
       {inbox.isLoading && <Spinner />}
       {questions.length > 0 && (
         <section className="space-y-3">

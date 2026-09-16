@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
+import { isBackendUnavailable } from "../api/errors";
 import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
 import MessageList from "../components/MessageList";
-import { Button, ErrorText, Spinner } from "../components/ui";
+import { Button, ErrorText, OfflineNotice, Spinner } from "../components/ui";
 import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
 import { emptyThreadState, hydrate, mergeRun, reduceThreadEvent, type ThreadState } from "../lib/threadState";
 import { threadUsageLabel } from "../lib/threadUsage";
@@ -66,7 +67,10 @@ export default function ThreadPage() {
   }, [id, latestMessageId, streamedChars, runEventCount, runStatuses]);
 
   if (detail.isLoading) return <Spinner />;
-  if (!detail.data) return <ErrorText error={detail.error} />;
+  if (!detail.data) {
+    if (isBackendUnavailable(detail.error)) return <OfflineNotice />;
+    return <ErrorText error={detail.error} />;
+  }
   const t = detail.data;
   const usageLine = usage.data ? threadUsageLabel(usage.data) : null;
   const handles = [...new Set([

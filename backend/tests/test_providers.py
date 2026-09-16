@@ -128,3 +128,26 @@ def test_auto_provider_follows_openrouter_env_override():
 def test_auto_provider_without_any_key_raises():
     with pytest.raises(ValueError, match="no provider is configured"):
         chat_model(BotProfile(provider="auto", model="", model_settings={}), s())
+
+
+def test_reasoning_effort_passes_through_to_openai_compatible_models():
+    """GLM spent 7k reasoning tokens deciding to run `node --version`. Operators can turn the effort
+    down per bot from model_settings; the OpenAI-compatible endpoints (OpenRouter included) accept it."""
+    m = chat_model(BotProfile(provider="openrouter", model="z-ai/glm-5.3-flash", model_settings={"reasoning_effort": "low"}),
+                   s(openrouter_api_key="k", direct_anthropic=False))
+    assert isinstance(m, ChatOpenAI) and m.reasoning_effort == "low"
+    m = chat_model(BotProfile(provider="openrouter", model="z-ai/glm-5.3-flash", model_settings={}), s(openrouter_api_key="k"))
+    assert m.reasoning_effort is None
+
+
+def test_openrouter_provider_order_pins_the_upstream_and_disables_fallbacks():
+    """OpenRouter serves this model from 26 upstreams, each with its own prompt cache; a request that
+    lands elsewhere is a full cache miss. Pinning keeps the cache warm."""
+    st = s(openrouter_api_key="k", openrouter_provider_order="z-ai,fireworks")
+    assert st.openrouter_provider_order == ["z-ai", "fireworks"]
+    m = chat_model(BotProfile(provider="openrouter", model="z-ai/glm-5.3-flash"), st)
+    assert m.extra_body == {"provider": {"order": ["z-ai", "fireworks"], "allow_fallbacks": False}}
+    m = chat_model(BotProfile(provider="openrouter", model="z-ai/glm-5.3-flash"), s(openrouter_api_key="k"))
+    assert not m.extra_body
+    m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini"), s(openai_api_key="k", openrouter_provider_order="z-ai"))
+    assert not m.extra_body                                        # pinning is an OpenRouter concept only

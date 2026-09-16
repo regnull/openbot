@@ -22,6 +22,9 @@ class Settings(BaseSettings):
 
     bot_model: str | None = None
     openrouter_model: str | None = None
+    # Pin OpenRouter to these upstream providers (CSV, e.g. `z-ai,fireworks`) with fallbacks off. A model can be
+    # served by dozens of upstreams, each with its own prompt cache; a request that lands elsewhere is a full miss.
+    openrouter_provider_order: Annotated[list[str], NoDecode] = []
 
     embedding_model: str = "openai:text-embedding-3-small"
     embedding_dims: int = 1536
@@ -38,7 +41,11 @@ class Settings(BaseSettings):
     prompt_caching: bool = True          # add Anthropic cache breakpoints to every model call
     direct_anthropic: bool = True        # send OpenRouter `anthropic/...` models to Anthropic directly when a key exists
     tool_output_cap: int = 8000          # max chars of any single tool result the model sees (head + tail kept)
-    context_trigger_tokens: int = 25000  # clear old tool results once a run's context exceeds this
+    shell_output_cap: int = 4000         # tighter cap for run_shell, so dumping a file through cat/git show loses to read_file ranges
+    context_trigger_tokens: int = 12000  # clear old tool results once a run's context exceeds this
+    context_clear_at_least: int = 6000   # ...and reclaim at least this many tokens per clearing, so clearings are rare
+    summary_trigger_tokens: int = 18000  # summarize older history into one message once a run's context exceeds this
+    summary_keep_messages: int = 12      # ...keeping this many recent messages verbatim
     max_model_calls_per_run: int = 40    # model turns per run before the agent is stopped (bots can lower it)
     history_token_budget: int = 24000
     history_max_messages: int = 80
@@ -54,7 +61,7 @@ class Settings(BaseSettings):
     log_file: Path = Path("logs/openbot.log")
     webhook_retry_delays: Annotated[list[float], NoDecode] = [5.0, 30.0, 120.0]
 
-    @field_validator("cors_origins", "webhook_retry_delays", mode="before")
+    @field_validator("cors_origins", "webhook_retry_delays", "openrouter_provider_order", mode="before")
     @classmethod
     def _split_csv(cls, v):
         if isinstance(v, str):
