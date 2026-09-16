@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from openbot.api.deps import get_services
-from openbot.runtime.bus import EventBus
+from openbot.runtime.bus import CLOSED, EventBus
 from openbot.services import Services
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -23,6 +23,8 @@ async def event_stream(bus: EventBus, thread_id: str | None) -> AsyncIterator[st
             except TimeoutError:
                 yield ": ping\n\n"
                 continue
+            if item is CLOSED:
+                return          # server shutting down: end the response so the connection can drain
             yield f"event: {item['event']}\ndata: {json.dumps(item, default=str)}\n\n"
 
 
