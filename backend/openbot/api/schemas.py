@@ -231,7 +231,7 @@ class InboxItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     actor_id: str
-    thread_id: str | None
+    thread_id: str
     kind: str
     message_id: str | None
     run_id: str | None

@@ -11,7 +11,7 @@ export interface RunEvent { id: string; run_id: string; seq: number; type: strin
 export interface RunDetail extends Run { events: RunEvent[]; }
 export interface ThreadDetail extends Thread { messages: Message[]; has_more: boolean; runs: Run[]; }
 export interface ThreadUsage { model_calls: number; prompt_tokens: number; completion_tokens: number; cache_read_tokens: number; }
-export interface InboxItem { id: string; actor_id: string; thread_id: string | null; kind: "message" | "question" | "resume"; message_id: string | null; run_id: string | null; payload: Record<string, any>; status: string; attempts: number; last_error: string | null; created_at: string; processed_at: string | null; message: Message | null; }
+export interface InboxItem { id: string; actor_id: string; thread_id: string; kind: "message" | "question" | "resume"; message_id: string | null; run_id: string | null; payload: Record<string, any>; status: string; attempts: number; last_error: string | null; created_at: string; processed_at: string | null; message: Message | null; }
 export interface ToolInfo { name: string; description: string; source: string; args_schema: Record<string, unknown>; }
 export interface ProviderInfo { id: string; configured: boolean; models: string[]; default_model: string; }
 export interface ProvidersOut { providers: ProviderInfo[]; embedding_model: string; embeddings_configured: boolean; }
