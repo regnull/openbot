@@ -230,7 +230,12 @@ route except `/health` requires an `X-API-Key` header.
 
 All variables live in `.env` at the repo root (also readable from `backend/.env`). Copy
 `.env.example` to `.env` and fill in what you need — everything has a sensible default except the
-provider keys. By default, bot LLM calls use OpenRouter with the cost-effective `openai/gpt-4o-mini`; set `BOT_MODEL` to any OpenRouter model id to change it without editing bot records.
+provider keys. Every bot's model defaults to `auto`: it always uses whichever provider is configured
+on the server (OpenRouter with the cost-effective `openai/gpt-4o-mini` if `OPENROUTER_API_KEY` is set,
+else the first configured provider), so it keeps working as keys are added, removed, or changed. Set
+`BOT_MODEL` to any OpenRouter model id to change what "auto" resolves to without editing bot records.
+Pick an explicit provider/model per bot in the bot editor (or via the API) to opt out of "auto" for
+that bot.
 
 | Variable | Default | Notes |
 |---|---|---|

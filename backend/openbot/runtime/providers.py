@@ -12,6 +12,7 @@ from openbot.db.models import BotProfile
 
 log = logging.getLogger(__name__)
 
+AUTO_PROVIDER = "auto"
 DEFAULT_BOT_PROVIDER = "openrouter"
 DEFAULT_BOT_MODEL = "openai/gpt-4o-mini"
 OLLAMA = "ollama"
@@ -32,6 +33,8 @@ PROVIDER_MODELS: dict[str, list[str]] = {
 }
 DEFAULT_MODEL = {p: models[0] for p, models in PROVIDER_MODELS.items()}
 PROVIDER_ORDER = ["openai", "anthropic", "openrouter", "xai", OLLAMA]
+# Order in which providers are listed for the UI/API; "auto" is always first since it is the default.
+STATUS_PROVIDER_ORDER = [AUTO_PROVIDER, *PROVIDER_ORDER]
 _KEY_ENV = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
@@ -61,14 +64,23 @@ def configured_bot_model(settings: Settings) -> str:
 def effective_bot_profile(bot: BotProfile, settings: Settings) -> tuple[str, str]:
     """Return the provider/model to use for a bot LLM call.
 
-    A configured OpenRouter key makes OpenRouter the runtime provider for every cloud bot, so the
-    team can be moved to another OpenRouter model from `.env` without editing persisted bot rows one
-    by one. Installations without OpenRouter configured keep using each bot's stored provider/model,
-    even if BOT_MODEL/OPENROUTER_MODEL is set.
+    A bot with provider "auto" (the default for new bots) always resolves to whichever provider is
+    configured (see `default_provider`), so it keeps working as keys are added, removed, or changed
+    without ever needing to be edited.
+
+    For bots with an explicit cloud provider, a configured OpenRouter key makes OpenRouter the
+    runtime provider for every bot, so the team can be moved to another OpenRouter model from `.env`
+    without editing persisted bot rows one by one. Installations without OpenRouter configured keep
+    using each bot's stored provider/model, even if BOT_MODEL/OPENROUTER_MODEL is set.
 
     A bot on a local Ollama model is an explicit choice to keep that bot off the cloud, so it is
     never rerouted through OpenRouter.
     """
+    if bot.provider == AUTO_PROVIDER:
+        dp = default_provider(settings)
+        if dp is None:
+            raise ValueError("no provider is configured: set an API key for at least one provider")
+        return dp
     if bot.provider == OLLAMA:
         return bot.provider, bot.model
     if api_key_for(settings, DEFAULT_BOT_PROVIDER):
@@ -176,7 +188,14 @@ def provider_default_model(settings: Settings, provider: str, ollama_models: lis
 
 
 def provider_status(settings: Settings, ollama_models: list[str] | None = None) -> list[dict]:
-    return [
+    dp = default_provider(settings)
+    auto = {
+        "id": AUTO_PROVIDER,
+        "configured": dp is not None,
+        "models": [],
+        "default_model": f"{dp[0]}/{dp[1]}" if dp else "",
+    }
+    rest = [
         {
             "id": p,
             "configured": provider_configured(settings, p),
@@ -185,6 +204,7 @@ def provider_status(settings: Settings, ollama_models: list[str] | None = None) 
         }
         for p in PROVIDER_ORDER
     ]
+    return [auto, *rest]
 
 
 def default_provider(settings: Settings) -> tuple[str, str] | None:

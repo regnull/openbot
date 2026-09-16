@@ -28,6 +28,7 @@ from openbot.db.models import (
 from openbot.runtime import memory
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt
+from openbot.runtime.providers import effective_bot_profile
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.workspace import thread_workspace_root
 from openbot.tools.context import RunContext
@@ -191,9 +192,10 @@ class Runner:
         try:
             system_prompt, inputs, hop = await self._prepare(bot, thread, run)
             workspace_root = thread_workspace_root(self.s.settings.workspace_root, thread.working_directory)
+            eff_provider, eff_model = effective_bot_profile(bot.bot, self.s.settings)
             log.info("run %s started: bot=@%s thread=%s hop=%d resume=%s working_directory=%s tool_root=%s model=%s/%s tools=%s",
                      run.id, bot.handle, thread.id, hop, resume is not None, thread.working_directory or ".",
-                     workspace_root, bot.bot.provider, bot.bot.model, ",".join(bot.bot.tool_names) or "-")
+                     workspace_root, eff_provider, eff_model, ",".join(bot.bot.tool_names) or "-")
             log.debug("run %s system prompt:\n%s", run.id, system_prompt)
             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
                              thread.working_directory, hop)

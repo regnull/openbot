@@ -7,7 +7,7 @@ import BotIcon from "../components/BotIcon";
 import { Button, Card, ErrorText, Field, Input, Select, Spinner, Textarea } from "../components/ui";
 import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
 
-const empty: BotInput = { handle: "", name: "", description: "", icon: DEFAULT_BOT_ICON, instructions: "", provider: "openai", model: "", model_settings: {},
+const empty: BotInput = { handle: "", name: "", description: "", icon: DEFAULT_BOT_ICON, instructions: "", provider: "auto", model: "", model_settings: {},
   tool_names: [], approval_tools: [], memory_enabled: true, enabled: true };
 
 export default function BotEditorPage() {
@@ -20,12 +20,6 @@ export default function BotEditorPage() {
   const providers = useQuery({ queryKey: ["providers"], queryFn: Api.getProviders });
   const [form, setForm] = useState<BotInput>(empty);
   useEffect(() => { if (bot.data) { const { id: _i, created_at: _c, updated_at: _u, ...rest } = bot.data; setForm(rest); } }, [bot.data]);
-  useEffect(() => {
-    if (isNew && providers.data && !form.model) {
-      const p = providers.data.providers.find((x) => x.configured) ?? providers.data.providers[0];
-      setForm((f) => ({ ...f, provider: p.id, model: p.default_model }));
-    }
-  }, [providers.data, isNew, form.model]);
 
   const save = useMutation({
     mutationFn: () => {
@@ -44,6 +38,8 @@ export default function BotEditorPage() {
     return { ...f, tool_names, approval_tools };
   });
   const toggleApproval = (name: string) => set("approval_tools", form.approval_tools.includes(name) ? form.approval_tools.filter((t) => t !== name) : [...form.approval_tools, name]);
+  const isAuto = form.provider === "auto";
+  const auto = providers.data?.providers.find((p) => p.id === "auto");
   const prov = providers.data?.providers.find((p) => p.id === form.provider);
   if (!isNew && bot.isLoading) return <Spinner />;
 
@@ -63,15 +59,27 @@ export default function BotEditorPage() {
           </div>
         </Field>
         <div className="sm:col-span-2"><Field label="Instructions"><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field></div>
-        <Field label="Provider">
-          <Select value={form.provider} onChange={(e) => { const p = providers.data?.providers.find((x) => x.id === e.target.value); set("provider", e.target.value); if (p) set("model", p.default_model); }}>
-            {providers.data?.providers.map((p) => <option key={p.id} value={p.id}>{p.id}{p.configured ? "" : " (not configured)"}</option>)}
+        <Field label="Provider" hint="Auto picks whichever provider is configured on the server and keeps working if that changes">
+          <Select value={form.provider} onChange={(e) => {
+            const value = e.target.value;
+            if (value === "auto") { setForm((f) => ({ ...f, provider: "auto", model: "" })); return; }
+            const p = providers.data?.providers.find((x) => x.id === value);
+            setForm((f) => ({ ...f, provider: value, model: p?.default_model ?? "" }));
+          }}>
+            <option value="auto">Auto (recommended){auto?.configured ? "" : " (no provider configured)"}</option>
+            {providers.data?.providers.filter((p) => p.id !== "auto").map((p) => <option key={p.id} value={p.id}>{p.id}{p.configured ? "" : " (not configured)"}</option>)}
           </Select>
         </Field>
-        <Field label="Model" hint="Pick from the list or type any model id">
-          <Input list="models" value={form.model} onChange={(e) => set("model", e.target.value)} required />
-          <datalist id="models">{prov?.models.map((m) => <option key={m} value={m} />)}</datalist>
-        </Field>
+        {isAuto ? (
+          <Field label="Model" hint="Chosen automatically from the configured provider">
+            <Input value={auto?.configured ? `auto (currently ${auto.default_model})` : "auto (no provider configured yet)"} disabled />
+          </Field>
+        ) : (
+          <Field label="Model" hint="Pick from the list or type any model id">
+            <Input list="models" value={form.model} onChange={(e) => set("model", e.target.value)} required />
+            <datalist id="models">{prov?.models.map((m) => <option key={m} value={m} />)}</datalist>
+          </Field>
+        )}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.memory_enabled} onChange={(e) => set("memory_enabled", e.target.checked)} /> Background memory extraction</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} /> Enabled</label>
       </Card>

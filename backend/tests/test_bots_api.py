@@ -32,6 +32,21 @@ async def test_validation(client):
     assert (await client.post("/api/v1/bots", json={**BOT, "handle": "x2", "tool_names": ["no_such_tool"]})).status_code == 422
     assert (await client.post("/api/v1/bots", json={**BOT, "handle": "x3", "tool_names": ["run_shell"],
                                                      "approval_tools": ["read_file"]})).status_code == 422
+    assert (await client.post("/api/v1/bots", json={**BOT, "handle": "x4", "provider": "openai", "model": ""})).status_code == 422
+
+
+async def test_provider_defaults_to_auto(client):
+    body = {k: v for k, v in BOT.items() if k not in ("provider", "model")}
+    r = await client.post("/api/v1/bots", json={**body, "handle": "autobot"})
+    assert r.status_code == 201, r.text
+    bot = r.json()
+    assert bot["provider"] == "auto" and bot["model"] == ""
+    r = await client.patch(f"/api/v1/bots/{bot['id']}", json={"provider": "openai"})
+    assert r.status_code == 422
+    r = await client.patch(f"/api/v1/bots/{bot['id']}", json={"provider": "openai", "model": "gpt-5.5"})
+    assert r.status_code == 200 and r.json()["provider"] == "openai" and r.json()["model"] == "gpt-5.5"
+    r = await client.patch(f"/api/v1/bots/{bot['id']}", json={"provider": "auto", "model": ""})
+    assert r.status_code == 200 and r.json()["provider"] == "auto"
 
 
 async def test_delete_refuses_while_a_run_is_open(client, services):
