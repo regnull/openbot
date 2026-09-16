@@ -125,27 +125,27 @@ async def test_pagination(client, services):
 
 
 
-async def test_create_thread_auto_title_from_handles(client, services):
-    """When title is empty string and handles provided, generate title from sorted handles."""
+async def test_create_thread_blank_title_is_timestamp_even_with_handles(client, services):
+    """Blank title is timestamped even when handles are provided (user asked for timestamp titles)."""
     await client.post("/api/v1/bots", json={**CHIEF})
     await client.post("/api/v1/bots", json={**BOT})
     r = await client.post("/api/v1/threads", json={"title": "", "handles": ["eng", "chief_of_staff"]})
     assert r.status_code == 201, r.text
     t = r.json()
-    assert t["title"] == "@chief_of_staff · @eng"
+    assert t["title"] in _expected_recent_titles(), t["title"]
 
 
-async def test_create_thread_auto_title_default_bot(client, services):
-    """When title is empty and no handles but default_bot_handle is set, generate default bot title."""
+async def test_create_thread_blank_title_is_timestamp_even_with_default_bot(client, services):
+    """Blank title is timestamped even when default_bot_handle is set."""
     await client.post("/api/v1/bots", json={**CHIEF})
     r = await client.post("/api/v1/threads", json={"title": "", "handles": [], "default_bot_handle": "chief_of_staff"})
     assert r.status_code == 201, r.text
     t = r.json()
-    assert t["title"] == "Default: @chief_of_staff"
+    assert t["title"] in _expected_recent_titles(), t["title"]
 
 
 async def test_create_thread_auto_title_datetime(client, services):
-    """When title is empty and no handles, fall back to 'YYYY-MM-DD HH:MM' local time."""
+    """When title is empty, fall back to 'YYYY-MM-DD HH:MM' local time."""
     r = await client.post("/api/v1/threads", json={"title": "", "handles": []})
     assert r.status_code == 201, r.text
     t = r.json()

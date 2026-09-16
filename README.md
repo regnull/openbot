@@ -249,7 +249,7 @@ that bot.
 | `OLLAMA_MODEL` | `llama3.1` | Default model suggested for new `ollama` bots, and the seed model when Ollama is the only configured provider. |
 | `BOT_MODEL` | `openai/gpt-4o-mini` | OpenRouter model used for bot LLM calls for seeded bots and any bot whose provider is `openrouter`. Set this in `.env` to switch the whole bot team to a different OpenRouter model; `BOT_MODEL` takes precedence over `OPENROUTER_MODEL`. |
 | `OPENROUTER_MODEL` | *(unset)* | Backward-compatible alias for `BOT_MODEL`. |
-| `OPENROUTER_PROVIDER_ORDER` | *(unset)* | CSV of OpenRouter upstream provider slugs (e.g. `z-ai`) to pin, with fallbacks disabled. A model can be served by dozens of upstreams, each with its own prompt cache; a request routed elsewhere is a full cache miss. |
+| `OPENROUTER_PROVIDER_ORDER` | *(unset)* | CSV of OpenRouter upstream provider slugs (e.g. `z-ai`) to prefer; others are used only when the preferred ones cannot serve a request. A model can be served by dozens of upstreams, each with its own prompt cache; staying on one keeps it warm. |
 | `EMBEDDING_MODEL` | `openai:text-embedding-3-small` | Used for semantic memory search; without a matching key, memory search degrades to non-semantic. |
 | `EMBEDDING_DIMS` | `1536` | Must match the embedding model's output size. |
 | `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing. |
