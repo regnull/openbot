@@ -22,8 +22,8 @@ class Settings(BaseSettings):
 
     bot_model: str | None = None
     openrouter_model: str | None = None
-    # Pin OpenRouter to these upstream providers (CSV, e.g. `z-ai,fireworks`) with fallbacks off. A model can be
-    # served by dozens of upstreams, each with its own prompt cache; a request that lands elsewhere is a full miss.
+    # Prefer these OpenRouter upstreams (CSV, e.g. `z-ai,fireworks`), falling back to others only when they cannot
+    # serve a request. Each upstream has its own prompt cache; staying on one keeps it warm.
     openrouter_provider_order: Annotated[list[str], NoDecode] = []
 
     embedding_model: str = "openai:text-embedding-3-small"

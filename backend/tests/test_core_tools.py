@@ -76,3 +76,14 @@ async def test_start_thread(services):
     assert "error" in await start_thread.ainvoke({"title": "x", "handles": ["ghost"], "message": "m", "runtime": rt(services, eng, t.id)})
     assert "error" in await start_thread.ainvoke({"title": "x", "handles": ["rev"], "message": "m",
                                                   "working_directory": "../bad", "runtime": rt(services, eng, t.id)})
+
+
+async def test_start_thread_without_title(services):
+    eng, _rev, t = await setup(services)
+    out = await start_thread.ainvoke({"handles": ["rev"], "message": "@rev no title", "runtime": rt(services, eng, t.id)})
+    assert out.startswith("started thread ")
+    thread_id = out.removeprefix("started thread ")
+    from tests.test_threads_api import _expected_recent_titles
+    async with services.session_factory() as s:
+        new = await s.get(Thread, thread_id)
+        assert new.title in _expected_recent_titles(), new.title

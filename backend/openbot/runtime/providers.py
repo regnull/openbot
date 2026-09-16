@@ -148,7 +148,11 @@ def provider_chat_model(
     if provider == "openrouter":
         kwargs["default_headers"] = {"HTTP-Referer": "https://github.com/regnull/openbot", "X-Title": "OpenBot"}
         if settings.openrouter_provider_order:
-            kwargs["extra_body"] = {"provider": {"order": list(settings.openrouter_provider_order), "allow_fallbacks": False}}
+            # Preferred upstreams first (each upstream has its own prompt cache, so staying on one keeps it
+            # warm), but fallbacks stay on: a request the preferred upstream cannot serve, e.g. memory
+            # extraction's tool_choice=required which Z.AI rejects, must get a cold-cache answer elsewhere
+            # rather than "No endpoints found".
+            kwargs["extra_body"] = {"provider": {"order": list(settings.openrouter_provider_order), "allow_fallbacks": True}}
     return ChatOpenAI(model=model, api_key=key, **kwargs)
 
 

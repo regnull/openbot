@@ -32,33 +32,15 @@ DEFAULT_BOT_HANDLE = "chief_of_staff"
 TITLE_TIME_FORMAT = "%Y-%m-%d %H:%M"
 
 
-def generate_thread_title(handles: list[str], default_bot_handle: str | None) -> str:
-    """Generate a title for a new thread based on handles or default bot.
-
-    Args:
-        handles: List of bot handles to include in the title.
-        default_bot_handle: Optional handle of the default bot for this thread.
+def generate_thread_title() -> str:
+    """Generate a title for a new thread when the user gave none.
 
     Returns:
-        Auto-generated title string.
+        Auto-generated title string (always timestamp-based).
 
-    Only the fully-invented fallback (no handles, no default bot) uses the
-    timestamp; handle-derived and default-bot titles carry user-provided
-    information and are kept.
-
-    Examples:
-        >>> generate_thread_title(["engineer", "qa"], None)
-        '@engineer · @qa'
-        >>> generate_thread_title([], "chief_of_staff")
-        'Default: @chief_of_staff'
-        >>> generate_thread_title([], None)  # doctest: +SKIP
-        '2025-06-14 09:30'
+    >>> generate_thread_title()  # doctest: +SKIP
+    '2025-06-14 09:30'
     """
-    if handles:
-        sorted_handles = sorted(handles)
-        return " · ".join(f"@{h}" for h in sorted_handles)
-    if default_bot_handle:
-        return f"Default: @{default_bot_handle}"
     return now_local().strftime(TITLE_TIME_FORMAT)
 
 
@@ -124,7 +106,7 @@ async def create_thread(services, session: AsyncSession, *, title: str, handles:
         raise ValueError(msg) from e
     effective_title = title if title and title.strip() else None
     if effective_title is None:
-        effective_title = generate_thread_title(handles, default_bot_handle)
+        effective_title = generate_thread_title()
 
     thread = Thread(title=effective_title, kind=kind, created_by_actor_id=created_by.id if created_by else None,
                     default_bot_actor_id=default_bot.id if default_bot else None,

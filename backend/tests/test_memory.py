@@ -165,3 +165,26 @@ async def test_reflection_and_memory_tool_are_told_memory_is_bot_scoped(monkeypa
     assert "thread" in captured["instructions"].lower() and "never" in captured["instructions"].lower()
     manage = memory_tools("b1", InMemoryStore())[0]
     assert "thread" in manage.description.lower()
+
+
+async def test_reflection_bounds_the_extractor_loop():
+    """trustcall loops extract -> validate_or_retry back to extract whenever the model call yields no AI
+    message (a provider error, for instance) without counting an attempt, so a failing upstream spun 12
+    times until LangGraph's default recursion limit. Reflection is best-effort background work: cap it."""
+    seen = {}
+
+    class StubManager:
+        async def ainvoke(self, inp, config=None):
+            seen.update(config or {})
+            return []
+
+    class Svc:
+        store = InMemoryStore()
+        model_factory = None
+
+    r = MemoryReflector(Svc(), delay=10)
+    r.make_manager = lambda bot: StubManager()
+    r.schedule(Actor(id="b1", kind="bot", handle="b", name="B"), [HumanMessage("x")], thread_id="t1")
+    await r.flush()
+    assert seen.get("recursion_limit", 25) <= 12
+    assert seen.get("configurable", {}).get("max_attempts", 3) <= 2
