@@ -292,3 +292,14 @@ def bot_out(actor, *, active: bool = False) -> BotOut:
                   instructions=p.instructions, provider=p.provider, model=p.model, model_settings=p.model_settings,
                   tool_names=p.tool_names, approval_tools=p.approval_tools, memory_enabled=p.memory_enabled,
                   created_at=actor.created_at, updated_at=actor.updated_at)
+
+
+class SettingOut(BaseModel):
+    key: str
+    group: str
+    label: str
+    description: str
+    type: str
+    value: Any
+    default: Any
+    overridden: bool

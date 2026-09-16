@@ -22,4 +22,5 @@ class Services:
     reflector: Any = None      # MemoryReflector
     model_factory: Callable[[Any], Any] | None = None  # (Actor) -> BaseChatModel
     http_client: Any = None    # httpx.AsyncClient for webhook delivery
+    env_defaults: dict = field(default_factory=dict)  # tunables' values before stored overrides (see runtime/app_settings.py)
     _owned_resources: list = field(default_factory=list)
