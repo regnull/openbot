@@ -107,3 +107,50 @@ async def test_pagination(client, services):
     assert [m["content"] for m in d["messages"]] == ["m3", "m4"] and d["has_more"] is True
     d2 = (await client.get(f"/api/v1/threads/{t['id']}?limit=2&before={d['messages'][0]['id']}")).json()
     assert [m["content"] for m in d2["messages"]] == ["m1", "m2"]
+
+
+
+async def test_create_thread_auto_title_from_handles(client, services):
+    """When title is empty string and handles provided, generate title from sorted handles."""
+    await client.post("/api/v1/bots", json={**CHIEF})
+    await client.post("/api/v1/bots", json={**BOT})
+    r = await client.post("/api/v1/threads", json={"title": "", "handles": ["eng", "chief_of_staff"]})
+    assert r.status_code == 201, r.text
+    t = r.json()
+    assert t["title"] == "@chief_of_staff · @eng"
+
+
+async def test_create_thread_auto_title_default_bot(client, services):
+    """When title is empty and no handles but default_bot_handle is set, generate default bot title."""
+    await client.post("/api/v1/bots", json={**CHIEF})
+    r = await client.post("/api/v1/threads", json={"title": "", "handles": [], "default_bot_handle": "chief_of_staff"})
+    assert r.status_code == 201, r.text
+    t = r.json()
+    assert t["title"] == "Default: @chief_of_staff"
+
+
+async def test_create_thread_auto_title_no_handles(client, services):
+    """When title is empty and no handles, generate 'New thread'."""
+    r = await client.post("/api/v1/threads", json={"title": "", "handles": []})
+    assert r.status_code == 201, r.text
+    t = r.json()
+    assert t["title"] == "New thread"
+
+
+async def test_create_thread_explicit_title_preserved(client, services):
+    """Explicit title should not be overridden by auto-generation."""
+    await client.post("/api/v1/bots", json={**CHIEF})
+    await client.post("/api/v1/bots", json={**BOT})
+    r = await client.post("/api/v1/threads", json={"title": "My Custom Title", "handles": ["eng"]})
+    assert r.status_code == 201, r.text
+    t = r.json()
+    assert t["title"] == "My Custom Title"
+
+
+async def test_create_thread_auto_title_whitespace(client, services):
+    """Whitespace-only title should be treated as empty and auto-generated."""
+    await client.post("/api/v1/bots", json={**CHIEF})
+    r = await client.post("/api/v1/threads", json={"title": "   ", "handles": []})
+    assert r.status_code == 201, r.text
+    t = r.json()
+    assert t["title"] == "New thread"

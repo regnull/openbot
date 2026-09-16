@@ -20,6 +20,32 @@ HUMAN_HANDLE = "you"
 DEFAULT_BOT_HANDLE = "chief_of_staff"
 
 
+def generate_thread_title(handles: list[str], default_bot_handle: str | None) -> str:
+    """Generate a title for a new thread based on handles or default bot.
+
+    Args:
+        handles: List of bot handles to include in the title.
+        default_bot_handle: Optional handle of the default bot for this thread.
+
+    Returns:
+        Auto-generated title string.
+
+    Examples:
+        >>> generate_thread_title(["engineer", "qa"], None)
+        '@engineer · @qa'
+        >>> generate_thread_title([], "chief_of_staff")
+        'Default: @chief_of_staff'
+        >>> generate_thread_title([], None)
+        'New thread'
+    """
+    if handles:
+        sorted_handles = sorted(handles)
+        return " · ".join(f"@{h}" for h in sorted_handles)
+    if default_bot_handle:
+        return f"Default: @{default_bot_handle}"
+    return "New thread"
+
+
 @dataclass
 class PostResult:
     message: Message
@@ -79,13 +105,17 @@ async def create_thread(services, session: AsyncSession, *, title: str, handles:
         if "working_directory" not in msg:
             msg = f"invalid working_directory: {msg}"
         raise ValueError(msg) from e
-    thread = Thread(title=title, created_by_actor_id=created_by.id if created_by else None,
+    effective_title = title if title and title.strip() else None
+    if effective_title is None:
+        effective_title = generate_thread_title(handles, default_bot_handle)
+
+    thread = Thread(title=effective_title, created_by_actor_id=created_by.id if created_by else None,
                     default_bot_actor_id=default_bot.id if default_bot else None,
                     working_directory=normalized_working_directory, external_ref=external_ref)
     session.add(thread)
     await session.flush()
     log.info("thread %s created: title=%r handles=%s default_bot=%s working_directory=%s tool_root=%s",
-             thread.id, title, handles, effective_default if default_bot else None, normalized_working_directory or ".",
+             thread.id, effective_title, handles, effective_default if default_bot else None, normalized_working_directory or ".",
              thread_workspace_root(services.settings.workspace_root, normalized_working_directory))
     ids = {by_handle[h].id for h in handles}
     if created_by:
