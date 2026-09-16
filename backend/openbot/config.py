@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     context_clear_at_least: int = 6000   # ...and reclaim at least this many tokens per clearing, so clearings are rare
     summary_trigger_tokens: int = 18000  # summarize older history into one message once a run's context exceeds this
     summary_keep_messages: int = 12      # ...keeping this many recent messages verbatim
-    max_model_calls_per_run: int = 40    # model turns per run before the agent is stopped (bots can lower it)
+    max_model_calls_per_run: int = 60    # model turns per run before the agent is stopped (bots can lower it)
     history_token_budget: int = 24000
     history_max_messages: int = 80
     memory_reflection_delay: float = 30.0

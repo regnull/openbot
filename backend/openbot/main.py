@@ -15,10 +15,12 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from openbot.api import actors, bots, events, inbox, messages, providers, runs, threads, tools
+from openbot.api import settings as settings_api
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
 from openbot.logsetup import configure_logging
+from openbot.runtime import app_settings
 from openbot.runtime.actors import ActorSystem
 from openbot.runtime.bus import EventBus
 from openbot.runtime.memory import MemoryReflector
@@ -80,6 +82,7 @@ async def close_services(services: Services) -> None:
 
 
 async def start_background(services: Services) -> None:
+    await app_settings.apply_stored_overrides(services)
     await ensure_human_actor(services)
     if services.settings.seed_demo_bots:
         await seed_demo_bots(services)
@@ -199,7 +202,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
     for r in (actors.router, bots.router, threads.router, messages.router, inbox.router, runs.router, tools.router,
-              providers.router, events.router):
+              providers.router, events.router, settings_api.router):
         api.include_router(r)
     app.include_router(public)
     app.include_router(api)

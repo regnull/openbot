@@ -1,4 +1,4 @@
-import type { Actor, Bot, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import type { Actor, AppSetting, Bot, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 import { ApiError, backendUnavailableEvent, isBackendUnavailable } from "./errors";
 
 export { ApiError } from "./errors";
@@ -61,5 +61,8 @@ export const Api = {
   resumeRun: (id: string, body: { answer?: string; decisions?: ("approve" | "reject")[] }) => api<Run>(`/runs/${id}/resume`, { method: "POST", json: body }),
   cancelRun: (id: string) => api<Run>(`/runs/${id}/cancel`, { method: "POST" }),
   listTools: () => api<{ tools: ToolInfo[]; errors: { file: string; error: string }[] }>("/tools"),
+  getSettings: () => api<AppSetting[]>("/settings"),
+  patchSettings: (updates: Record<string, unknown>) => api<AppSetting[]>("/settings", { method: "PATCH", json: updates }),
+  resetSetting: (key: string) => api<AppSetting[]>(`/settings/${key}`, { method: "DELETE" }),
   getProviders: () => api<ProvidersOut>("/providers"),
 };

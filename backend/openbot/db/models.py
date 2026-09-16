@@ -196,3 +196,11 @@ class RunEvent(Base):
     type: Mapped[str] = mapped_column(String(16), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class AppSetting(Base):
+    """A runtime override of one Settings field (see runtime/app_settings.py). Absent row = environment value."""
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[object] = mapped_column(JSON, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
