@@ -8,6 +8,7 @@ import MessageList from "../components/MessageList";
 import { Button, ErrorText, Spinner } from "../components/ui";
 import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
 import { emptyThreadState, hydrate, mergeRun, reduceThreadEvent, type ThreadState } from "../lib/threadState";
+import { threadUsageLabel } from "../lib/threadUsage";
 
 export default function ThreadPage() {
   const { id = "" } = useParams();
@@ -15,6 +16,7 @@ export default function ThreadPage() {
   const nav = useNavigate();
   const detail = useQuery({ queryKey: ["thread", id], queryFn: () => Api.getThread(id) });
   const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
+  const usage = useQuery({ queryKey: ["thread-usage", id], queryFn: () => Api.getThreadUsage(id) });
   const [state, setState] = useState<ThreadState>(emptyThreadState());
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -30,8 +32,13 @@ export default function ThreadPage() {
   useEffect(() => { Api.ackThread(id).then(() => qc.invalidateQueries({ queryKey: ["inbox"] })).catch(() => {}); }, [id, qc, state.messages.length]);
   // Events published while the SSE socket was down are not replayed, so a reconnect leaves the
   // locally-reduced thread state behind. Refetch the thread instead of trusting it.
-  useBusEvents(id, (e) => setState((s) => reduceThreadEvent(s, e)), () => {
+  useBusEvents(id, (e) => {
+    setState((s) => reduceThreadEvent(s, e));
+    // Usage is written when a run leaves `running`, so that is when the header totals move.
+    if (e.event === "run.updated" && e.data.status !== "running") qc.invalidateQueries({ queryKey: ["thread-usage", id] });
+  }, () => {
     qc.invalidateQueries({ queryKey: ["thread", id] });
+    qc.invalidateQueries({ queryKey: ["thread-usage", id] });
   });
   const send = useMutation({
     mutationFn: (content: string) => Api.postMessage(id, { content }),
@@ -61,6 +68,7 @@ export default function ThreadPage() {
   if (detail.isLoading) return <Spinner />;
   if (!detail.data) return <ErrorText error={detail.error} />;
   const t = detail.data;
+  const usageLine = usage.data ? threadUsageLabel(usage.data) : null;
   const handles = [...new Set([
     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
     ...(bots.data ?? []).filter((b) => b.enabled).map((b) => b.handle),
@@ -72,6 +80,7 @@ export default function ThreadPage() {
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold">{t.title || "Untitled thread"}</h1>
           <div className="truncate text-xs text-zinc-500">cwd {t.working_directory ?? "."}</div>
+          {usageLine && <div className="truncate text-xs text-zinc-500" title="LLM calls and prompt/completion tokens across every run in this thread">{usageLine}</div>}
         </div>
         <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-zinc-500">
           <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>

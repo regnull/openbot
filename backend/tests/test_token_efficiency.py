@@ -166,3 +166,41 @@ async def test_seed_persists_model_settings(services):
     assert chief.bot.model_settings == {"max_model_calls": 6}
     assert chief.bot.tool_names == []
     assert services.runner.model_call_limit(chief) == 6
+
+
+async def test_thread_usage_sums_all_runs(client, services):
+    """The thread header shows running totals over every run, finished or not, and treats
+    runs that never reported usage as zero."""
+    from openbot.db.models import Thread
+    from tests.factories import bot_actor
+    async with services.session_factory() as s:
+        eng, thread, other = bot_actor("eng"), Thread(title="t"), Thread(title="other")
+        s.add_all([eng, thread, other])
+        await s.flush()
+        s.add_all([
+            Run(actor_id=eng.id, thread_id=thread.id, status="completed", prompt_tokens=10, completion_tokens=2,
+                cache_read_tokens=5, total_tokens=12, model_calls=1),
+            Run(actor_id=eng.id, thread_id=thread.id, status="waiting_human", prompt_tokens=100, completion_tokens=20,
+                cache_read_tokens=0, total_tokens=120, model_calls=3),
+            Run(actor_id=eng.id, thread_id=thread.id, status="queued"),
+            Run(actor_id=eng.id, thread_id=other.id, status="completed", prompt_tokens=999, completion_tokens=999,
+                cache_read_tokens=999, total_tokens=1998, model_calls=9),
+        ])
+        await s.commit()
+        thread_id = thread.id
+    r = await client.get(f"/api/v1/threads/{thread_id}/usage")
+    assert r.status_code == 200
+    assert r.json() == {"model_calls": 4, "prompt_tokens": 110, "completion_tokens": 22, "cache_read_tokens": 5}
+
+
+async def test_thread_usage_is_zero_for_thread_without_runs(client, services):
+    from openbot.db.models import Thread
+    async with services.session_factory() as s:
+        thread = Thread(title="t")
+        s.add(thread)
+        await s.commit()
+        thread_id = thread.id
+    r = await client.get(f"/api/v1/threads/{thread_id}/usage")
+    assert r.status_code == 200
+    assert r.json() == {"model_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cache_read_tokens": 0}
+    assert (await client.get("/api/v1/threads/nope/usage")).status_code == 404

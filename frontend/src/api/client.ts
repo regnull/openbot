@@ -1,4 +1,4 @@
-import type { Actor, Bot, BotInput, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ToolInfo } from "./types";
+import type { Actor, Bot, BotInput, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 
 export const BASE = "/api/v1";
 const KEY = "openbot_api_key";
@@ -45,6 +45,7 @@ export const Api = {
   ackItem: (id: string) => api<InboxItem>(`/inbox/${id}/ack`, { method: "POST" }),
   listRuns: (threadId: string) => api<Run[]>(`/runs?thread_id=${threadId}`),
   getRun: (id: string) => api<RunDetail>(`/runs/${id}`),
+  getThreadUsage: (id: string) => api<ThreadUsage>(`/threads/${id}/usage`),
   resumeRun: (id: string, body: { answer?: string; decisions?: ("approve" | "reject")[] }) => api<Run>(`/runs/${id}/resume`, { method: "POST", json: body }),
   cancelRun: (id: string) => api<Run>(`/runs/${id}/cancel`, { method: "POST" }),
   listTools: () => api<{ tools: ToolInfo[]; errors: { file: string; error: string }[] }>("/tools"),

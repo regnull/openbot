@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openbot.api.deps import get_services, get_session
@@ -13,6 +13,7 @@ from openbot.api.schemas import (
     ThreadDetail,
     ThreadOut,
     ThreadUpdate,
+    ThreadUsage,
 )
 from openbot.db.models import (
     OPEN_RUN_STATUSES,
@@ -115,6 +116,15 @@ async def get_thread(thread_id: str, before: str | None = None, limit: int = Que
     d.has_more = len(rows) > limit
     d.runs = [RunOut.model_validate(r) for r in runs]
     return d
+
+
+@router.get("/{thread_id}/usage", response_model=ThreadUsage)
+async def get_thread_usage(thread_id: str, session: AsyncSession = Depends(get_session)):
+    """Sum usage over all runs in the thread; runs that never reported usage count as zero."""
+    await get_thread_or_404(session, thread_id)
+    cols = [func.coalesce(func.sum(getattr(Run, k)), 0) for k in ThreadUsage.model_fields]
+    row = (await session.execute(select(*cols).where(Run.thread_id == thread_id))).one()
+    return ThreadUsage(**dict(zip(ThreadUsage.model_fields, row, strict=True)))
 
 
 @router.patch("/{thread_id}", response_model=ThreadOut)

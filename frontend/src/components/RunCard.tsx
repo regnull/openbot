@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Api } from "../api/client";
+import { compact } from "../lib/threadUsage";
 import type { Run, RunEvent } from "../api/types";
 import { Badge, ErrorText } from "./ui";
 
@@ -9,7 +10,6 @@ const ACTIVE = ["queued", "running", "waiting_human"];
 type Tone = "green" | "red" | "amber" | "blue";
 const tone = (s: string): Tone => (s === "completed" ? "green" : s === "failed" || s === "cancelled" ? "red" : s === "waiting_human" ? "amber" : "blue");
 
-const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
 /** "12.3k tok (78% cached)" — prompt + completion tokens over the run, with the cached share of the prompt. */
 export function usageLabel(run: Pick<Run, "prompt_tokens" | "completion_tokens" | "cache_read_tokens" | "model_calls">): string | null {

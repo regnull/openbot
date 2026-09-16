@@ -192,6 +192,14 @@ class ThreadDetail(ThreadOut):
     runs: list[RunOut] = []
 
 
+class ThreadUsage(BaseModel):
+    """Running LLM totals over every run in a thread, for the thread header."""
+    model_calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cache_read_tokens: int = 0
+
+
 class MessageCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     content: str = Field(min_length=1)
