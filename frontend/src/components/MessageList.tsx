@@ -40,6 +40,13 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
                 <span className="font-medium text-zinc-700 dark:text-zinc-300">{m.sender_name}</span> · {parseTs(m.created_at).toLocaleTimeString()}{m.hop > 0 && ` · hop ${m.hop}`}
               </div>
               <div className="whitespace-pre-wrap text-sm">{m.content}</div>
+              {((m.metadata?.images as string[] | undefined) ?? []).length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {(m.metadata.images as string[]).map((src, i) => (
+                    <img key={`${m.id}:${i}`} src={src} alt={`image attached to message by ${m.sender_name}`} className="max-h-40 rounded border border-zinc-200 dark:border-zinc-700" />
+                  ))}
+                </div>
+              )}
               {run && <RunCard run={run} events={eventsFor(run.id)} streaming={state.streaming[run.id]} />}
               {run?.status === "waiting_human" && <InterruptCard run={run} botName={byActor.get(run.actor_id)?.name} />}
             </div>

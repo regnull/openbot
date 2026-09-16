@@ -42,7 +42,7 @@ export default function ThreadPage() {
     qc.invalidateQueries({ queryKey: ["thread-usage", id] });
   });
   const send = useMutation({
-    mutationFn: (content: string) => Api.postMessage(id, { content }),
+    mutationFn: ({ content, images }: { content: string; images: string[] }) => Api.postMessage(id, { content, images: images.length ? images : undefined }),
     onSuccess: (r) => setNotice(r.unaddressed ? "No bot was addressed. Mention a bot with @handle or set a default bot to wake one up." : null),
   });
   const loadOlder = useMutation({
@@ -108,7 +108,7 @@ export default function ThreadPage() {
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         {notice && <p className="mb-1 text-xs text-amber-600">{notice}</p>}
         <ErrorText error={send.error} />
-        <Composer handles={handles} onSend={async (text) => { await send.mutateAsync(text); }} />
+        <Composer handles={handles} onSend={async (text, images) => { await send.mutateAsync({ content: text, images }); }} />
       </div>
     </div>
   );

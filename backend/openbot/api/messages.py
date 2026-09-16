@@ -25,8 +25,9 @@ async def post(thread_id: str, body: MessageCreate, session: AsyncSession = Depe
                services: Services = Depends(get_services)):
     sender = await resolve_sender(session, body.from_handle)
     try:
+        # Images ride in Message.meta, never through the bus payload (binary-safe).
         res = await post_message(services, session, thread_id=thread_id, sender=sender, content=body.content,
-                                 to_handles=body.to)
+                                 to_handles=body.to, meta={"images": body.images} if body.images else None)
     except LookupError as e:
         raise HTTPException(404, "thread not found") from e
     except ValueError as e:

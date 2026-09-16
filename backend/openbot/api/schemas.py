@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -9,6 +10,8 @@ from openbot.bot_icons import DEFAULT_BOT_ICON, validate_bot_icon
 
 Provider = Literal["auto", "openai", "anthropic", "openrouter", "xai", "ollama"]
 HANDLE_RE = r"^[a-z0-9_-]{2,32}$"
+# ~3.5 MB of decoded image bytes (base64 inflates by 4/3).
+MAX_IMAGE_CHARS = 4_700_000
 
 
 class ActorOut(BaseModel):
@@ -140,6 +143,7 @@ class ThreadOut(BaseModel):
 
 
 class MessageOut(BaseModel):
+    images: list[str] = []
     model_config = ConfigDict(from_attributes=True)
     id: str
     thread_id: str
@@ -201,11 +205,26 @@ class ThreadUsage(BaseModel):
     cache_read_tokens: int = 0
 
 
+MAX_IMAGES = 4
+DATA_URL_RE = r"^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$"
+
+
 class MessageCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=20000)
     to: list[str] = []
     from_handle: str | None = Field(default=None, alias="from")
+    images: list[str] = Field(default=[], max_length=MAX_IMAGES)
+
+    @field_validator("images")
+    @classmethod
+    def _validate_images(cls, v: list[str]) -> list[str]:
+        for url in v:
+            if not re.fullmatch(DATA_URL_RE, url):
+                raise ValueError("images must be data URLs (data:image/png|jpeg|webp|gif;base64,...)")
+            if len(url) > MAX_IMAGE_CHARS:
+                raise ValueError("image is too large")
+        return v
 
 
 class PostMessageOut(BaseModel):

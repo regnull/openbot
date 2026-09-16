@@ -30,6 +30,9 @@ def build_history(messages: list[Message], actor_id: str, *, token_budget: int, 
             out.append(AIMessage(content=m.content))
             continue
         tag = " (new)" if m.id in trigger_ids else ""
+        n_imgs = len((getattr(m, "meta", None) or {}).get("images") or [])
+        if n_imgs:
+            tag += f" [attached {n_imgs} image{'s' if n_imgs > 1 else ''}]"
         line = f"[{m.sender_name}]{tag}: {m.content}"
         if out and isinstance(out[-1], HumanMessage):
             out[-1] = HumanMessage(content=f"{out[-1].content}\n\n{line}")

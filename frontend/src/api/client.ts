@@ -51,7 +51,7 @@ export const Api = {
   getThread: (id: string, before?: string) => api<ThreadDetail>(`/threads/${id}?limit=50${before ? `&before=${before}` : ""}`),
   deleteThread: (id: string) => api<void>(`/threads/${id}`, { method: "DELETE" }),
   updateThread: (id: string, body: { default_bot_handle: string }) => api<Thread>(`/threads/${id}`, { method: "PATCH", json: body }),
-  postMessage: (id: string, body: { content: string; to?: string[] }) => api<{ message: Message; addressed: string[]; unaddressed: boolean }>(`/threads/${id}/messages`, { method: "POST", json: body }),
+  postMessage: (id: string, body: { content: string; to?: string[]; images?: string[] }) => api<{ message: Message; addressed: string[]; unaddressed: boolean }>(`/threads/${id}/messages`, { method: "POST", json: body }),
   ackThread: (id: string) => api<{ acked: number }>(`/threads/${id}/ack`, { method: "POST" }),
   listInbox: () => api<InboxItem[]>("/inbox"),
   ackItem: (id: string) => api<InboxItem>(`/inbox/${id}/ack`, { method: "POST" }),
