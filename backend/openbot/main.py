@@ -12,6 +12,7 @@ from dotenv import find_dotenv, load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from openbot.api import actors, bots, events, inbox, messages, providers, runs, threads, tools
 from openbot.api.deps import require_api_key
@@ -146,6 +147,25 @@ def close_buses_on_uvicorn_exit(bus) -> Callable[[], None]:
 _install_uvicorn_exit_hook()
 
 
+class SpaStaticFiles(StaticFiles):
+    """Static files with a single-page-app history fallback.
+
+    Routes such as /inbox or /bots/<id> exist only in the frontend router, so a browser refresh on one
+    of them must load index.html and let the app route. Starlette's html mode only falls back to a
+    404.html, so deep links 404ed. Unknown API paths and paths whose last segment looks like a file
+    (has an extension) are left alone: a missing asset must stay a 404, not silently become the app shell.
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            # Not the app: a real 404 from the API namespace, or a path that names a file (has an extension).
+            if exc.status_code != 404 or path.startswith("api/") or "." in path.rsplit("/", 1)[-1]:
+                raise
+            return await super().get_response("index.html", scope)
+
+
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
     load_dotenv()
     settings = settings or get_settings()
@@ -186,7 +206,10 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     dist = settings.frontend_dist
     if dist and Path(dist).is_dir():
-        app.mount("/", StaticFiles(directory=str(dist), html=True), name="frontend")
+        if not (Path(dist) / "index.html").is_file():
+            log.warning("frontend_dist %s has no index.html; run `make build` (or `make run`, which builds first) "
+                        "or the UI will 404", Path(dist).resolve())
+        app.mount("/", SpaStaticFiles(directory=str(dist), html=True), name="frontend")
     return app
 
 
