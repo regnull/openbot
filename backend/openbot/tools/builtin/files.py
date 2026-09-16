@@ -6,6 +6,25 @@ from openbot.tools.builtin.workspace import cap, resolve_in_workspace
 from openbot.tools.context import RunContext
 
 
+def _outline(path: str, lines: list[str], size: int, limit: int) -> str:
+    """What a whole-file read returns when the file is over the cap.
+
+    A head-and-tail dump at the cap is content the model cannot use, and in practice it re-reads the
+    file by ranges straight after, so the dump is paid for twice on every later turn. Show the size,
+    the start (a third of the cap at most), and how to read the rest."""
+    budget = limit // 3
+    shown: list[str] = []
+    used = 0
+    for line in lines:
+        if used + len(line) + 1 > budget:
+            break
+        shown.append(line)
+        used += len(line) + 1
+    head = "\n".join(shown)
+    return (f"{path}: {len(lines)} lines, {size} chars; too large to show whole (cap {limit} chars). "
+            f"Read it in parts with start_line/end_line, or grep for what you need. Lines 1-{len(shown)}:\n{head}")
+
+
 @tool
 async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int | None = None,
                     end_line: int | None = None) -> str:
@@ -20,10 +39,12 @@ async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int
     except (ValueError, OSError) as e:
         return f"error: {e}"
     limit = runtime.context.tool_output_cap
-    if start_line is None and end_line is None:
-        return cap(text, limit, hint="re-read with start_line/end_line to see the rest")
     lines = text.splitlines()
     total = len(lines)
+    if start_line is None and end_line is None:
+        if len(text) <= limit:
+            return text
+        return _outline(path, lines, len(text), limit)
     start = max(1, start_line or 1)
     end = min(total, end_line or total)
     if start > end:

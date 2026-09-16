@@ -262,7 +262,7 @@ that bot.
 | `PROMPT_CACHING` | `true` | Add Anthropic prompt-cache breakpoints to every model call. Direct Anthropic caches the whole growing transcript, tool results included; through OpenRouter only the system prompt and human turns can carry a breakpoint. OpenAI-style providers cache automatically and are unaffected. |
 | `DIRECT_ANTHROPIC` | `true` | When the effective model is an OpenRouter `anthropic/...` id and `ANTHROPIC_API_KEY` is set, call Anthropic directly (`anthropic/claude-opus-4.6` -> `claude-opus-4-6`) so caching fully applies and no OpenRouter fee is paid. |
 | `TOOL_OUTPUT_CAP` | `8000` | Maximum characters of any single tool result the model sees; longer output keeps its head and tail with a note on how to get the rest (`read_file` takes `start_line`/`end_line`). Everything a tool returns is re-sent on every later turn, so this bounds the quadratic part of a run's cost. |
-| `CONTEXT_TRIGGER_TOKENS` | `60000` | Once a run's context exceeds this, tool results older than the three most recent are replaced with a placeholder in the model's view. The run's event log keeps the real output. |
+| `CONTEXT_TRIGGER_TOKENS` | `25000` | Once a run's context exceeds this, tool results older than the three most recent are replaced with a placeholder in the model's view. The run's event log keeps the real output. |
 | `MAX_MODEL_CALLS_PER_RUN` | `40` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). |
 | `HISTORY_TOKEN_BUDGET` | `24000` | Approximate token budget (chars / 4) for conversation history included in a run. |
 | `HISTORY_MAX_MESSAGES` | `80` | Hard cap on the number of history messages included in a run. |
@@ -329,6 +329,8 @@ pnpm build
 
 Or, from the repo root: `make test`, `make lint`, `make build`. `make reset_db` deletes the local
 SQLite databases (app and LangGraph state); the next start re-runs migrations and re-seeds the demo bots.
+`make sync_bots` updates the existing demo bots' instructions, tools and limits from the seed definitions
+without touching threads, runs or memories; use it after pulling a change to the seeded team.
 The live provider smoke
 tests in `backend/tests/smoke/` are marked `smoke` and deselected by default (`addopts =
 "-m 'not smoke'"`), so `make test` never bills a provider; run them deliberately with

@@ -102,3 +102,50 @@ async def seed_demo_bots(services) -> int:
         await session.commit()
     log.info("seeded %d demo bots using auto provider selection", len(DEMO_BOTS))
     return len(DEMO_BOTS)
+
+
+SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings")
+
+
+async def sync_demo_bots(services) -> int:
+    """Rewrite the demo bots' instructions, tools, approval tools and model settings from DEMO_BOTS.
+
+    `seed_demo_bots` skips an install that already has bots, so a redesigned team never reaches a
+    running install on its own. This brings existing demo rows up to date while leaving each bot's
+    provider/model pin and every non-demo bot untouched. Threads, runs and memories are not affected.
+    """
+    n = 0
+    async with services.session_factory() as session:
+        bots = {a.handle: a for a in (await session.execute(select(Actor).where(Actor.kind == "bot"))).scalars()}
+        for spec in DEMO_BOTS:
+            actor = bots.get(spec["handle"])
+            if actor is None or actor.bot is None:
+                continue
+            actor.name, actor.description = spec["name"], spec["description"]
+            for field in SYNCED_FIELDS:
+                setattr(actor.bot, field, spec.get(field, {} if field == "model_settings" else []))
+            n += 1
+        await session.commit()
+    log.info("synced %d demo bots from the seed definitions", n)
+    return n
+
+
+async def _main() -> None:
+    from types import SimpleNamespace
+
+    from openbot.config import Settings
+    from openbot.db.session import make_engine, make_session_factory
+
+    settings = Settings()
+    engine = make_engine(settings.database_url)
+    try:
+        n = await sync_demo_bots(SimpleNamespace(settings=settings, session_factory=make_session_factory(engine)))
+        print(f"synced {n} demo bots; restart the server or wait for the next run to pick them up")
+    finally:
+        await engine.dispose()
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(_main())
