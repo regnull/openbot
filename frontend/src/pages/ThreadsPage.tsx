@@ -6,6 +6,7 @@ import Avatar from "../components/Avatar";
 import { Button, Card, ErrorText, Input, Spinner } from "../components/ui";
 import { parseTs } from "../lib/time";
 import { normalizeWorkingDirectory } from "../lib/workingDirectory";
+import { browseDirectory } from "../lib/browseDirectory";
 
 export default function ThreadsPage() {
   const qc = useQueryClient();
@@ -16,6 +17,7 @@ export default function ThreadsPage() {
   const [handles, setHandles] = useState<string[]>([]);
   const [defaultBot, setDefaultBot] = useState("chief_of_staff");
   const [workingDirectory, setWorkingDirectory] = useState("");
+  const [browseLoading, setBrowseLoading] = useState(false);
   const enabledBots = bots.data?.filter((b) => b.enabled) ?? [];
   const effectiveDefaultBot = enabledBots.some((b) => b.handle === defaultBot) ? defaultBot : enabledBots[0]?.handle;
   const workingDirectoryValidation = normalizeWorkingDirectory(workingDirectory);
@@ -31,6 +33,17 @@ export default function ThreadsPage() {
     },
     onSuccess: (t) => { qc.invalidateQueries({ queryKey: ["threads"] }); nav(`/threads/${t.id}`); },
   });
+  const handleBrowse = async () => {
+    setBrowseLoading(true);
+    try {
+      const result = await browseDirectory();
+      if (result?.path) {
+        setWorkingDirectory(result.path);
+      }
+    } finally {
+      setBrowseLoading(false);
+    }
+  };
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Threads</h1>
@@ -39,7 +52,14 @@ export default function ThreadsPage() {
         <Input placeholder="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} />
         <label className="block space-y-1 text-sm">
           <span className="text-zinc-600 dark:text-zinc-400">Working directory for thread tools</span>
-          <Input placeholder=". (workspace root)" value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} />
+          <div className="flex gap-2">
+            <Input placeholder=". (workspace root)" value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} />
+            <Button variant="secondary" onClick={handleBrowse} disabled={browseLoading} title="Browse for directory" className="shrink-0">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+            </Button>
+          </div>
           <span className="block text-xs text-zinc-500">Leave blank to use the current workspace root. Enter an existing relative directory under the workspace.</span>
         </label>
         {workingDirectoryValidation.error && <p className="text-xs text-red-600">{workingDirectoryValidation.error}</p>}
