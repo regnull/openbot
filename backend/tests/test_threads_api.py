@@ -1,3 +1,18 @@
+import re
+from datetime import datetime, timedelta
+
+from openbot.runtime.delivery import TITLE_TIME_FORMAT
+
+
+def _expected_recent_titles() -> set[str]:
+    """The current local time (+-1 minute), formatted the way the backend should."""
+    now = datetime.now().astimezone()
+    return {
+        (now + offset).strftime(TITLE_TIME_FORMAT)
+        for offset in (timedelta(minutes=-1), timedelta(), timedelta(minutes=1))
+    }
+
+
 BOT = {"handle": "eng", "name": "Engineer", "provider": "openai", "model": "gpt-5.5"}
 CHIEF = {"handle": "chief_of_staff", "name": "Chief of Staff", "provider": "openai", "model": "gpt-5.5"}
 REVIEWER = {"handle": "reviewer", "name": "Reviewer", "provider": "openai", "model": "gpt-5.5"}
@@ -129,12 +144,13 @@ async def test_create_thread_auto_title_default_bot(client, services):
     assert t["title"] == "Default: @chief_of_staff"
 
 
-async def test_create_thread_auto_title_no_handles(client, services):
-    """When title is empty and no handles, generate 'New thread'."""
+async def test_create_thread_auto_title_datetime(client, services):
+    """When title is empty and no handles, fall back to 'YYYY-MM-DD HH:MM' local time."""
     r = await client.post("/api/v1/threads", json={"title": "", "handles": []})
     assert r.status_code == 201, r.text
     t = r.json()
-    assert t["title"] == "New thread"
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", t["title"]), t["title"]
+    assert t["title"] in _expected_recent_titles(), t["title"]
 
 
 async def test_create_thread_explicit_title_preserved(client, services):
@@ -148,9 +164,17 @@ async def test_create_thread_explicit_title_preserved(client, services):
 
 
 async def test_create_thread_auto_title_whitespace(client, services):
-    """Whitespace-only title should be treated as empty and auto-generated."""
+    """Whitespace-only title should be treated as not provided and become the timestamp."""
     await client.post("/api/v1/bots", json={**CHIEF})
     r = await client.post("/api/v1/threads", json={"title": "   ", "handles": []})
     assert r.status_code == 201, r.text
     t = r.json()
-    assert t["title"] == "New thread"
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", t["title"]), t["title"]
+    assert t["title"] in _expected_recent_titles(), t["title"]
+
+
+async def test_create_thread_explicit_title_whitespace_preserved(client, services):
+    """Titles with meaningful content keep surrounding whitespace verbatim (no stripping)."""
+    r = await client.post("/api/v1/threads", json={"title": "  Padded Title  ", "handles": []})
+    assert r.status_code == 201, r.text
+    assert r.json()["title"] == "  Padded Title  "

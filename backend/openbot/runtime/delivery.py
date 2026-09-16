@@ -8,7 +8,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openbot.api.schemas import InboxItemOut, MessageOut, to_json
-from openbot.db.models import Actor, InboxItem, Message, Run, Thread, ThreadParticipant, utcnow
+from openbot.db.models import (
+    Actor,
+    InboxItem,
+    Message,
+    Run,
+    Thread,
+    ThreadParticipant,
+    now_local,
+    utcnow,
+)
 from openbot.runtime import memory
 from openbot.runtime.router import parse_mentions, resolve_targets
 from openbot.tools.builtin.workspace import thread_workspace_root, validate_workspace_directory
@@ -18,6 +27,9 @@ log = logging.getLogger(__name__)
 HOP_LIMIT_NOTICE = "Bot-to-bot hop limit reached; a human message resets it."
 HUMAN_HANDLE = "you"
 DEFAULT_BOT_HANDLE = "chief_of_staff"
+# Format for auto-generated thread titles when no title is provided:
+# "YYYY-MM-DD HH:MM" in local time.
+TITLE_TIME_FORMAT = "%Y-%m-%d %H:%M"
 
 
 def generate_thread_title(handles: list[str], default_bot_handle: str | None) -> str:
@@ -30,20 +42,24 @@ def generate_thread_title(handles: list[str], default_bot_handle: str | None) ->
     Returns:
         Auto-generated title string.
 
+    Only the fully-invented fallback (no handles, no default bot) uses the
+    timestamp; handle-derived and default-bot titles carry user-provided
+    information and are kept.
+
     Examples:
         >>> generate_thread_title(["engineer", "qa"], None)
         '@engineer · @qa'
         >>> generate_thread_title([], "chief_of_staff")
         'Default: @chief_of_staff'
-        >>> generate_thread_title([], None)
-        'New thread'
+        >>> generate_thread_title([], None)  # doctest: +SKIP
+        '2025-06-14 09:30'
     """
     if handles:
         sorted_handles = sorted(handles)
         return " · ".join(f"@{h}" for h in sorted_handles)
     if default_bot_handle:
         return f"Default: @{default_bot_handle}"
-    return "New thread"
+    return now_local().strftime(TITLE_TIME_FORMAT)
 
 
 @dataclass
