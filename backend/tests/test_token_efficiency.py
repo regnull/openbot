@@ -350,3 +350,17 @@ def test_engineer_reviewer_and_qa_are_told_not_to_dump_files_through_the_shell()
         assert "cat" in text and "git show" in text and "start_line/end_line" in text, h
     assert "gh pr diff <n> -- <path>" in bots["reviewer"]["instructions"]
     assert "tail" in bots["qa"]["instructions"]
+
+
+async def test_model_call_limit_is_reached_before_the_graph_recursion_limit(settings):
+    """A model turn traverses one graph node per middleware hook plus the model and tools nodes, so
+    the recursion limit must follow the real node count. With 40 calls allowed and five nodes per
+    turn the old fixed formula (calls * 4 + 20 = 180) ran out at turn 36 and the run failed with
+    GraphRecursionError instead of ending with the limit notice."""
+    settings.max_model_calls_per_run = 40
+    services, _eng, t, run = await make(settings, {"eng": _shell_loop(60) + [ai("never reached")]}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert run.status == "completed", run.error
+    assert [e.type for e in await events(services, run.id)].count("tool_call") == 40
+    assert "limit" in (await messages(services, t.id))[-1].content.lower()
