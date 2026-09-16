@@ -31,6 +31,11 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def now_local() -> datetime:
+    """Current local time (host timezone), used for human-facing timestamps."""
+    return datetime.now().astimezone()
+
+
 class UTCDateTime(TypeDecorator):
     """DateTime type that always round-trips as a tz-aware UTC datetime.
 
