@@ -21,9 +21,10 @@ from tests.fakes import ScriptedChatModel, ai, call
 from tests.test_runner import events, get, make, messages
 
 
-def rt(root: Path, cap_chars: int = 8000) -> ToolRuntime:
+def rt(root: Path, cap_chars: int = 8000, shell_cap_chars: int | None = None) -> ToolRuntime:
     root.mkdir(parents=True, exist_ok=True)
-    ctx = RunContext("b", "bot", "Bot", "t", "r", root.resolve(), None, tool_output_cap=cap_chars)
+    ctx = RunContext("b", "bot", "Bot", "t", "r", root.resolve(), None, tool_output_cap=cap_chars,
+                     shell_output_cap=shell_cap_chars if shell_cap_chars is not None else cap_chars)
     return ToolRuntime(context=ctx, store=None, state={}, tool_call_id="c", config={}, stream_writer=lambda *_: None)
 
 
@@ -321,3 +322,28 @@ async def test_long_runs_get_their_history_summarized(settings):
     assert any("SUMMARY: ran steps" in str(m.content) for m in final_prompt), "summary should replace the old history"
     assert not any("step0 " in str(m.content) for m in final_prompt if m.type == "tool"), "the summarized tool output is gone"
     assert len(final_prompt) < 12
+
+
+# --- shell bypass: cat/git show around read_file's outline ---------------------------------------------
+
+def test_shell_output_cap_is_tighter_than_the_file_cap():
+    """Bots route around read_file's outline with `cat` and `git show`, which used the same 8k cap. A
+    tighter shell cap makes dumping a file through the shell worse than reading a range."""
+    from openbot.config import Settings
+    st = Settings(_env_file=None)
+    assert st.shell_output_cap <= 4000 < st.tool_output_cap
+
+
+async def test_run_shell_uses_its_own_cap(tmp_path):
+    r = rt(tmp_path, cap_chars=8000, shell_cap_chars=1000)
+    out = await run_shell.ainvoke({"command": "python3 -c \"print('y'*5000)\"", "runtime": r})
+    assert len(out) < 1200 and "[truncated" in out
+
+
+def test_engineer_reviewer_and_qa_are_told_not_to_dump_files_through_the_shell():
+    bots = {b["handle"]: b for b in DEMO_BOTS}
+    for h in ("engineer", "reviewer"):
+        text = bots[h]["instructions"]
+        assert "cat" in text and "git show" in text and "start_line/end_line" in text, h
+    assert "gh pr diff <n> -- <path>" in bots["reviewer"]["instructions"]
+    assert "tail" in bots["qa"]["instructions"]

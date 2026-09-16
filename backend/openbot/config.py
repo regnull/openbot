@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     prompt_caching: bool = True          # add Anthropic cache breakpoints to every model call
     direct_anthropic: bool = True        # send OpenRouter `anthropic/...` models to Anthropic directly when a key exists
     tool_output_cap: int = 8000          # max chars of any single tool result the model sees (head + tail kept)
+    shell_output_cap: int = 4000         # tighter cap for run_shell, so dumping a file through cat/git show loses to read_file ranges
     context_trigger_tokens: int = 12000  # clear old tool results once a run's context exceeds this
     context_clear_at_least: int = 6000   # ...and reclaim at least this many tokens per clearing, so clearings are rare
     summary_trigger_tokens: int = 18000  # summarize older history into one message once a run's context exceeds this

@@ -289,7 +289,8 @@ class Runner:
                      workspace_root, eff_provider, eff_model, ",".join(bot.bot.tool_names) or "-")
             log.debug("run %s system prompt:\n%s", run.id, system_prompt)
             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
-                             thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap)
+                             thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap,
+                             shell_output_cap=self.s.settings.shell_output_cap)
             agent = self._build_agent(bot, system_prompt)
             with collect_runs() as cb:
                 final_text, interrupt, seq, usage = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq)

@@ -20,7 +20,9 @@ async def _kill_group(proc: asyncio.subprocess.Process) -> None:
 async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | None = None,
                     timeout: int = 120) -> str:
     """Run a shell command (bash) inside the workspace. Use it for git, gh, tests, builds.
-    `cwd` is relative to the workspace root. Returns stdout, stderr and the exit code."""
+    `cwd` is relative to the workspace root. Returns stdout, stderr and the exit code. Output is capped
+    tighter than read_file's: do not `cat` or `git show` files through it; read code with read_file
+    (start_line/end_line) and pipe long output through `head`, `tail` or `grep`."""
     try:
         workdir = resolve_in_workspace(runtime.context.workspace_root, cwd)
     except ValueError as e:
@@ -46,5 +48,5 @@ async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | N
         parts.append("stdout:\n" + out.decode(errors="replace"))
     if err:
         parts.append("stderr:\n" + err.decode(errors="replace"))
-    return cap("\n".join(parts), runtime.context.tool_output_cap,
-               hint="pipe through head/tail/grep or use --name-only style flags to get less output")
+    return cap("\n".join(parts), runtime.context.shell_output_cap,
+               hint="pipe through head/tail/grep or use --name-only style flags to get less output; to read code use read_file with a line range")
