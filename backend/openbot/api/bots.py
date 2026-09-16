@@ -25,6 +25,11 @@ def _validate_tools(services: Services, tool_names: list[str], approval_tools: l
         raise HTTPException(422, f"approval_tools must be a subset of tool_names: {extra}")
 
 
+def _validate_model(provider: str, model: str) -> None:
+    if provider != "auto" and not model:
+        raise HTTPException(422, 'model is required unless provider is "auto"')
+
+
 async def _get_bot_or_404(session: AsyncSession, bot_id: str) -> Actor:
     actor = await session.get(Actor, bot_id)
     if not actor or actor.kind != "bot":
@@ -66,6 +71,7 @@ async def update_bot(bot_id: str, body: BotUpdate, session: AsyncSession = Depen
     actor = await _get_bot_or_404(session, bot_id)
     data = body.model_dump(exclude_unset=True)
     _validate_tools(services, data.get("tool_names", actor.bot.tool_names), data.get("approval_tools", actor.bot.approval_tools))
+    _validate_model(data.get("provider", actor.bot.provider), data.get("model", actor.bot.model))
     if "handle" in data and data["handle"] != actor.handle and await handle_taken(session, data["handle"]):
         raise HTTPException(409, "handle already exists")
     for k, v in data.items():
