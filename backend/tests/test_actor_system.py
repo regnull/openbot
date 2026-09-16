@@ -85,7 +85,7 @@ async def test_batching_and_parking(settings):
     # The batched human turn, not seen[-1][-1]: history is chronological, and the resumed run's own
     # "after" reply is posted after "two"/"three" (which waited while the thread was parked).
     last_prompt = next(m.content for m in ScriptedChatModel.seen[-1] if m.type == "human")
-    assert "[You]: two" in last_prompt and "[You]: three" in last_prompt
+    assert "[You] (new): two" in last_prompt and "[You] (new): three" in last_prompt   # both coalesced triggers are marked
     await services.actors.stop()
 
 

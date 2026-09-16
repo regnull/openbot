@@ -9,7 +9,11 @@ def estimate_tokens(text: str) -> int:
     return len(text) // 4 + 8
 
 
-def build_history(messages: list[Message], actor_id: str, *, token_budget: int, max_messages: int) -> tuple[list[BaseMessage], int]:
+def build_history(messages: list[Message], actor_id: str, *, token_budget: int, max_messages: int,
+                  trigger_ids: set[str] | frozenset[str] = frozenset()) -> tuple[list[BaseMessage], int]:
+    """Render the thread from the bot's point of view. Messages in `trigger_ids` (the ones that woke
+    this run) are marked "(new)" so the model knows what it is answering; other bots may have posted
+    since its last reply, and several triggers may have been coalesced into one run."""
     ordered = sorted(messages, key=lambda m: (m.created_at, m.id))
     picked: list[Message] = []
     used = 0
@@ -25,7 +29,8 @@ def build_history(messages: list[Message], actor_id: str, *, token_budget: int, 
         if m.sender_kind == "bot" and m.sender_actor_id == actor_id:
             out.append(AIMessage(content=m.content))
             continue
-        line = f"[{m.sender_name}]: {m.content}"
+        tag = " (new)" if m.id in trigger_ids else ""
+        line = f"[{m.sender_name}]{tag}: {m.content}"
         if out and isinstance(out[-1], HumanMessage):
             out[-1] = HumanMessage(content=f"{out[-1].content}\n\n{line}")
         else:
@@ -51,7 +56,7 @@ def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list
 {bot.bot.instructions}
 
 # How this platform works
-- You are in a shared thread with: {', '.join(participants) or 'nobody else'}. Messages from others appear as "[name]: text". The human operator is @you.
+- You are in a shared thread with: {', '.join(participants) or 'nobody else'}. Messages from others appear as "[name]: text". Messages marked "[name] (new): text" are the ones that woke you for this run; answer those. The human operator is @you.
 - Your reply is posted to the thread as a message from you. To hand work to another bot or ask it something, mention it with @handle in your reply. Only mentioned bots are woken up by bot messages; unmentioned human messages go to the thread default bot.{default_note} Never mention yourself. Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @.
 - Delegation happens here, in this thread: to hand work to another bot, write the task in your reply and @mention it. Never use start_thread to delegate or hand off work from this thread; it creates a separate thread that the human and the other participants are not following. Use start_thread only when you genuinely need an unrelated side conversation; omit working_directory to keep this thread's current tool directory, or pass an existing relative directory under the workspace. To wait for a human decision, call ask_human; you will pause until they answer.
 - Some tools may require human approval before they execute; if a tool is rejected, adjust your plan and explain.

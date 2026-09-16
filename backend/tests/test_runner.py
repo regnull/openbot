@@ -64,7 +64,7 @@ async def test_simple_reply_and_handoff(settings):
         rev_items = (await s.execute(select(InboxItem).where(InboxItem.message_id == msgs[-1].id, InboxItem.kind == "message"))).scalars().all()
     assert {i.actor_id for i in rev_items} >= {msgs[-1].mentions[0]}
     sent = ScriptedChatModel.seen[0]
-    assert sent[0].type == "system" and "@rev" in sent[0].content and "[You]: please build it" in sent[-1].content
+    assert sent[0].type == "system" and "@rev" in sent[0].content and "[You] (new): please build it" in sent[-1].content
     assert [e.type for e in await events(services, run.id)] == ["text", "message"]
 
 
@@ -246,3 +246,11 @@ async def test_runner_logs_run_context_and_tool_activity(settings, caplog):
     assert any(l.startswith(f"run {run.id} completed") for l in lines)
     debug = [r for r in caplog.records if r.levelno == logging.DEBUG and "system prompt" in r.getMessage()]
     assert debug and str((settings.workspace_root / "project").resolve()) in debug[0].getMessage()
+
+
+async def test_model_sees_trigger_messages_marked_new(settings):
+    ScriptedChatModel.seen.clear()
+    services, _eng, _t, run = await make(settings, {"eng": [ai("ok")]})
+    await services.runner.execute(run.id)
+    last_human = [m for m in ScriptedChatModel.seen[0] if m.type == "human"][-1]
+    assert "[You] (new): please build it" in last_human.content
