@@ -141,8 +141,14 @@ def provider_chat_model(
 
     if provider in _BASE_URL:
         kwargs["base_url"] = _BASE_URL[provider]
+    if "reasoning_effort" in ms:
+        # Reasoning models spend thousands of output tokens on trivial steps; OpenAI, xAI and OpenRouter all
+        # accept the OpenAI-style knob (OpenRouter maps it to each upstream's own setting).
+        kwargs["reasoning_effort"] = ms["reasoning_effort"]
     if provider == "openrouter":
         kwargs["default_headers"] = {"HTTP-Referer": "https://github.com/regnull/openbot", "X-Title": "OpenBot"}
+        if settings.openrouter_provider_order:
+            kwargs["extra_body"] = {"provider": {"order": list(settings.openrouter_provider_order), "allow_fallbacks": False}}
     return ChatOpenAI(model=model, api_key=key, **kwargs)
 
 

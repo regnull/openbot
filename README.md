@@ -249,6 +249,7 @@ that bot.
 | `OLLAMA_MODEL` | `llama3.1` | Default model suggested for new `ollama` bots, and the seed model when Ollama is the only configured provider. |
 | `BOT_MODEL` | `openai/gpt-4o-mini` | OpenRouter model used for bot LLM calls for seeded bots and any bot whose provider is `openrouter`. Set this in `.env` to switch the whole bot team to a different OpenRouter model; `BOT_MODEL` takes precedence over `OPENROUTER_MODEL`. |
 | `OPENROUTER_MODEL` | *(unset)* | Backward-compatible alias for `BOT_MODEL`. |
+| `OPENROUTER_PROVIDER_ORDER` | *(unset)* | CSV of OpenRouter upstream provider slugs (e.g. `z-ai`) to pin, with fallbacks disabled. A model can be served by dozens of upstreams, each with its own prompt cache; a request routed elsewhere is a full cache miss. |
 | `EMBEDDING_MODEL` | `openai:text-embedding-3-small` | Used for semantic memory search; without a matching key, memory search degrades to non-semantic. |
 | `EMBEDDING_DIMS` | `1536` | Must match the embedding model's output size. |
 | `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing. |
@@ -267,7 +268,7 @@ that bot.
 | `CONTEXT_CLEAR_AT_LEAST` | `6000` | Each clearing reclaims at least this many tokens, so clearings are rare and the provider's prompt cache stays warm between them. |
 | `SUMMARY_TRIGGER_TOKENS` | `18000` | Once a run's context exceeds this, older history is folded into one structured summary message (decisions, artifacts, next steps) by the bot's own model. |
 | `SUMMARY_KEEP_MESSAGES` | `12` | How many recent messages summarization keeps verbatim. |
-| `MAX_MODEL_CALLS_PER_RUN` | `40` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). |
+| `MAX_MODEL_CALLS_PER_RUN` | `40` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). `model_settings` also accepts `reasoning_effort` (e.g. `"low"`) for reasoning models on OpenAI-compatible providers, and `temperature` / `max_tokens`. |
 | `HISTORY_TOKEN_BUDGET` | `24000` | Approximate token budget (chars / 4) for conversation history included in a run. |
 | `HISTORY_MAX_MESSAGES` | `80` | Hard cap on the number of history messages included in a run. |
 | `MEMORY_REFLECTION_DELAY` | `30` | Seconds to debounce background memory reflection after a run completes. |

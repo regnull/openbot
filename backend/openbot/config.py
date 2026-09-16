@@ -22,6 +22,9 @@ class Settings(BaseSettings):
 
     bot_model: str | None = None
     openrouter_model: str | None = None
+    # Pin OpenRouter to these upstream providers (CSV, e.g. `z-ai,fireworks`) with fallbacks off. A model can be
+    # served by dozens of upstreams, each with its own prompt cache; a request that lands elsewhere is a full miss.
+    openrouter_provider_order: Annotated[list[str], NoDecode] = []
 
     embedding_model: str = "openai:text-embedding-3-small"
     embedding_dims: int = 1536
@@ -58,7 +61,7 @@ class Settings(BaseSettings):
     log_file: Path = Path("logs/openbot.log")
     webhook_retry_delays: Annotated[list[float], NoDecode] = [5.0, 30.0, 120.0]
 
-    @field_validator("cors_origins", "webhook_retry_delays", mode="before")
+    @field_validator("cors_origins", "webhook_retry_delays", "openrouter_provider_order", mode="before")
     @classmethod
     def _split_csv(cls, v):
         if isinstance(v, str):
