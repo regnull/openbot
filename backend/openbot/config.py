@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     openrouter_api_key: str | None = None
     xai_api_key: str | None = None
+    # Local Ollama server, e.g. http://localhost:11434. No API key; setting this enables the provider.
+    ollama_base_url: str | None = None
+    ollama_model: str = "llama3.1"
 
     bot_model: str | None = None
     openrouter_model: str | None = None
@@ -52,11 +55,18 @@ class Settings(BaseSettings):
             return [p.strip() for p in v.split(",") if p.strip()]
         return v
 
-    @field_validator("bot_model", "openrouter_model", mode="before")
+    @field_validator("bot_model", "openrouter_model", "ollama_base_url", mode="before")
     @classmethod
     def _empty_model_env_means_default(cls, v):
         if v == "":
             return None
+        return v
+
+    @field_validator("ollama_model", mode="before")
+    @classmethod
+    def _empty_ollama_model_means_default(cls, v):
+        if v == "":
+            return cls.model_fields["ollama_model"].default
         return v
 
     @field_validator("log_level", mode="before")

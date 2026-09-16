@@ -64,7 +64,7 @@ def test_status_and_default():
 
 async def test_providers_endpoint(client):
     r = await client.get("/api/v1/providers")
-    assert r.status_code == 200 and {p["id"] for p in r.json()["providers"]} == {"openai", "anthropic", "openrouter", "xai"}
+    assert r.status_code == 200 and {p["id"] for p in r.json()["providers"]} == {"openai", "anthropic", "openrouter", "xai", "ollama"}
 
 
 def test_configured_bot_model_default_and_env_override(monkeypatch):

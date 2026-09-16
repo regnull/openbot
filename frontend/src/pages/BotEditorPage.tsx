@@ -65,7 +65,7 @@ export default function BotEditorPage() {
         <div className="sm:col-span-2"><Field label="Instructions"><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field></div>
         <Field label="Provider">
           <Select value={form.provider} onChange={(e) => { const p = providers.data?.providers.find((x) => x.id === e.target.value); set("provider", e.target.value); if (p) set("model", p.default_model); }}>
-            {providers.data?.providers.map((p) => <option key={p.id} value={p.id}>{p.id}{p.configured ? "" : " (no key)"}</option>)}
+            {providers.data?.providers.map((p) => <option key={p.id} value={p.id}>{p.id}{p.configured ? "" : " (not configured)"}</option>)}
           </Select>
         </Field>
         <Field label="Model" hint="Pick from the list or type any model id">
