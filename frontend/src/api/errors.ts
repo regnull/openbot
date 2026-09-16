@@ -4,13 +4,36 @@ export class ApiError extends Error {
 }
 
 /**
- * True when a response status means "backend not ready to serve this request":
- * 404 (route missing after a restart / stale proxy) or any 5xx (crashed or
- * starting up). Auth failures (401), rate limits (429) and client mistakes
- * (400-499 generally) are deliberately excluded — those need different UI.
+ * Bodies that mean "no such route / proxy can't reach the backend" rather than
+ * "the app looked for a resource and didn't find it": FastAPI's default
+ * {"detail":"Not Found"} (what a freshly restarted backend answers for any
+ * unknown path), an empty body (some proxies), or a proxy/gateway error page.
  */
-export function isUnavailableStatus(status: number): boolean {
-  return status === 404 || (status >= 500 && status <= 599);
+const routeMissing404 = new Set([
+  "not found",
+  '{"detail":"not found"}',
+]);
+
+function isRouteMissingBody(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (normalized === "") return true; // empty body: proxies often drop it
+  if (routeMissing404.has(normalized)) return true;
+  // Proxy error pages: "502 Bad Gateway", "503 Service Temporarily Unavailable", nginx default html, ...
+  return /\b(bad gateway|service (?:temporarily )?unavailable|gateway time-?out|proxy|nginx|varnish|cloudflare)\b/.test(normalized);
+}
+
+/**
+ * True when a response status means "backend not ready to serve this request":
+ * any 5xx (crashed or starting up), or a 404 whose body says the route itself
+ * is missing (`{"detail":"Not Found"}` after a restart / stale proxy) rather
+ * than an application-level 404 ({"detail":"thread not found"} etc.), which
+ * must render as a normal error. Auth failures (401), rate limits (429) and
+ * client mistakes (400-499 generally) are deliberately excluded.
+ */
+export function isUnavailableStatus(status: number, message: string): boolean {
+  if (status >= 500 && status <= 599) return true;
+  if (status === 404) return isRouteMissingBody(message);
+  return false;
 }
 
 /**
@@ -20,7 +43,7 @@ export function isUnavailableStatus(status: number): boolean {
  * failures as a TypeError instead of a response.
  */
 export function isBackendUnavailable(error: unknown): boolean {
-  if (error instanceof ApiError) return isUnavailableStatus(error.status);
+  if (error instanceof ApiError) return isUnavailableStatus(error.status, error.message);
   // Network-level failures: fetch rejects with TypeError ("Failed to fetch", "load failed").
   return error instanceof TypeError;
 }
