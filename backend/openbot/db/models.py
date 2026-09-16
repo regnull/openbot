@@ -145,7 +145,7 @@ class InboxItem(Base):
     __table_args__ = (Index("ix_inbox_actor_status_created", "actor_id", "status", "created_at"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), nullable=False)
-    thread_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    thread_id: Mapped[str] = mapped_column(String(36), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

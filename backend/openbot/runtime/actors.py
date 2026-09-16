@@ -84,8 +84,14 @@ class BotActor(_Worker):
         self.current_task: asyncio.Task | None = None
 
     async def _drain(self) -> None:
-        while (batch := await self._pick()) is not None:
+        # Take the concurrency slot before picking: _pick creates the Run row and flips the items to
+        # "processing", so picking first and then waiting on the semaphore left a phantom "queued"
+        # run (blocking bot deletion, drawing an active card) for as long as the wait lasted.
+        while True:
             async with self.system.sem:
+                batch = await self._pick()
+                if batch is None:
+                    return
                 await self._process(batch)
 
     async def _pick(self) -> Batch | None:
@@ -228,8 +234,10 @@ class ActorSystem:
             # card). No worker exists yet at this point in start(), so every queued run is provably
             # stale and gets the same treatment as an interrupted running one.
             stale = select(Run).where(Run.status.in_(["running", "queued"]))
+            failed_ids: list[str] = []
             for run in (await session.execute(stale)).scalars():
                 run.status, run.error, run.finished_at = "failed", "server restarted", utcnow()
+                failed_ids.append(run.id)
                 bot = await session.get(Actor, run.actor_id)
                 interrupted.append((run.thread_id, bot.handle if bot else "bot"))
                 for it in (await session.execute(select(InboxItem).where(InboxItem.run_id == run.id, InboxItem.status == "processing"))).scalars():
@@ -238,6 +246,8 @@ class ActorSystem:
                 it.status = "queued"
             await session.commit()
             pending = (await session.execute(select(InboxItem.actor_id).where(InboxItem.status == "queued").distinct())).scalars().all()
+        for run_id in failed_ids:
+            await self._drop_checkpoint(run_id)
         # A failed run draws no card in the thread, so without this a run killed by a restart leaves
         # the reader staring at their own unanswered message. The runner says so for every other
         # failure; say it here too.
@@ -292,8 +302,17 @@ class ActorSystem:
             await session.commit()
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             await self.s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": False})
+        await self._drop_checkpoint(run_id)
         await self.notify(run.actor_id)     # parked thread may now have waiting mail
         return True
+
+    async def _drop_checkpoint(self, run_id: str) -> None:
+        """A run that ends outside the runner (cancelled while waiting, or failed by a restart) still
+        owns a checkpoint nobody will read again."""
+        try:
+            await self.s.checkpointer.adelete_thread(run_id)
+        except Exception:
+            log.exception("could not delete the checkpoint for run %s", run_id)
 
     async def enqueue_resume(self, run: Run, value, from_actor: Actor | None) -> InboxItem:
         async with self.s.session_factory() as session:

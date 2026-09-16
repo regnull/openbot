@@ -16,6 +16,22 @@ from openbot.db.models import Actor, Message
 
 log = logging.getLogger(__name__)
 
+# Memory is bot-scoped and shared across every thread the bot works in, so it may only hold what the
+# bot learned about doing its job. Facts that are true inside one thread already reach the bot
+# through the thread itself when the next run unrolls it.
+MEMORY_SCOPE_RULE = (
+    "Memory is your own long-term knowledge and is shared across every thread you work in. Store only "
+    "durable, bot-level knowledge: how to do your job, team conventions and process (for example "
+    "'always wait for CI before merging'), the human's standing preferences, and lessons learned. "
+    "Never store facts that are only true inside one thread or task: task status, PR or issue numbers, "
+    "file names, branch names, or decisions made for a single conversation. Those live in the thread."
+)
+REFLECTION_INSTRUCTIONS = (
+    "Review the conversation and extract memories worth keeping for future conversations. "
+    + MEMORY_SCOPE_RULE
+    + " If the conversation contains nothing durable and bot-level, extract nothing."
+)
+
 
 def bot_namespace(bot_id: str) -> tuple[str, ...]:
     return ("bots", bot_id, "memories")
@@ -81,8 +97,7 @@ def memory_tools(bot_id: str, store: BaseStore) -> list[BaseTool]:
     ns = bot_namespace(bot_id)
     return [
         create_manage_memory_tool(ns, store=store, schema=str,
-            instructions="Save durable facts, preferences, decisions and lessons you will need in "
-                         "future conversations. Update or delete memories that became wrong."),
+            instructions=MEMORY_SCOPE_RULE + " Update or delete memories that became wrong."),
         create_search_memory_tool(ns, store=store),
     ]
 
@@ -116,47 +131,54 @@ async def recall(store: BaseStore, thread_id: str, query: str, limit: int = 10) 
 
 
 class MemoryReflector:
-    """Debounced background extraction of long-term memories after runs."""
+    """Debounced background extraction of long-term memories after runs.
+
+    Batches are keyed by (bot, thread): a bot interleaves threads, and one extraction pass over two
+    threads' transcripts cannot tell a durable pattern from a coincidence. Runs in the same thread
+    that finish within `delay` of each other still reflect once.
+    """
 
     def __init__(self, services, delay: float) -> None:
         self.services = services
         self.delay = delay
-        self._pending: dict[str, tuple[Actor, list[BaseMessage]]] = {}
-        self._timers: dict[str, asyncio.Task] = {}
+        self._pending: dict[tuple[str, str], tuple[Actor, list[BaseMessage]]] = {}
+        self._timers: dict[tuple[str, str], asyncio.Task] = {}
 
     def make_manager(self, bot: Actor):
         model = self.services.model_factory(bot)
         return create_memory_store_manager(model, namespace=bot_namespace(bot.id),
                                            store=ReflectionMemoryStore(self.services.store),
+                                           instructions=REFLECTION_INSTRUCTIONS,
                                            enable_inserts=True, enable_deletes=False)
 
-    def schedule(self, bot: Actor, messages: list[BaseMessage]) -> None:
-        _, existing = self._pending.get(bot.id, (bot, []))
-        self._pending[bot.id] = (bot, [*existing, *messages])
-        if t := self._timers.pop(bot.id, None):
+    def schedule(self, bot: Actor, messages: list[BaseMessage], *, thread_id: str) -> None:
+        key = (bot.id, thread_id)
+        _, existing = self._pending.get(key, (bot, []))
+        self._pending[key] = (bot, [*existing, *messages])
+        if t := self._timers.pop(key, None):
             t.cancel()
-        self._timers[bot.id] = asyncio.create_task(self._later(bot.id))
+        self._timers[key] = asyncio.create_task(self._later(key))
 
-    async def _later(self, bot_id: str) -> None:
+    async def _later(self, key: tuple[str, str]) -> None:
         await asyncio.sleep(self.delay)
-        await self._reflect(bot_id)
+        await self._reflect(key)
 
-    async def _reflect(self, bot_id: str) -> None:
-        self._timers.pop(bot_id, None)
-        item = self._pending.pop(bot_id, None)
+    async def _reflect(self, key: tuple[str, str]) -> None:
+        self._timers.pop(key, None)
+        item = self._pending.pop(key, None)
         if not item:
             return
         bot, messages = item
         try:
             await self.make_manager(bot).ainvoke({"messages": messages})
         except Exception:
-            log.exception("memory reflection failed for bot %s", bot.handle)
+            log.exception("memory reflection failed for bot %s in thread %s", bot.handle, key[1])
 
     async def flush(self) -> None:
-        for bot_id in list(self._pending):
-            if t := self._timers.pop(bot_id, None):
+        for key in list(self._pending):
+            if t := self._timers.pop(key, None):
                 t.cancel()
-            await self._reflect(bot_id)
+            await self._reflect(key)
 
     async def shutdown(self) -> None:
         for t in self._timers.values():

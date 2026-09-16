@@ -53,3 +53,24 @@ def test_system_prompt_contents():
     # The chief of staff used start_thread to delegate, which split the conversation into a new thread
     # nobody was watching. Hand-offs must stay in the current thread; start_thread is not for delegation.
     assert "Never use start_thread to delegate or hand off work from this thread" in p
+
+
+def test_history_marks_the_messages_that_triggered_this_run():
+    """Several bots may post between two of this bot's runs, and several trigger messages may be
+    coalesced into one run. The model must not have to guess which messages it is answering."""
+    ms = [msg(1, "human", "You", "hi"), msg(2, "bot", "Eng", "done", "eng"), msg(3, "bot", "Rev", "LGTM", "rev"),
+          msg(4, "human", "You", "@eng ship it"), msg(5, "bot", "Rev", "@eng also bump version", "rev")]
+    hist, _ = build_history(ms, "eng", token_budget=10_000, max_messages=80, trigger_ids={"m4", "m5"})
+    assert hist[-1].content == "[Rev]: LGTM\n\n[You] (new): @eng ship it\n\n[Rev] (new): @eng also bump version"
+    assert hist[0].content == "[You]: hi"
+    # Without trigger ids nothing is marked (the resume path has no trigger messages).
+    hist, _ = build_history(ms, "eng", token_budget=10_000, max_messages=80)
+    assert "(new)" not in hist[-1].content
+
+
+def test_system_prompt_explains_the_new_marker():
+    bot = bot_actor("eng", name="Engineer", description="Builds", instructions="Be terse.")
+    bot.id = "e"
+    p = build_system_prompt(bot=bot, all_bots=[bot], participants=["You"], memories=[], workspace_root="/w",
+                            older_count=0, tool_names=[])
+    assert "(new)" in p

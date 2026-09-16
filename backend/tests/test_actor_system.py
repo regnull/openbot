@@ -85,7 +85,7 @@ async def test_batching_and_parking(settings):
     # The batched human turn, not seen[-1][-1]: history is chronological, and the resumed run's own
     # "after" reply is posted after "two"/"three" (which waited while the thread was parked).
     last_prompt = next(m.content for m in ScriptedChatModel.seen[-1] if m.type == "human")
-    assert "[You]: two" in last_prompt and "[You]: three" in last_prompt
+    assert "[You] (new): two" in last_prompt and "[You] (new): three" in last_prompt   # both coalesced triggers are marked
     await services.actors.stop()
 
 
@@ -231,4 +231,76 @@ async def test_drain_survives_item_bookkeeping_failure(settings):
     # batch 1's bookkeeping blew up, but the drain kept going and still picked up batch 2
     assert [r.thread_id for r in rs] == [t1.id, t2.id]
     assert [r.status for r in rs] == ["completed", "completed"]
+    await services.actors.stop()
+
+
+async def test_run_is_created_only_when_a_slot_is_free(settings):
+    """Under load a bot used to create its run (and flip its items to processing) and then sit on
+    the semaphore, leaving a phantom queued run that blocked bot deletion and drew an active card.
+    Now the slot comes first: a waiting bot has no run row and its items stay queued."""
+    from langchain_core.messages import AIMessage
+
+    class Slow:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            import time
+            time.sleep(0.6)
+            return AIMessage(content="late")
+
+    settings.max_concurrent_runs = 1
+    services, t = await setup(settings, {}, handles=("eng", "rev"))
+    services.model_factory = lambda actor: ScriptedChatModel(messages=Slow())
+    await post(services, t, "@eng @rev go")
+
+    async def one_running():
+        rs = await runs(services)
+        return rs if any(r.status == "running" for r in rs) else None
+
+    rs = await until(one_running, timeout=2.0)
+    assert [r.status for r in rs] == ["running"]          # exactly one run row exists, and it is live
+    async with services.session_factory() as s:
+        waiting = (await s.execute(select(InboxItem).where(InboxItem.status == "queued", InboxItem.kind == "message"))).scalars().all()
+        bots = {a.id: a.handle for a in (await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars()}
+    assert len(waiting) == 1 and bots[waiting[0].actor_id] != bots[rs[0].actor_id]
+    await services.actors.wait_idle()
+    assert sorted(r.status for r in await runs(services)) == ["completed", "completed"]
+    await services.actors.stop()
+
+
+async def _checkpoint(services, run_id):
+    return await services.checkpointer.aget_tuple({"configurable": {"thread_id": run_id}})
+
+
+async def test_cancelling_a_waiting_run_drops_its_checkpoint(settings):
+    services, t = await setup(settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")])]})
+    await post(services, t, "go")
+    await services.actors.wait_idle()
+    run = (await runs(services))[0]
+    assert run.status == "waiting_human" and await _checkpoint(services, run.id) is not None
+    assert await services.actors.cancel_run(run.id) is True
+    assert (await runs(services))[0].status == "cancelled"
+    assert await _checkpoint(services, run.id) is None
+    await services.actors.stop()
+
+
+async def test_restart_recovery_drops_checkpoints_of_failed_runs(settings):
+    services, t = await setup(settings, {})
+    async with services.session_factory() as s:
+        eng = (await s.execute(select(Actor).where(Actor.handle == "eng"))).scalar_one()
+        run = Run(actor_id=eng.id, thread_id=t.id, status="running")
+        s.add(run)
+        await s.commit()
+        run_id = run.id
+    await services.checkpointer.aput({"configurable": {"thread_id": run_id, "checkpoint_ns": ""}},
+                                     {"v": 1, "id": "c1", "ts": "", "channel_values": {}, "channel_versions": {}, "versions_seen": {}},
+                                     {}, {})
+    assert await _checkpoint(services, run_id) is not None
+    await services.actors.stop()
+    services.actors._started = False
+    await services.actors.start()
+    async with services.session_factory() as s:
+        assert (await s.get(Run, run_id)).status == "failed"
+    assert await _checkpoint(services, run_id) is None
     await services.actors.stop()
