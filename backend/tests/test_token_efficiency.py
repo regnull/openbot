@@ -6,11 +6,12 @@ import logging
 from pathlib import Path
 
 from langchain.tools import ToolRuntime
+from langchain_core.messages import AIMessage
 from sqlalchemy import inspect, select
 
 from openbot.db.models import Actor, Run
 from openbot.db.session import make_engine, run_migrations
-from openbot.runtime.runner import CLEARED_TOOL_RESULT
+from openbot.runtime.runner import CLEARED_TOOL_RESULT, Runner
 from openbot.seed import DEMO_BOTS, seed_demo_bots
 from openbot.tools.builtin.files import read_file
 from openbot.tools.builtin.shell import run_shell
@@ -267,3 +268,56 @@ async def test_ask_human_and_memory_results_are_never_cleared(settings):
     final_prompt = ScriptedChatModel.seen[-1]
     mem = next(m for m in final_prompt if m.type == "tool" and m.name == "manage_memory")
     assert mem.content != CLEARED_TOOL_RESULT
+
+
+# --- summarization: the second tier -------------------------------------------------------------------
+
+class SummarizingScriptedModel(ScriptedChatModel):
+    """Answers the summarization middleware's request with a fixed summary; everything else follows the script."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if any("Messages to summarize" in str(m.content) for m in messages):
+            ScriptedChatModel.seen.append(list(messages))
+            from langchain_core.outputs import ChatGeneration, ChatResult
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="SUMMARY: ran steps 0-3; nothing left but to finish"))])
+        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+
+def test_middleware_order_is_limit_then_summarize_then_clear(settings):
+    """LangChain's guidance: context editing after summarization, so clearing respects what was summarized."""
+    from langchain.agents.middleware import (
+        ContextEditingMiddleware,
+        ModelCallLimitMiddleware,
+        SummarizationMiddleware,
+    )
+
+    from tests.factories import bot_actor
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    runner = Runner(services)
+    mw = runner.build_middleware(bot_actor("eng"), ScriptedChatModel(messages=iter([])))
+    kinds = [type(m) for m in mw]
+    assert kinds.index(ModelCallLimitMiddleware) < kinds.index(SummarizationMiddleware) < kinds.index(ContextEditingMiddleware)
+
+
+def test_summarization_defaults_sit_above_the_clearing_trigger():
+    from openbot.config import Settings
+    s = Settings(_env_file=None)
+    assert s.context_trigger_tokens < s.summary_trigger_tokens <= 20000
+    assert 6 <= s.summary_keep_messages <= 20
+
+
+async def test_long_runs_get_their_history_summarized(settings):
+    settings.summary_trigger_tokens = 300
+    settings.summary_keep_messages = 4
+    settings.context_trigger_tokens = 10_000       # keep clearing out of this test
+    ScriptedChatModel.seen.clear()
+    script = [ai(tool_calls=[call("run_shell", cid=f"c{i}", command=f"python3 -c \"print('step{i} ' + 'y'*400)\"")]) for i in range(6)] + [ai("done")]
+    services, _eng, t, run = await make(settings, {"eng": []}, tool_names=["run_shell"])
+    services.model_factory = lambda actor: SummarizingScriptedModel(messages=iter(script))
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "completed"
+    assert (await messages(services, t.id))[-1].content == "done"
+    final_prompt = ScriptedChatModel.seen[-1]
+    assert any("SUMMARY: ran steps" in str(m.content) for m in final_prompt), "summary should replace the old history"
+    assert not any("step0 " in str(m.content) for m in final_prompt if m.type == "tool"), "the summarized tool output is gone"
+    assert len(final_prompt) < 12

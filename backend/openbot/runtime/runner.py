@@ -13,6 +13,7 @@ from langchain.agents.middleware import (
     ContextEditingMiddleware,
     HumanInTheLoopMiddleware,
     ModelCallLimitMiddleware,
+    SummarizationMiddleware,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langchain_core.tracers.context import collect_runs
@@ -182,21 +183,26 @@ class Runner:
         except (TypeError, ValueError):
             return int(self.s.settings.max_model_calls_per_run)
 
-    def _build_agent(self, bot: Actor, system_prompt: str):
-        p = bot.bot
+    def build_middleware(self, bot: Actor, model) -> list:
+        """The run's context controls, in the order LangChain expects them to compose.
+
+        Two tiers keep a long run's context from growing without bound. Summarization folds older
+        history into one structured message once the context passes `summary_trigger_tokens`, keeping
+        the last `summary_keep_messages` verbatim; it preserves decisions and file lists that plain
+        clearing would lose. Context editing then clears old tool results and their call arguments
+        (e.g. the full content passed to write_file) once the context passes `context_trigger_tokens`,
+        reclaiming at least `context_clear_at_least` per clearing. Each edit to earlier context costs a
+        prompt-cache miss from that point, so both fire rarely and in large steps rather than a little
+        on every turn. Editing runs after summarization so it respects what was already summarized.
+        """
         st = self.s.settings
-        tools = [*self.s.registry.resolve(list(p.tool_names)), *CORE_TOOLS, *memory.memory_tools(bot.id, self.s.store)]
-        model = self.s.model_factory(bot)
+        p = bot.bot
         middleware = [
             *caching_middleware(model, st),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
-            # Once the transcript passes the trigger, old tool results (and the arguments of the calls that
-            # produced them, e.g. the full content passed to write_file) are replaced by a placeholder so the
-            # context, and the bill for re-sending it, stops growing with every tool call. Each clearing
-            # reclaims a big chunk at once: every edit to earlier context invalidates the provider's prompt
-            # cache from that point, so rare large clearings beat frequent small ones. Questions to the human
-            # and memory writes are the run's own decisions and stay.
+            SummarizationMiddleware(model, trigger=("tokens", st.summary_trigger_tokens),
+                                    keep=("messages", st.summary_keep_messages)),
             ContextEditingMiddleware(edits=[ClearToolUsesEdit(trigger=st.context_trigger_tokens, keep=3,
                                                               clear_at_least=st.context_clear_at_least,
                                                               clear_tool_inputs=True,
@@ -207,7 +213,13 @@ class Runner:
             middleware.append(HumanInTheLoopMiddleware(
                 interrupt_on={t: {"allowed_decisions": ["approve", "reject"]} for t in p.approval_tools},
                 description_prefix="Tool execution requires approval"))
-        return create_agent(model, tools=tools, system_prompt=system_prompt, middleware=middleware,
+        return middleware
+
+    def _build_agent(self, bot: Actor, system_prompt: str):
+        p = bot.bot
+        tools = [*self.s.registry.resolve(list(p.tool_names)), *CORE_TOOLS, *memory.memory_tools(bot.id, self.s.store)]
+        model = self.s.model_factory(bot)
+        return create_agent(model, tools=tools, system_prompt=system_prompt, middleware=self.build_middleware(bot, model),
                             checkpointer=self.s.checkpointer, store=self.s.store, context_schema=RunContext)
 
     async def _stream(self, agent, inputs, config, ctx: RunContext, run: Run, seq: int) -> tuple[str, dict | None, int, dict[str, int]]:

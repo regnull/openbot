@@ -264,6 +264,8 @@ that bot.
 | `TOOL_OUTPUT_CAP` | `8000` | Maximum characters of any single tool result the model sees; longer output keeps its head and tail with a note on how to get the rest (`read_file` takes `start_line`/`end_line`). Everything a tool returns is re-sent on every later turn, so this bounds the quadratic part of a run's cost. |
 | `CONTEXT_TRIGGER_TOKENS` | `12000` | Once a run's context exceeds this, tool results older than the three most recent, and the arguments of the calls that produced them, are replaced with a placeholder in the model's view. The run's event log keeps the real output. |
 | `CONTEXT_CLEAR_AT_LEAST` | `6000` | Each clearing reclaims at least this many tokens, so clearings are rare and the provider's prompt cache stays warm between them. |
+| `SUMMARY_TRIGGER_TOKENS` | `18000` | Once a run's context exceeds this, older history is folded into one structured summary message (decisions, artifacts, next steps) by the bot's own model. |
+| `SUMMARY_KEEP_MESSAGES` | `12` | How many recent messages summarization keeps verbatim. |
 | `MAX_MODEL_CALLS_PER_RUN` | `40` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). |
 | `HISTORY_TOKEN_BUDGET` | `24000` | Approximate token budget (chars / 4) for conversation history included in a run. |
 | `HISTORY_MAX_MESSAGES` | `80` | Hard cap on the number of history messages included in a run. |
