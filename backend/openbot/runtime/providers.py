@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+
+import httpx
 from langchain.embeddings import init_embeddings
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
@@ -7,9 +10,12 @@ from langchain_core.language_models import BaseChatModel
 from openbot.config import Settings
 from openbot.db.models import BotProfile
 
+log = logging.getLogger(__name__)
+
 AUTO_PROVIDER = "auto"
 DEFAULT_BOT_PROVIDER = "openrouter"
 DEFAULT_BOT_MODEL = "openai/gpt-4o-mini"
+OLLAMA = "ollama"
 
 PROVIDER_MODELS: dict[str, list[str]] = {
     "openai": ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5-mini"],
@@ -22,9 +28,11 @@ PROVIDER_MODELS: dict[str, list[str]] = {
         "openai/gpt-oss-120b",
     ],
     "xai": ["grok-4.6", "grok-4.5"],
+    # Fallback suggestions only; when the Ollama server is reachable the installed models replace these.
+    OLLAMA: ["llama3.1", "qwen3", "gpt-oss:20b", "gemma3", "deepseek-r1"],
 }
 DEFAULT_MODEL = {p: models[0] for p, models in PROVIDER_MODELS.items()}
-PROVIDER_ORDER = ["openai", "anthropic", "openrouter", "xai"]
+PROVIDER_ORDER = ["openai", "anthropic", "openrouter", "xai", OLLAMA]
 # Order in which providers are listed for the UI/API; "auto" is always first since it is the default.
 STATUS_PROVIDER_ORDER = [AUTO_PROVIDER, *PROVIDER_ORDER]
 _KEY_ENV = {
@@ -32,12 +40,21 @@ _KEY_ENV = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
     "xai": "XAI_API_KEY",
+    OLLAMA: "OLLAMA_BASE_URL",
 }
 _BASE_URL = {"openrouter": "https://openrouter.ai/api/v1", "xai": "https://api.x.ai/v1"}
+OLLAMA_TAGS_TIMEOUT = 2.0
 
 
 def api_key_for(settings: Settings, provider: str) -> str | None:
     return getattr(settings, f"{provider}_api_key", None)
+
+
+def provider_configured(settings: Settings, provider: str) -> bool:
+    """Ollama is a local server with no API key: it is configured when OLLAMA_BASE_URL is set."""
+    if provider == OLLAMA:
+        return bool(settings.ollama_base_url)
+    return bool(api_key_for(settings, provider))
 
 
 def configured_bot_model(settings: Settings) -> str:
@@ -51,16 +68,21 @@ def effective_bot_profile(bot: BotProfile, settings: Settings) -> tuple[str, str
     configured (see `default_provider`), so it keeps working as keys are added, removed, or changed
     without ever needing to be edited.
 
-    For bots with an explicit provider, a configured OpenRouter key makes OpenRouter the runtime
-    provider for every bot, so the team can be moved to another OpenRouter model from `.env` without
-    editing persisted bot rows one by one. Installations without OpenRouter configured keep using
-    each bot's stored provider/model, even if BOT_MODEL/OPENROUTER_MODEL is set.
+    For bots with an explicit cloud provider, a configured OpenRouter key makes OpenRouter the
+    runtime provider for every bot, so the team can be moved to another OpenRouter model from `.env`
+    without editing persisted bot rows one by one. Installations without OpenRouter configured keep
+    using each bot's stored provider/model, even if BOT_MODEL/OPENROUTER_MODEL is set.
+
+    A bot on a local Ollama model is an explicit choice to keep that bot off the cloud, so it is
+    never rerouted through OpenRouter.
     """
     if bot.provider == AUTO_PROVIDER:
         dp = default_provider(settings)
         if dp is None:
             raise ValueError("no provider is configured: set an API key for at least one provider")
         return dp
+    if bot.provider == OLLAMA:
+        return bot.provider, bot.model
     if api_key_for(settings, DEFAULT_BOT_PROVIDER):
         return DEFAULT_BOT_PROVIDER, configured_bot_model(settings)
     return bot.provider, bot.model
@@ -73,8 +95,7 @@ def provider_chat_model(
     model_settings: dict | None = None,
 ) -> BaseChatModel:
     """Build a chat model for an explicit provider/model without bot-level env overrides."""
-    key = api_key_for(settings, provider)
-    if not key:
+    if not provider_configured(settings, provider):
         raise ValueError(f"provider {provider} is not configured: set {_KEY_ENV[provider]}")
     ms = dict(model_settings or {})
     kwargs: dict = {}
@@ -83,6 +104,14 @@ def provider_chat_model(
     if "max_tokens" in ms:
         kwargs["max_tokens"] = ms["max_tokens"]
 
+    if provider == OLLAMA:
+        from langchain_ollama import ChatOllama
+
+        if "max_tokens" in kwargs:
+            kwargs["num_predict"] = kwargs.pop("max_tokens")
+        return ChatOllama(model=model, base_url=settings.ollama_base_url, **kwargs)
+
+    key = api_key_for(settings, provider)
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
@@ -104,14 +133,40 @@ def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
 
 
 def embeddings(settings: Settings) -> Embeddings | None:
-    provider = settings.embedding_model.split(":", 1)[0]
-    key = api_key_for(settings, provider)
-    if not key:
+    provider, _, model = settings.embedding_model.partition(":")
+    if not provider_configured(settings, provider):
         return None
-    return init_embeddings(settings.embedding_model, api_key=key)
+    if provider == OLLAMA:
+        from langchain_ollama import OllamaEmbeddings
+
+        return OllamaEmbeddings(model=model, base_url=settings.ollama_base_url)
+    return init_embeddings(settings.embedding_model, api_key=api_key_for(settings, provider))
 
 
-def provider_models(settings: Settings, provider: str) -> list[str]:
+async def list_ollama_models(settings: Settings, client: httpx.AsyncClient | None) -> list[str] | None:
+    """Names of the models installed on the configured Ollama server (GET /api/tags), sorted.
+
+    Returns None when Ollama is not configured, no HTTP client is available, or the server cannot be
+    reached in time, so callers can fall back to the static suggestions rather than fail the request."""
+    if not settings.ollama_base_url or client is None:
+        return None
+    url = settings.ollama_base_url.rstrip("/") + "/api/tags"
+    try:
+        r = await client.get(url, timeout=OLLAMA_TAGS_TIMEOUT)
+        r.raise_for_status()
+        names = [m["name"] for m in r.json().get("models", []) if isinstance(m, dict) and m.get("name")]
+    except Exception as e:  # noqa: BLE001 - any failure here must degrade to the static list
+        log.warning("could not list Ollama models from %s: %s", url, e)
+        return None
+    return sorted(names)
+
+
+def provider_models(settings: Settings, provider: str, ollama_models: list[str] | None = None) -> list[str]:
+    if provider == OLLAMA:
+        if ollama_models:
+            return list(ollama_models)
+        models = PROVIDER_MODELS[OLLAMA]
+        return models if settings.ollama_model in models else [settings.ollama_model, *models]
     models = PROVIDER_MODELS[provider]
     if provider != DEFAULT_BOT_PROVIDER:
         return models
@@ -121,7 +176,18 @@ def provider_models(settings: Settings, provider: str) -> list[str]:
     return [model, *models]
 
 
-def provider_status(settings: Settings) -> list[dict]:
+def provider_default_model(settings: Settings, provider: str, ollama_models: list[str] | None = None) -> str:
+    if provider == DEFAULT_BOT_PROVIDER:
+        return configured_bot_model(settings)
+    if provider == OLLAMA:
+        # Prefer a model the server actually has (bare name or name:tag) over an uninstalled default.
+        if ollama_models and not any(m == settings.ollama_model or m.split(":", 1)[0] == settings.ollama_model for m in ollama_models):
+            return ollama_models[0]
+        return settings.ollama_model
+    return DEFAULT_MODEL[provider]
+
+
+def provider_status(settings: Settings, ollama_models: list[str] | None = None) -> list[dict]:
     dp = default_provider(settings)
     auto = {
         "id": AUTO_PROVIDER,
@@ -132,9 +198,9 @@ def provider_status(settings: Settings) -> list[dict]:
     rest = [
         {
             "id": p,
-            "configured": bool(api_key_for(settings, p)),
-            "models": provider_models(settings, p),
-            "default_model": configured_bot_model(settings) if p == DEFAULT_BOT_PROVIDER else DEFAULT_MODEL[p],
+            "configured": provider_configured(settings, p),
+            "models": provider_models(settings, p, ollama_models),
+            "default_model": provider_default_model(settings, p, ollama_models),
         }
         for p in PROVIDER_ORDER
     ]
@@ -145,6 +211,6 @@ def default_provider(settings: Settings) -> tuple[str, str] | None:
     if api_key_for(settings, DEFAULT_BOT_PROVIDER):
         return DEFAULT_BOT_PROVIDER, configured_bot_model(settings)
     for p in PROVIDER_ORDER:
-        if api_key_for(settings, p):
-            return p, DEFAULT_MODEL[p]
+        if provider_configured(settings, p):
+            return p, provider_default_model(settings, p)
     return None

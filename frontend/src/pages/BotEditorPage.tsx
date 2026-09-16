@@ -67,7 +67,7 @@ export default function BotEditorPage() {
             setForm((f) => ({ ...f, provider: value, model: p?.default_model ?? "" }));
           }}>
             <option value="auto">Auto (recommended){auto?.configured ? "" : " (no provider configured)"}</option>
-            {providers.data?.providers.filter((p) => p.id !== "auto").map((p) => <option key={p.id} value={p.id}>{p.id}{p.configured ? "" : " (no key)"}</option>)}
+            {providers.data?.providers.filter((p) => p.id !== "auto").map((p) => <option key={p.id} value={p.id}>{p.id}{p.configured ? "" : " (not configured)"}</option>)}
           </Select>
         </Field>
         {isAuto ? (

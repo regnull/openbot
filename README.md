@@ -35,8 +35,8 @@ webhook-driven external system all participate in the same conversation the same
 ## Quick start
 
 Prerequisites: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 24+ with
-[pnpm](https://pnpm.io/) 10, and an OpenRouter API key (recommended), or another
-LLM provider API key (OpenAI, Anthropic, or xAI).
+[pnpm](https://pnpm.io/) 10, and an OpenRouter API key (recommended), another
+LLM provider API key (OpenAI, Anthropic, or xAI), or a local [Ollama](https://ollama.com) server.
 
 ```bash
 make setup            # uv sync (backend), pnpm install (frontend), copy .env.example -> .env
@@ -245,6 +245,8 @@ that bot.
 | `ANTHROPIC_API_KEY` | *(unset)* | Enables the `anthropic` provider. |
 | `OPENROUTER_API_KEY` | *(unset)* | Enables the `openrouter` provider. |
 | `XAI_API_KEY` | *(unset)* | Enables the `xai` provider (OpenAI-compatible). |
+| `OLLAMA_BASE_URL` | *(unset)* | Enables the `ollama` provider for local models, e.g. `http://localhost:11434`. No key. The bot editor lists the models installed on that server (`GET /api/tags`); bots on `ollama` keep their own model even when `OPENROUTER_API_KEY` is set. `EMBEDDING_MODEL=ollama:nomic-embed-text` works too (set `EMBEDDING_DIMS` to match). |
+| `OLLAMA_MODEL` | `llama3.1` | Default model suggested for new `ollama` bots, and the seed model when Ollama is the only configured provider. |
 | `BOT_MODEL` | `openai/gpt-4o-mini` | OpenRouter model used for bot LLM calls for seeded bots and any bot whose provider is `openrouter`. Set this in `.env` to switch the whole bot team to a different OpenRouter model; `BOT_MODEL` takes precedence over `OPENROUTER_MODEL`. |
 | `OPENROUTER_MODEL` | *(unset)* | Backward-compatible alias for `BOT_MODEL`. |
 | `EMBEDDING_MODEL` | `openai:text-embedding-3-small` | Used for semantic memory search; without a matching key, memory search degrades to non-semantic. |

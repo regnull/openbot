@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from openbot.bot_icons import DEFAULT_BOT_ICON, validate_bot_icon
 
-Provider = Literal["auto", "openai", "anthropic", "openrouter", "xai"]
+Provider = Literal["auto", "openai", "anthropic", "openrouter", "xai", "ollama"]
 HANDLE_RE = r"^[a-z0-9_-]{2,32}$"
 
 

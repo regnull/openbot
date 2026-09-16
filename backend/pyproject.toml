@@ -23,6 +23,7 @@ dependencies = [
   "langmem>=0.0.30",
   "langsmith>=0.12",
   "beautifulsoup4>=4.12",
+  "langchain-ollama>=1.0",
 ]
 
 [dependency-groups]
