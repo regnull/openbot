@@ -54,6 +54,12 @@ def _hermetic_env(monkeypatch):
     for name in _DOTENV_LEAKS:
         monkeypatch.delenv(name, raising=False)
     assert not [n for n in _DOTENV_LEAKS if n in os.environ]
+    # The `client` fixture imports openbot.main lazily, and that import's load_dotenv() runs *after* the
+    # deletions above, so the first test to build a client got the developer's .env back, including
+    # LANGSMITH_TRACING=true: the LangSmith tracer then serialized the scripted model (iterator and all)
+    # into a trace and ate the script. load_dotenv never overrides a variable that is already set, so
+    # pinning tracing off here holds no matter when the app module is first imported.
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
 
 
 @pytest.fixture

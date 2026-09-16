@@ -127,6 +127,7 @@ class ThreadOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     title: str
+    kind: str = "chat"
     created_by_actor_id: str | None
     default_bot_actor_id: str | None
     default_bot_handle: str | None = None
@@ -242,6 +243,31 @@ class InboxItemOut(BaseModel):
     created_at: datetime
     processed_at: datetime | None
     message: MessageOut | None = None
+
+
+class BotInboxItemOut(InboxItemOut):
+    """An item in a bot's inbox as the operator sees it: what woke the bot, how the run went, what it said."""
+    thread_kind: str = "chat"
+    run_status: str | None = None
+    reply: MessageOut | None = None
+
+
+class DirectPost(BaseModel):
+    content: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("content")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("content must not be blank")
+        return v
+
+
+class MemoryOut(BaseModel):
+    key: str
+    content: str
+    created_at: datetime | None
+    updated_at: datetime | None
 
 
 class ResumeBody(BaseModel):

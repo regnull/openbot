@@ -108,6 +108,10 @@ class Thread(TimestampMixin, Base):
     __tablename__ = "threads"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    # "chat" is a conversation; "direct" is the hidden one-shot container behind a post made straight
+    # into a bot's inbox (see api/bots.py). Direct threads are excluded from the thread list and from
+    # human inbox notifications.
+    kind: Mapped[str] = mapped_column(String(16), default="chat", server_default="chat", nullable=False)
     created_by_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     default_bot_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     working_directory: Mapped[str | None] = mapped_column(String(1000), nullable=True)
