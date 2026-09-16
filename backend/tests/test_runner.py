@@ -254,3 +254,36 @@ async def test_model_sees_trigger_messages_marked_new(settings):
     await services.runner.execute(run.id)
     last_human = [m for m in ScriptedChatModel.seen[0] if m.type == "human"][-1]
     assert "[You] (new): please build it" in last_human.content
+
+
+async def _checkpoint(services, run_id):
+    return await services.checkpointer.aget_tuple({"configurable": {"thread_id": run_id}})
+
+
+async def test_checkpoint_is_kept_while_waiting_and_deleted_when_the_run_ends(settings):
+    """The agent transcript is checkpointed under the run id only so a paused run can resume. Once
+    the run is terminal (and reflection has taken its copy) nothing reads it again, so it goes."""
+    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")]), ai("Merged.")]})
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "waiting_human"
+    assert await _checkpoint(services, run.id) is not None
+    await services.runner.execute(run.id, resume=Command(resume="yes"))
+    assert (await get(services, Run, run.id)).status == "completed"
+    assert await _checkpoint(services, run.id) is None
+
+
+async def test_checkpoint_deleted_after_a_failed_run(settings):
+    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("read_history")]), RuntimeError("provider down")]},
+                                       )
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "failed"
+    assert await _checkpoint(services, run.id) is None
+
+
+async def test_reflection_still_gets_the_transcript_before_the_checkpoint_goes(settings):
+    services, _eng, _t, run = await make(settings, {"eng": [ai("ok")]})
+    scheduled = []
+    services.reflector.schedule = lambda bot, msgs, *, thread_id: scheduled.append(len(msgs))
+    await services.runner.execute(run.id)
+    assert scheduled == [2] or (scheduled and scheduled[0] >= 2)
+    assert await _checkpoint(services, run.id) is None

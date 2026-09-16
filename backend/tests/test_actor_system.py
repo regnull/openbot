@@ -267,3 +267,40 @@ async def test_run_is_created_only_when_a_slot_is_free(settings):
     await services.actors.wait_idle()
     assert sorted(r.status for r in await runs(services)) == ["completed", "completed"]
     await services.actors.stop()
+
+
+async def _checkpoint(services, run_id):
+    return await services.checkpointer.aget_tuple({"configurable": {"thread_id": run_id}})
+
+
+async def test_cancelling_a_waiting_run_drops_its_checkpoint(settings):
+    services, t = await setup(settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")])]})
+    await post(services, t, "go")
+    await services.actors.wait_idle()
+    run = (await runs(services))[0]
+    assert run.status == "waiting_human" and await _checkpoint(services, run.id) is not None
+    assert await services.actors.cancel_run(run.id) is True
+    assert (await runs(services))[0].status == "cancelled"
+    assert await _checkpoint(services, run.id) is None
+    await services.actors.stop()
+
+
+async def test_restart_recovery_drops_checkpoints_of_failed_runs(settings):
+    services, t = await setup(settings, {})
+    async with services.session_factory() as s:
+        eng = (await s.execute(select(Actor).where(Actor.handle == "eng"))).scalar_one()
+        run = Run(actor_id=eng.id, thread_id=t.id, status="running")
+        s.add(run)
+        await s.commit()
+        run_id = run.id
+    await services.checkpointer.aput({"configurable": {"thread_id": run_id, "checkpoint_ns": ""}},
+                                     {"v": 1, "id": "c1", "ts": "", "channel_values": {}, "channel_versions": {}, "versions_seen": {}},
+                                     {}, {})
+    assert await _checkpoint(services, run_id) is not None
+    await services.actors.stop()
+    services.actors._started = False
+    await services.actors.start()
+    async with services.session_factory() as s:
+        assert (await s.get(Run, run_id)).status == "failed"
+    assert await _checkpoint(services, run_id) is None
+    await services.actors.stop()

@@ -137,6 +137,15 @@ class Runner:
         async with self.s.session_factory() as session:
             await post_message(self.s, session, thread_id=thread_id, sender=None, content=content)
 
+    async def _drop_checkpoint(self, run_id: str) -> None:
+        """The agent transcript is checkpointed under the run id only so a `waiting_human` run can
+        resume. Once the run is terminal nothing reads it again (reflection already holds its copy),
+        so delete it rather than let `.langgraph.db` grow with every run ever made."""
+        try:
+            await self.s.checkpointer.adelete_thread(run_id)
+        except Exception:
+            log.exception("could not delete the checkpoint for run %s", run_id)
+
     async def _prepare(self, bot: Actor, thread: Thread, run: Run) -> tuple[str, dict, int]:
         st = self.s.settings
         async with self.s.session_factory() as session:
@@ -287,10 +296,12 @@ class Runner:
                     self.s.reflector.schedule(bot, list(state.values.get("messages", [])), thread_id=thread.id)
                 except Exception:
                     log.exception("could not schedule memory reflection for run %s", run.id)
+            await self._drop_checkpoint(run.id)
         except asyncio.CancelledError:
             log.info("run %s cancelled after %.1fs", run.id, time.monotonic() - started)
             await self._set_status(run.id, "cancelled")
             await self._system_message(thread.id, f"@{bot.handle} run was cancelled.")
+            await self._drop_checkpoint(run.id)
             raise
         except Exception as e:
             log.exception("run %s failed", run.id)
@@ -306,3 +317,4 @@ class Runner:
                 await self._system_message(thread.id, f"@{bot.handle} failed: {err}")
             except Exception:
                 log.exception("could not post the failure notice for run %s", run.id)
+            await self._drop_checkpoint(run.id)
