@@ -26,7 +26,7 @@ export default function BotEditorPage() {
       const payload = { ...form, approval_tools: form.approval_tools.filter((t) => form.tool_names.includes(t)) };
       return isNew ? Api.createBot(payload) : Api.updateBot(id!, payload);
     },
-    onSuccess: (b) => { qc.invalidateQueries({ queryKey: ["bots"] }); nav(`/bots/${b.id}`); },
+    onSuccess: (b) => { qc.invalidateQueries({ queryKey: ["bots"] }); qc.invalidateQueries({ queryKey: ["bot", b.id] }); nav(`/bots/${b.id}?tab=settings`); },
   });
   const remove = useMutation({ mutationFn: () => Api.deleteBot(id!), onSuccess: () => { qc.invalidateQueries({ queryKey: ["bots"] }); nav("/bots"); } });
 
@@ -45,7 +45,7 @@ export default function BotEditorPage() {
 
   return (
     <form className="mx-auto max-w-3xl space-y-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
-      <h1 className="text-xl font-semibold">{isNew ? "New bot" : `Edit @${form.handle}`}</h1>
+      {isNew && <h1 className="text-xl font-semibold">New bot</h1>}
       <Card className="grid gap-4 sm:grid-cols-2">
         <Field label="Name"><Input value={form.name} onChange={(e) => set("name", e.target.value)} required /></Field>
         <Field label="Handle" hint="lowercase, digits, _ or -; used as @handle"><Input value={form.handle} onChange={(e) => set("handle", e.target.value)} pattern="[a-z0-9_\-]{2,32}" required /></Field>

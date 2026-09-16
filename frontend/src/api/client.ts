@@ -1,4 +1,4 @@
-import type { Actor, Bot, BotInput, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import type { Actor, Bot, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 import { ApiError, backendUnavailableEvent, isBackendUnavailable } from "./errors";
 
 export { ApiError } from "./errors";
@@ -39,6 +39,10 @@ export const Api = {
   createBot: (b: BotInput) => api<Bot>("/bots", { method: "POST", json: b }),
   updateBot: (id: string, b: Partial<BotInput>) => api<Bot>(`/bots/${id}`, { method: "PATCH", json: b }),
   deleteBot: (id: string) => api<void>(`/bots/${id}`, { method: "DELETE" }),
+  getBotInbox: (id: string) => api<BotInboxItem[]>(`/bots/${id}/inbox`),
+  postBotInbox: (id: string, content: string) => api<BotInboxItem>(`/bots/${id}/inbox`, { method: "POST", json: { content } }),
+  listBotMemories: (id: string) => api<BotMemory[]>(`/bots/${id}/memories`),
+  deleteBotMemory: (id: string, key: string) => api<void>(`/bots/${id}/memories/${encodeURIComponent(key)}`, { method: "DELETE" }),
   listActors: () => api<Actor[]>("/actors"),
   createActor: (a: { handle: string; name: string; description?: string; webhook_url?: string | null; webhook_secret?: string | null }) => api<Actor>("/actors", { method: "POST", json: a }),
   deleteActor: (id: string) => api<void>(`/actors/${id}`, { method: "DELETE" }),
