@@ -7,6 +7,7 @@ import ThreadsPage from "./pages/ThreadsPage";
 import ThreadPage from "./pages/ThreadPage";
 import BotsPage from "./pages/BotsPage";
 import BotEditorPage from "./pages/BotEditorPage";
+import BotPage from "./pages/BotPage";
 import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
@@ -21,7 +22,7 @@ export default function App() {
             <Route path="/threads/:id" element={<ThreadPage />} />
             <Route path="/bots" element={<BotsPage />} />
             <Route path="/bots/new" element={<BotEditorPage />} />
-            <Route path="/bots/:id" element={<BotEditorPage />} />
+            <Route path="/bots/:id" element={<BotPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>

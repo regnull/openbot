@@ -3,7 +3,7 @@ import type { Thread } from "../api/types";
 import { RECENT_THREADS_LIMIT, recentThreads, threadLabel } from "./recentThreads";
 
 const thread = (id: string, last: string | null, updated = "2026-01-01T00:00:00Z", title = ""): Thread => ({
-  id, title, created_by_actor_id: null, default_bot_actor_id: null, default_bot_handle: null, working_directory: null,
+  id, title, kind: "chat", created_by_actor_id: null, default_bot_actor_id: null, default_bot_handle: null, working_directory: null,
   external_ref: null, created_at: updated, updated_at: updated, last_message_at: last,
   participants: [{ actor_id: "a", kind: "human", handle: "you", name: "You" }, { actor_id: "b", kind: "bot", handle: "eng", name: "Engineer" }],
 });

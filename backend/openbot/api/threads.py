@@ -76,7 +76,7 @@ async def get_thread_or_404(session: AsyncSession, thread_id: str) -> Thread:
 
 @router.get("", response_model=list[ThreadOut])
 async def list_threads(session: AsyncSession = Depends(get_session)):
-    threads = (await session.execute(select(Thread).order_by(Thread.updated_at.desc()))).scalars().all()
+    threads = (await session.execute(select(Thread).where(Thread.kind == "chat").order_by(Thread.updated_at.desc()))).scalars().all()
     ids = [t.id for t in threads]
     parts = await participants_for(session, ids)
     default_handles = await default_bot_handles_for(session, ids)

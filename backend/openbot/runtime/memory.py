@@ -102,19 +102,37 @@ def memory_tools(bot_id: str, store: BaseStore) -> list[BaseTool]:
     ]
 
 
+def memory_text(value: object) -> str:
+    """The human-readable text of a stored memory, whatever shape wrote it (langmem manager, the
+    manage_memory tool, or the legacy {"content": ...} form)."""
+    if isinstance(value, dict):
+        content = value.get("content", value)
+        if isinstance(content, dict) and set(content) == {"content"}:
+            content = content["content"]
+        return str(content)
+    return str(value)
+
+
 async def relevant_memories(store: BaseStore, bot_id: str, query: str, limit: int = 8) -> list[str]:
     items = await store.asearch(bot_namespace(bot_id), query=query or None, limit=limit)
-    out = []
-    for it in items:
-        v = it.value
-        if isinstance(v, dict):
-            content = v.get("content", v)
-            if isinstance(content, dict) and set(content) == {"content"}:
-                content = content["content"]
-            out.append(str(content))
-        else:
-            out.append(str(v))
-    return out
+    return [memory_text(it.value) for it in items]
+
+
+async def list_memories(store: BaseStore, bot_id: str, limit: int = 200) -> list[dict]:
+    """Every memory of a bot, newest first, for the operator's Memory view."""
+    items = await store.asearch(bot_namespace(bot_id), limit=limit)
+    rows = [{"key": it.key, "content": memory_text(it.value), "created_at": it.created_at, "updated_at": it.updated_at}
+            for it in items]
+    rows.sort(key=lambda r: (r["updated_at"] or r["created_at"] or 0), reverse=True)
+    return rows
+
+
+async def delete_memory(store: BaseStore, bot_id: str, key: str) -> bool:
+    ns = bot_namespace(bot_id)
+    if await store.aget(ns, key) is None:
+        return False
+    await store.adelete(ns, key)
+    return True
 
 
 async def index_message(store: BaseStore, message: Message) -> None:

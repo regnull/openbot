@@ -1,13 +1,33 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openbot.api.actors import handle_taken
 from openbot.api.deps import get_services, get_session
-from openbot.api.schemas import BotCreate, BotOut, BotUpdate, bot_out
-from openbot.db.models import ACTIVE_RUN_STATUSES, OPEN_RUN_STATUSES, Actor, BotProfile, Run, Thread
+from openbot.api.schemas import (
+    BotCreate,
+    BotInboxItemOut,
+    BotOut,
+    BotUpdate,
+    DirectPost,
+    MemoryOut,
+    MessageOut,
+    bot_out,
+)
+from openbot.db.models import (
+    ACTIVE_RUN_STATUSES,
+    OPEN_RUN_STATUSES,
+    Actor,
+    BotProfile,
+    InboxItem,
+    Message,
+    Run,
+    Thread,
+)
+from openbot.runtime import memory
+from openbot.runtime.delivery import create_thread, human_actor, post_message
 from openbot.services import Services
 
 router = APIRouter(prefix="/bots", tags=["bots"])
@@ -94,3 +114,72 @@ async def delete_bot(bot_id: str, session: AsyncSession = Depends(get_session),
     await session.delete(actor)
     await session.commit()
     await services.bus.publish("bots.updated", None, {"id": bot_id, "deleted": True})
+
+
+# --- inbox --------------------------------------------------------------------------------------------------
+
+async def _bot_inbox_rows(session: AsyncSession, bot: Actor, items: list[InboxItem]) -> list[BotInboxItemOut]:
+    msg_ids = [i.message_id for i in items if i.message_id]
+    run_ids = [i.run_id for i in items if i.run_id]
+    thread_ids = list({i.thread_id for i in items})
+    msgs = {m.id: m for m in (await session.execute(select(Message).where(Message.id.in_(msg_ids)))).scalars()} if msg_ids else {}
+    runs = {r.id: r for r in (await session.execute(select(Run).where(Run.id.in_(run_ids)))).scalars()} if run_ids else {}
+    replies: dict[str, Message] = {}
+    if run_ids:
+        q = select(Message).where(Message.run_id.in_(run_ids), Message.sender_actor_id == bot.id).order_by(Message.created_at)
+        for m in (await session.execute(q)).scalars():
+            replies[m.run_id] = m           # the last message a run posted is its reply
+    kinds = {t.id: t.kind for t in (await session.execute(select(Thread).where(Thread.id.in_(thread_ids)))).scalars()} if thread_ids else {}
+    out = []
+    for it in items:
+        o = BotInboxItemOut.model_validate(it)
+        o.message = MessageOut.model_validate(msgs[it.message_id]) if it.message_id in msgs else None
+        o.thread_kind = kinds.get(it.thread_id, "chat")
+        run = runs.get(it.run_id) if it.run_id else None
+        o.run_status = run.status if run else None
+        o.reply = MessageOut.model_validate(replies[it.run_id]) if it.run_id in replies else None
+        out.append(o)
+    return out
+
+
+@router.get("/{bot_id}/inbox", response_model=list[BotInboxItemOut])
+async def bot_inbox(bot_id: str, limit: int = Query(100, ge=1, le=200), session: AsyncSession = Depends(get_session)):
+    """The bot's mailbox as the operator sees it: every item, newest first, with the run's status and reply."""
+    bot = await _get_bot_or_404(session, bot_id)
+    items = (await session.execute(select(InboxItem).where(InboxItem.actor_id == bot.id)
+                                   .order_by(InboxItem.created_at.desc()).limit(limit))).scalars().all()
+    return await _bot_inbox_rows(session, bot, list(items))
+
+
+@router.post("/{bot_id}/inbox", response_model=BotInboxItemOut, status_code=201)
+async def post_to_bot_inbox(bot_id: str, body: DirectPost, session: AsyncSession = Depends(get_session),
+                            services: Services = Depends(get_services)):
+    """Post straight into a bot's inbox. Each post gets its own hidden one-message thread, so the bot sees only
+    this message plus its memories: an inbox is a queue of independent messages, not a conversation."""
+    bot = await _get_bot_or_404(session, bot_id)
+    you = await human_actor(session)
+    content = body.content.strip()
+    title = content.splitlines()[0][:60]
+    thread = await create_thread(services, session, title=title, handles=[bot.handle], created_by=you, kind="direct")
+    res = await post_message(services, session, thread_id=thread.id, sender=you, content=content, to_handles=[bot.handle])
+    item = next(i for i in res.items if i.actor_id == bot.id)
+    return (await _bot_inbox_rows(session, bot, [item]))[0]
+
+
+# --- memory -------------------------------------------------------------------------------------------------
+
+@router.get("/{bot_id}/memories", response_model=list[MemoryOut])
+async def bot_memories(bot_id: str, session: AsyncSession = Depends(get_session), services: Services = Depends(get_services)):
+    await _get_bot_or_404(session, bot_id)
+    if services.store is None:
+        return []
+    return [MemoryOut(**row) for row in await memory.list_memories(services.store, bot_id)]
+
+
+@router.delete("/{bot_id}/memories/{key}", status_code=204)
+async def delete_bot_memory(bot_id: str, key: str, session: AsyncSession = Depends(get_session),
+                            services: Services = Depends(get_services)):
+    await _get_bot_or_404(session, bot_id)
+    if services.store is None or not await memory.delete_memory(services.store, bot_id, key):
+        raise HTTPException(404, "memory not found")
+    return Response(status_code=204)

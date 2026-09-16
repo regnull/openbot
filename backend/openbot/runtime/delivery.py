@@ -87,7 +87,8 @@ async def _publish_items(services, items: list[InboxItem]) -> None:
 
 async def create_thread(services, session: AsyncSession, *, title: str, handles: list[str], created_by: Actor | None,
                         external_ref: str | None = None, include_human: bool = True,
-                        default_bot_handle: str | None = None, working_directory: str | None = None) -> Thread:
+                        default_bot_handle: str | None = None, working_directory: str | None = None,
+                        kind: str = "chat") -> Thread:
     by_handle = await _actors_by_handle(session)
     unknown = [h for h in handles if h not in by_handle]
     if unknown:
@@ -109,7 +110,7 @@ async def create_thread(services, session: AsyncSession, *, title: str, handles:
     if effective_title is None:
         effective_title = generate_thread_title(handles, default_bot_handle)
 
-    thread = Thread(title=effective_title, created_by_actor_id=created_by.id if created_by else None,
+    thread = Thread(title=effective_title, kind=kind, created_by_actor_id=created_by.id if created_by else None,
                     default_bot_actor_id=default_bot.id if default_bot else None,
                     working_directory=normalized_working_directory, external_ref=external_ref)
     session.add(thread)
@@ -184,7 +185,9 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
     items: list[InboxItem] = []
     for bot in targets:
         items.append(InboxItem(actor_id=bot.id, thread_id=thread_id, kind="message", message_id=msg.id))
-    for m in messages:
+    # A direct thread is a one-shot exchange the operator reads in the bot's inbox view, so the reply is
+    # not also pushed into the human's inbox as an unread message.
+    for m in messages if thread.kind != "direct" else []:
         for aid in part_ids:
             a = by_id.get(aid)
             if a is None or a.kind == "bot" or (sender is not None and a.id == sender.id):

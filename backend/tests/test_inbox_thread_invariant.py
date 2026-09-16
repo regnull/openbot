@@ -26,3 +26,13 @@ async def test_migration_makes_inbox_thread_id_not_null(tmp_path):
         cols = await conn.run_sync(lambda c: {col["name"]: col for col in inspect(c).get_columns("inbox_items")})
     await engine.dispose()
     assert cols["thread_id"]["nullable"] is False
+
+
+async def test_migration_adds_thread_kind_defaulting_to_chat(tmp_path):
+    url = f"sqlite+aiosqlite:///{tmp_path}/m.db"
+    await run_migrations(url)
+    engine = make_engine(url)
+    async with engine.connect() as conn:
+        cols = await conn.run_sync(lambda c: {col["name"]: col for col in inspect(c).get_columns("threads")})
+    await engine.dispose()
+    assert cols["kind"]["nullable"] is False and "chat" in str(cols["kind"]["default"])
