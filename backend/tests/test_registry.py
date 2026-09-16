@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from langchain.tools import tool
@@ -14,11 +15,19 @@ def test_register_and_resolve():
     reg.register(hello)
     assert reg.has("hello") and reg.get("hello") is hello
     assert reg.resolve(["hello"]) == [hello]
-    try:
-        reg.resolve(["nope"])
-        assert False
-    except KeyError:
-        pass
+
+
+def test_resolve_warns_and_drops_unknown(caplog):
+    """A DB tool list can be newer than the registry snapshotted at server start."""
+    @tool
+    def hello(name: str) -> str:
+        """Say hello."""
+        return f"hi {name}"
+    reg = ToolRegistry()
+    reg.register(hello)
+    with caplog.at_level(logging.WARNING, logger="openbot.tools.registry"):
+        assert reg.resolve(["hello", "brand_new_tool"]) == [hello]
+    assert "brand_new_tool" in caplog.text and "restart" in caplog.text
 
 
 def test_load_plugins(tmp_path: Path):

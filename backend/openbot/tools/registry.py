@@ -36,10 +36,19 @@ class ToolRegistry:
         return self._tools[name].tool
 
     def resolve(self, names: list[str]) -> list[BaseTool]:
-        unknown = [n for n in names if n not in self._tools]
-        if unknown:
-            raise KeyError(f"unknown tools: {unknown}")
-        return [self._tools[n].tool for n in names]
+        """Return the named tools, dropping any the registry does not know.
+
+        The registry is snapshotted at startup while bot tool lists live in the DB
+        and can change underneath a running server, so an unknown name usually means
+        the list was updated after this process started. Warn and drop instead of
+        failing the whole run; unknown tools are still rejected by API validation
+        when a profile is written.
+        """
+        missing = [n for n in names if n not in self._tools]
+        if missing:
+            log.warning("dropping unknown tools %s (tool list changed since server start? "
+                        "restart to pick up new tools)", missing)
+        return [self._tools[n].tool for n in names if n in self._tools]
 
     def specs(self) -> list[ToolSpec]:
         return list(self._tools.values())
