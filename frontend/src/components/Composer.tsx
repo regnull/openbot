@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { applyMention, mentionQuery } from "../lib/mentions";
+import type { AttachmentIn } from "../api/client";
 import { Button } from "./ui";
 
 // Paste constraints for attached images (client-side guard; the API re-validates).
@@ -27,9 +28,9 @@ async function toDataUrl(file: File): Promise<string> {
   }
 }
 
-/** Reads pasted/dropped image files into data URLs. Returns the decoded ones and whether any file was skipped. */
-async function decodeImages(files: File[]): Promise<{ urls: string[]; skipped: boolean }> {
-  const urls: string[] = [];
+/** Reads pasted/dropped image files into attachments (data URL + file name). Returns the decoded ones and whether any file was skipped. */
+async function decodeImages(files: File[]): Promise<{ attachments: AttachmentIn[]; skipped: boolean }> {
+  const attachments: AttachmentIn[] = [];
   let skipped = false;
   for (const f of files) {
     if (!f.type.startsWith("image/")) continue;
@@ -39,20 +40,20 @@ async function decodeImages(files: File[]): Promise<{ urls: string[]; skipped: b
         skipped = true;
         continue;
       }
-      urls.push(url);
+      attachments.push({ url, name: f.name || undefined });
     } catch {
       skipped = true; // undecodable image: skip it
     }
   }
-  return { urls, skipped };
+  return { attachments, skipped };
 }
 
-export default function Composer({ handles, onSend, disabled, hint }: { handles: string[]; onSend: (text: string, images: string[]) => Promise<void>; disabled?: boolean; hint?: string }) {
+export default function Composer({ handles, onSend, disabled, hint }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string }) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [sel, setSel] = useState(0);
   const [sending, setSending] = useState(false);
-  const [images, setImages] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentIn[]>([]);
   const [skipped, setSkipped] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const q = mentionQuery(text, caret);
@@ -66,8 +67,8 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
     requestAnimationFrame(() => { ref.current?.focus(); ref.current?.setSelectionRange(r.caret, r.caret); });
   };
   const attach = (files: File[]) => {
-    void decodeImages(files).then(({ urls, skipped: bad }) => {
-      setImages((imgs) => [...imgs, ...urls].slice(0, MAX_IMAGES));
+    void decodeImages(files).then(({ attachments: atts, skipped: bad }) => {
+      setAttachments((imgs) => [...imgs, ...atts].slice(0, MAX_IMAGES));
       setSkipped(bad);
     });
   };
@@ -75,14 +76,14 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
   // retry, and the rejection stops here rather than escaping as an unhandled promise.
   const send = async () => {
     const t = text.trim();
-    if ((!t && images.length === 0) || sending) return;
+    if ((!t && attachments.length === 0) || sending) return;
     setSending(true);
     try {
-      await onSend(t, images);
+      await onSend(t, attachments);
       setText("");
       setCaret(0);
       setSel(0);
-      setImages([]);
+      setAttachments([]);
       setSkipped(false);
     } catch {
       /* the caller renders the error; keep the draft */
@@ -99,16 +100,16 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
           ))}
         </div>
       )}
-      {images.length > 0 && (
+      {attachments.length > 0 && (
         <div className="mb-1 flex flex-wrap gap-2">
-          {images.map((src, i) => (
-            <div key={`${i}:${src.slice(-24)}`} className="relative">
-              <img src={src} alt={`attached image ${i + 1}`} className="h-16 rounded border border-zinc-200 dark:border-zinc-700" />
+          {attachments.map((a, i) => (
+            <div key={`${i}:${a.url.slice(-24)}`} className="relative">
+              <img src={a.url} alt={a.name ?? `attached image ${i + 1}`} title={a.name} className="h-16 rounded border border-zinc-200 dark:border-zinc-700" />
               <button
                 type="button"
                 aria-label={`Remove attached image ${i + 1}`}
                 className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs leading-none text-white hover:bg-zinc-600"
-                onClick={() => setImages((imgs) => imgs.filter((_, j) => j !== i))}
+                onClick={() => setAttachments((imgs) => imgs.filter((_, j) => j !== i))}
               >×</button>
             </div>
           ))}
@@ -141,7 +142,7 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
         }}
       />
       <div className="mt-1 flex justify-end">
-        <Button onClick={() => void send()} disabled={disabled || sending || (!text.trim() && images.length === 0)}>
+        <Button onClick={() => void send()} disabled={disabled || sending || (!text.trim() && attachments.length === 0)}>
           {sending ? "Sending…" : "Send"}
         </Button>
       </div>

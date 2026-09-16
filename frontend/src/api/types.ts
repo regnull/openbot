@@ -4,6 +4,9 @@ export interface Bot { id: string; handle: string; name: string; description: st
 export type BotInput = Omit<Bot, "id" | "created_at" | "updated_at" | "active">;
 export interface Participant { actor_id: string; kind: ActorKind; handle: string; name: string; }
 export interface Thread { id: string; title: string; kind: "chat" | "direct"; created_by_actor_id: string | null; default_bot_actor_id: string | null; default_bot_handle: string | null; working_directory: string | null; external_ref: string | null; created_at: string; updated_at: string; last_message_at: string | null; participants: Participant[]; }
+export interface MessageAttachment { url: string; name?: string | null; }
+/** One image attached to a message (mirrors the backend Attachment schema); lives in Message.metadata.attachments. */
+export interface MessageAttachment { url: string; name?: string | null; }
 export interface Message { id: string; thread_id: string; sender_actor_id: string | null; sender_kind: string; sender_name: string; content: string; mentions: string[]; hop: number; run_id: string | null; metadata: Record<string, unknown>; created_at: string; }
 export interface Interrupt { kind: "question" | "approval"; question?: string; actions?: { name: string; args: Record<string, unknown> }[]; }
 export interface Run { id: string; actor_id: string; thread_id: string; status: string; interrupt: Interrupt | null; error: string | null; langsmith_run_id: string | null; prompt_tokens?: number | null; completion_tokens?: number | null; cache_read_tokens?: number | null; total_tokens?: number | null; model_calls?: number | null; created_at: string; started_at: string | null; finished_at: string | null; }

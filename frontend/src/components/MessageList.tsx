@@ -1,7 +1,8 @@
 import { useQueries } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Api } from "../api/client";
-import type { Participant, RunDetail, RunEvent } from "../api/types";
+import type { Message, MessageAttachment, Participant, RunDetail, RunEvent } from "../api/types";
+
 import type { ThreadState } from "../lib/threadState";
 import { parseTs } from "../lib/time";
 import Avatar from "./Avatar";
@@ -24,6 +25,19 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
 
 
   const eventsFor = (id: string): RunEvent[] => state.runEvents[id] ?? [];
+  // Attachment list for a message: typed entries from metadata.attachments, falling back to
+  // legacy messages that stored plain data URLs under metadata.images.
+  const messageImages = (m: Message): MessageAttachment[] => {
+    const raw = m.metadata?.attachments;
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.filter((a): a is MessageAttachment => !!a && typeof a === "object" && typeof (a as MessageAttachment).url === "string");
+    }
+    const legacy = m.metadata?.images;
+    if (Array.isArray(legacy)) {
+      return legacy.filter((u): u is string => typeof u === "string" && !!u).map((url) => ({ url }));
+    }
+    return [];
+  };
   // A run whose reply message already exists is rendered under that message; keep it out
   // of the active strip so it is not shown twice while it finishes.
   const shown = new Set(state.messages.map((m) => m.run_id).filter((r): r is string => !!r));
@@ -40,10 +54,13 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
                 <span className="font-medium text-zinc-700 dark:text-zinc-300">{m.sender_name}</span> · {parseTs(m.created_at).toLocaleTimeString()}{m.hop > 0 && ` · hop ${m.hop}`}
               </div>
               <div className="whitespace-pre-wrap text-sm">{m.content}</div>
-              {((m.metadata?.images as string[] | undefined) ?? []).length > 0 && (
+              {messageImages(m).length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-2">
-                  {(m.metadata.images as string[]).map((src, i) => (
-                    <img key={`${m.id}:${i}`} src={src} alt={`image attached to message by ${m.sender_name}`} className="max-h-40 rounded border border-zinc-200 dark:border-zinc-700" />
+                  {messageImages(m).map((a, i) => (
+                    <figure key={`${m.id}:${i}`} className="m-0">
+                      <img src={a.url} alt={`image attached to message by ${m.sender_name}`} className="max-h-40 rounded border border-zinc-200 dark:border-zinc-700" />
+                      {a.name && <figcaption className="mt-0.5 max-h-40 truncate text-xs text-zinc-500">{a.name}</figcaption>}
+                    </figure>
                   ))}
                 </div>
               )}

@@ -143,7 +143,6 @@ class ThreadOut(BaseModel):
 
 
 class MessageOut(BaseModel):
-    images: list[str] = []
     model_config = ConfigDict(from_attributes=True)
     id: str
     thread_id: str
@@ -206,7 +205,15 @@ class ThreadUsage(BaseModel):
 
 
 MAX_IMAGES = 4
+MAX_NAME_CHARS = 200
 DATA_URL_RE = r"^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$"
+
+
+class Attachment(BaseModel):
+    """One image attached to a message: a data URL plus an optional display name."""
+
+    url: str
+    name: str | None = Field(default=None, max_length=MAX_NAME_CHARS)
 
 
 class MessageCreate(BaseModel):
@@ -214,15 +221,15 @@ class MessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=20000)
     to: list[str] = []
     from_handle: str | None = Field(default=None, alias="from")
-    images: list[str] = Field(default=[], max_length=MAX_IMAGES)
+    attachments: list[Attachment] = Field(default=[], max_length=MAX_IMAGES)
 
-    @field_validator("images")
+    @field_validator("attachments")
     @classmethod
-    def _validate_images(cls, v: list[str]) -> list[str]:
-        for url in v:
-            if not re.fullmatch(DATA_URL_RE, url):
-                raise ValueError("images must be data URLs (data:image/png|jpeg|webp|gif;base64,...)")
-            if len(url) > MAX_IMAGE_CHARS:
+    def _validate_attachments(cls, v: list[Attachment]) -> list[Attachment]:
+        for a in v:
+            if not re.fullmatch(DATA_URL_RE, a.url):
+                raise ValueError("attachment urls must be data URLs (data:image/png|jpeg|webp|gif;base64,...)")
+            if len(a.url) > MAX_IMAGE_CHARS:
                 raise ValueError("image is too large")
         return v
 
