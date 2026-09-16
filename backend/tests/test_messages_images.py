@@ -48,3 +48,40 @@ async def test_post_message_rejects_invalid_attachment_payloads(client):
         r = await client.post(f"/api/v1/threads/{t['id']}/messages",
                               json={"content": "x", "attachments": atts})
         assert r.status_code == 422, f"{atts[0]['url'][:40]}: {r.text}"
+
+
+async def test_post_message_image_only_no_text(client, services):
+    t = await _thread_with_bot(client, "img-only")
+    atts = [{"url": PNG_URL, "name": "shot.png"}, {"url": GIF_URL}]
+    r = await client.post(f"/api/v1/threads/{t['id']}/messages",
+                          json={"content": "", "attachments": atts})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["message"]["content"] == ""
+    got = body["message"]["metadata"]["attachments"]
+    assert [(a["url"], a.get("name")) for a in got] == [(a["url"], a.get("name")) for a in atts]
+
+    if services.actors:
+        await services.actors.wait_idle()
+    d = (await client.get(f"/api/v1/threads/{t['id']}")).json()
+    mine = [m for m in d["messages"] if m["metadata"].get("attachments")]
+    assert len(mine) == 1
+    assert [(a["url"], a.get("name")) for a in mine[0]["metadata"]["attachments"]] \
+        == [(a["url"], a.get("name")) for a in atts]
+
+
+async def test_post_message_rejects_blank_without_attachments(client):
+    t = await _thread_with_bot(client, "blank")
+    for payload in ({"content": ""}, {"content": "   "}):
+        r = await client.post(f"/api/v1/threads/{t['id']}/messages", json=payload)
+        assert r.status_code == 422, f"{payload['content']!r}: {r.text}"
+
+
+async def test_post_message_rejects_attachments_over_total_cap(client):
+    t = await _thread_with_bot(client, "toobig-total")
+    big = "data:image/png;base64," + "A" * (4_700_000 - 22)
+    atts = [{"url": big}, {"url": big}, {"url": big}, {"url": big}]
+    r = await client.post(f"/api/v1/threads/{t['id']}/messages",
+                          json={"content": "x", "attachments": atts})
+    assert r.status_code == 422, r.text
+    assert "total" in r.json()["detail"][0]["msg"], r.text

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
 import re
+from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from openbot.bot_icons import DEFAULT_BOT_ICON, validate_bot_icon
 
@@ -12,6 +12,9 @@ Provider = Literal["auto", "openai", "anthropic", "openrouter", "xai", "ollama"]
 HANDLE_RE = r"^[a-z0-9_-]{2,32}$"
 # ~3.5 MB of decoded image bytes (base64 inflates by 4/3).
 MAX_IMAGE_CHARS = 4_700_000
+# Per-message aggregate cap across attachments (~14 MB decoded): keeps a full row of
+# max-size images from blowing up the Message.meta payload.
+MAX_TOTAL_IMAGE_CHARS = 3 * MAX_IMAGE_CHARS
 
 
 class ActorOut(BaseModel):
@@ -218,7 +221,7 @@ class Attachment(BaseModel):
 
 class MessageCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    content: str = Field(min_length=1, max_length=20000)
+    content: str = Field(default="", max_length=20000)
     to: list[str] = []
     from_handle: str | None = Field(default=None, alias="from")
     attachments: list[Attachment] = Field(default=[], max_length=MAX_IMAGES)
@@ -226,12 +229,22 @@ class MessageCreate(BaseModel):
     @field_validator("attachments")
     @classmethod
     def _validate_attachments(cls, v: list[Attachment]) -> list[Attachment]:
+        total = 0
         for a in v:
             if not re.fullmatch(DATA_URL_RE, a.url):
                 raise ValueError("attachment urls must be data URLs (data:image/png|jpeg|webp|gif;base64,...)")
             if len(a.url) > MAX_IMAGE_CHARS:
                 raise ValueError("image is too large")
+            total += len(a.url)
+        if total > MAX_TOTAL_IMAGE_CHARS:
+            raise ValueError("attachments are too large in total")
         return v
+
+    @model_validator(mode="after")
+    def _require_content_without_attachments(self) -> MessageCreate:
+        if not self.content.strip() and not self.attachments:
+            raise ValueError("content is required unless the message has attachments")
+        return self
 
 
 class PostMessageOut(BaseModel):

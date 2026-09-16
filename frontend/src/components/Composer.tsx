@@ -55,6 +55,7 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
   const [sending, setSending] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentIn[]>([]);
   const [skipped, setSkipped] = useState(false);
+  const [dropped, setDropped] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const q = mentionQuery(text, caret);
   const options = q ? handles.filter((h) => h.startsWith(q.query)).slice(0, 6) : [];
@@ -69,6 +70,7 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
   const attach = (files: File[]) => {
     void decodeImages(files).then(({ attachments: atts, skipped: bad }) => {
       setAttachments((imgs) => [...imgs, ...atts].slice(0, MAX_IMAGES));
+      if (attachments.length + atts.length > MAX_IMAGES) setDropped(true);
       setSkipped(bad);
     });
   };
@@ -85,6 +87,7 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
       setSel(0);
       setAttachments([]);
       setSkipped(false);
+      setDropped(false);
     } catch {
       /* the caller renders the error; keep the draft */
     } finally {
@@ -115,7 +118,14 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
           ))}
         </div>
       )}
-      {skipped && <p className="mb-1 text-xs text-amber-600">Some pasted images could not be read and were skipped.</p>}
+      {(skipped || dropped) && (
+        <p className="mb-1 text-xs text-amber-600">
+          {[
+            skipped ? "Some pasted images could not be read and were skipped." : null,
+            dropped ? `Only the first ${MAX_IMAGES} attached images are kept per message.` : null,
+          ].filter(Boolean).join(" ")}
+        </p>
+      )}
       <textarea
         ref={ref}
         rows={3}
