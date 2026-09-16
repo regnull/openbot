@@ -46,4 +46,5 @@ async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | N
         parts.append("stdout:\n" + out.decode(errors="replace"))
     if err:
         parts.append("stderr:\n" + err.decode(errors="replace"))
-    return cap("\n".join(parts))
+    return cap("\n".join(parts), runtime.context.tool_output_cap,
+               hint="pipe through head/tail/grep or use --name-only style flags to get less output")

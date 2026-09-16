@@ -80,12 +80,31 @@ def effective_bot_profile(bot: BotProfile, settings: Settings) -> tuple[str, str
         dp = default_provider(settings)
         if dp is None:
             raise ValueError("no provider is configured: set an API key for at least one provider")
-        return dp
+        return prefer_direct_anthropic(dp[0], dp[1], settings)
     if bot.provider == OLLAMA:
         return bot.provider, bot.model
     if api_key_for(settings, DEFAULT_BOT_PROVIDER):
-        return DEFAULT_BOT_PROVIDER, configured_bot_model(settings)
+        return prefer_direct_anthropic(DEFAULT_BOT_PROVIDER, configured_bot_model(settings), settings)
     return bot.provider, bot.model
+
+
+def prefer_direct_anthropic(provider: str, model: str, settings: Settings) -> tuple[str, str]:
+    """Send an OpenRouter `anthropic/...` model straight to Anthropic when a key is configured.
+
+    Prompt caching is what keeps long agent runs affordable, and it only fully works (tool results
+    included) on the direct Anthropic API; through OpenRouter's OpenAI-compatible endpoint only the
+    system prompt and human turns can carry cache breakpoints. Same list price, no OpenRouter fee.
+    Disable with DIRECT_ANTHROPIC=false."""
+    if (provider == "openrouter" and model.startswith("anthropic/") and settings.direct_anthropic
+            and api_key_for(settings, "anthropic")):
+        return "anthropic", openrouter_to_anthropic_model(model)
+    return provider, model
+
+
+def openrouter_to_anthropic_model(model: str) -> str:
+    """`anthropic/claude-opus-4.6` -> `claude-opus-4-6` (Anthropic ids use dashes in version numbers)."""
+    name = model.split("/", 1)[1]
+    return name.replace(".", "-")
 
 
 def provider_chat_model(

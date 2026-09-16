@@ -259,6 +259,11 @@ that bot.
 | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
 | `MAX_CONCURRENT_RUNS` | `4` | Global cap on simultaneous bot runs. |
 | `MAX_BOT_HOPS` | `20` | Bot-to-bot mention chain limit per thread before a human message is required. |
+| `PROMPT_CACHING` | `true` | Add Anthropic prompt-cache breakpoints to every model call. Direct Anthropic caches the whole growing transcript, tool results included; through OpenRouter only the system prompt and human turns can carry a breakpoint. OpenAI-style providers cache automatically and are unaffected. |
+| `DIRECT_ANTHROPIC` | `true` | When the effective model is an OpenRouter `anthropic/...` id and `ANTHROPIC_API_KEY` is set, call Anthropic directly (`anthropic/claude-opus-4.6` -> `claude-opus-4-6`) so caching fully applies and no OpenRouter fee is paid. |
+| `TOOL_OUTPUT_CAP` | `8000` | Maximum characters of any single tool result the model sees; longer output keeps its head and tail with a note on how to get the rest (`read_file` takes `start_line`/`end_line`). Everything a tool returns is re-sent on every later turn, so this bounds the quadratic part of a run's cost. |
+| `CONTEXT_TRIGGER_TOKENS` | `60000` | Once a run's context exceeds this, tool results older than the three most recent are replaced with a placeholder in the model's view. The run's event log keeps the real output. |
+| `MAX_MODEL_CALLS_PER_RUN` | `40` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). |
 | `HISTORY_TOKEN_BUDGET` | `24000` | Approximate token budget (chars / 4) for conversation history included in a run. |
 | `HISTORY_MAX_MESSAGES` | `80` | Hard cap on the number of history messages included in a run. |
 | `MEMORY_REFLECTION_DELAY` | `30` | Seconds to debounce background memory reflection after a run completes. |
@@ -292,7 +297,14 @@ so it is the place to look when a bot misbehaves:
   shell tools are rooted.
 - `run <id> started: bot=@... thread=... working_directory=... tool_root=... model=...` followed
   by one `tool_call` / `tool_result` line per tool invocation (arguments and a preview of the
-  result) and a `completed` / `waiting_human` / `failed` line with the elapsed time.
+  result), one `model call N: prompt=... (cache_read=...) completion=...` line per model turn, and a
+  `completed` / `waiting_human` / `failed` line with the elapsed time and the run's token totals.
+  The same totals are stored on the run (`prompt_tokens`, `completion_tokens`, `cache_read_tokens`,
+  `total_tokens`, `model_calls`) and shown on the run card in the thread view. A run whose
+  `cache_read` stays at 0 on an Anthropic model is not being cached (see `PROMPT_CACHING` /
+  `DIRECT_ANTHROPIC`); a run with many model calls and a `prompt=` that climbs every turn is
+  paying for its own transcript over and over (see `TOOL_OUTPUT_CAP`, `CONTEXT_TRIGGER_TOKENS`,
+  `MAX_MODEL_CALLS_PER_RUN`).
 - At `DEBUG`, the full system prompt each run was given.
 
 A bot that reports `frontend does not exist` while listing only a handful of files is almost always

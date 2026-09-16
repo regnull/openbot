@@ -7,13 +7,29 @@ from openbot.tools.context import RunContext
 
 
 @tool
-async def read_file(path: str, runtime: ToolRuntime[RunContext]) -> str:
-    """Read a UTF-8 text file at a path relative to the workspace root."""
+async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int | None = None,
+                    end_line: int | None = None) -> str:
+    """Read a UTF-8 text file at a path relative to the workspace root.
+
+    Pass `start_line` and/or `end_line` (1-based, inclusive) to read only part of a large file; the
+    reply says how many lines the file has. Long results are truncated, so prefer a range over
+    re-reading whole files you have already seen."""
     try:
         p = resolve_in_workspace(runtime.context.workspace_root, path)
-        return cap(p.read_text(encoding="utf-8", errors="replace"))
+        text = p.read_text(encoding="utf-8", errors="replace")
     except (ValueError, OSError) as e:
         return f"error: {e}"
+    limit = runtime.context.tool_output_cap
+    if start_line is None and end_line is None:
+        return cap(text, limit, hint="re-read with start_line/end_line to see the rest")
+    lines = text.splitlines()
+    total = len(lines)
+    start = max(1, start_line or 1)
+    end = min(total, end_line or total)
+    if start > end:
+        return f"error: no lines in range {start}-{end} (file has {total} lines)"
+    body = "\n".join(lines[start - 1:end])
+    return cap(f"lines {start}-{end} of {total}:\n{body}", limit, hint="ask for a narrower line range")
 
 
 @tool
@@ -49,4 +65,4 @@ async def list_files(runtime: ToolRuntime[RunContext], path: str = ".", depth: i
         rel = os.path.relpath(dirpath, root)
         for f in sorted(filenames):
             lines.append(f if rel == "." else f"{rel}/{f}")
-    return cap("\n".join(lines) or "(empty)")
+    return cap("\n".join(lines) or "(empty)", runtime.context.tool_output_cap, hint="list a subdirectory or a smaller depth")

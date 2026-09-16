@@ -31,8 +31,10 @@ class ScriptedChatModel(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=msg)])
 
 
-def ai(text: str = "", tool_calls: list[dict] | None = None) -> AIMessage:
-    return AIMessage(content=text, tool_calls=tool_calls or [])
+def ai(text: str = "", tool_calls: list[dict] | None = None, usage: dict | None = None) -> AIMessage:
+    """`usage` mirrors langchain's usage_metadata: {"input_tokens", "output_tokens", "total_tokens",
+    optional "input_token_details": {"cache_read": n}}."""
+    return AIMessage(content=text, tool_calls=tool_calls or [], usage_metadata=usage)
 
 
 def call(name: str, cid: str = "c1", **args) -> dict:
