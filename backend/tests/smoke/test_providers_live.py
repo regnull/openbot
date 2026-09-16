@@ -12,8 +12,12 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from openbot.config import Settings
-from openbot.db.models import BotProfile
-from openbot.runtime.providers import DEFAULT_MODEL, PROVIDER_MODELS, api_key_for, chat_model
+from openbot.runtime.providers import (
+    DEFAULT_MODEL,
+    PROVIDER_MODELS,
+    api_key_for,
+    provider_chat_model,
+)
 
 pytestmark = pytest.mark.smoke
 
@@ -35,10 +39,7 @@ MAX_TOKENS = 256
 
 
 async def _say_ok(provider: str, model: str, settings: Settings) -> str:
-    chat = chat_model(
-        BotProfile(provider=provider, model=model, model_settings={"max_tokens": MAX_TOKENS}),
-        settings,
-    )
+    chat = provider_chat_model(provider, model, settings, {"max_tokens": MAX_TOKENS})
     out = await chat.ainvoke([HumanMessage(content="Reply with the single word OK.")])
     return out.text if isinstance(out.text, str) else out.text()
 

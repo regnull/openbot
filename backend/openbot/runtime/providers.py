@@ -46,19 +46,25 @@ def effective_bot_profile(bot: BotProfile, settings: Settings) -> tuple[str, str
 
     A configured OpenRouter key makes OpenRouter the runtime provider for every bot, so the team can
     be moved to another OpenRouter model from `.env` without editing persisted bot rows one by one.
-    Installations without OpenRouter configured keep using each bot's stored provider/model.
+    Installations without OpenRouter configured keep using each bot's stored provider/model, even if
+    BOT_MODEL/OPENROUTER_MODEL is set.
     """
-    if settings.bot_model or settings.openrouter_model or api_key_for(settings, DEFAULT_BOT_PROVIDER):
+    if api_key_for(settings, DEFAULT_BOT_PROVIDER):
         return DEFAULT_BOT_PROVIDER, configured_bot_model(settings)
     return bot.provider, bot.model
 
 
-def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
-    provider, model = effective_bot_profile(bot, settings)
+def provider_chat_model(
+    provider: str,
+    model: str,
+    settings: Settings,
+    model_settings: dict | None = None,
+) -> BaseChatModel:
+    """Build a chat model for an explicit provider/model without bot-level env overrides."""
     key = api_key_for(settings, provider)
     if not key:
         raise ValueError(f"provider {provider} is not configured: set {_KEY_ENV[provider]}")
-    ms = dict(bot.model_settings or {})
+    ms = dict(model_settings or {})
     kwargs: dict = {}
     if "temperature" in ms:
         kwargs["temperature"] = ms["temperature"]
@@ -78,6 +84,11 @@ def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
     if provider == "openrouter":
         kwargs["default_headers"] = {"HTTP-Referer": "https://github.com/regnull/openbot", "X-Title": "OpenBot"}
     return ChatOpenAI(model=model, api_key=key, **kwargs)
+
+
+def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
+    provider, model = effective_bot_profile(bot, settings)
+    return provider_chat_model(provider, model, settings, bot.model_settings)
 
 
 def embeddings(settings: Settings) -> Embeddings | None:

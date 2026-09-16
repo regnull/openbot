@@ -96,6 +96,7 @@ def test_env_model_applies_to_all_bot_llm_calls_through_openrouter():
 
 
 def test_existing_provider_model_is_preserved_without_openrouter_config():
-    st = s(openai_api_key="k")
+    st = s(openai_api_key="k", bot_model="google/gemini-2.0-flash-001")
     m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={}), st)
     assert m.model_name == "gpt-4.1-mini"
+    assert not m.openai_api_base
