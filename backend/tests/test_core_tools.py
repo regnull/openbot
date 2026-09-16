@@ -37,6 +37,7 @@ async def setup(services):
 
 def test_names():
     assert [t.name for t in CORE_TOOLS] == ["list_bots", "start_thread", "ask_human", "read_history", "recall_messages"]
+    assert "Do not use this to delegate" in start_thread.description
 
 
 async def test_list_bots_and_history(services):

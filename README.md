@@ -285,7 +285,9 @@ pnpm lint
 pnpm build
 ```
 
-Or, from the repo root: `make test`, `make lint`, `make build`. The live provider smoke
+Or, from the repo root: `make test`, `make lint`, `make build`. `make reset_db` deletes the local
+SQLite databases (app and LangGraph state); the next start re-runs migrations and re-seeds the demo bots.
+The live provider smoke
 tests in `backend/tests/smoke/` are marked `smoke` and deselected by default (`addopts =
 "-m 'not smoke'"`), so `make test` never bills a provider; run them deliberately with
 `make smoke`. Each one skips unless the matching API key is configured.

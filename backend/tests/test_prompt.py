@@ -50,3 +50,6 @@ def test_system_prompt_contents():
     # woke them for no reason. Spell out that @ is an imperative, not a way of naming a bot.
     assert ("Only write @handle when you want that bot to act now. When merely referring to a bot, "
             "use its plain name without @.") in p
+    # The chief of staff used start_thread to delegate, which split the conversation into a new thread
+    # nobody was watching. Hand-offs must stay in the current thread; start_thread is not for delegation.
+    assert "Never use start_thread to delegate or hand off work from this thread" in p
