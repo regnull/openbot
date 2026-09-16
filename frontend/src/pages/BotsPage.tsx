@@ -20,7 +20,7 @@ export default function BotsPage() {
                 <div className="flex min-w-0 items-center gap-2"><BotIcon icon={b.icon} /><span className="truncate font-semibold">{b.name}</span></div>
                 <div className="flex shrink-0 items-center gap-2"><BotActivityIndicator active={b.active} showLabel />{!b.enabled && <Badge tone="amber">disabled</Badge>}</div>
               </div>
-              <div className="text-sm text-zinc-500">@{b.handle} · {b.provider}/{b.model}</div>
+              <div className="text-sm text-zinc-500">@{b.handle} · {b.provider === "auto" ? "auto" : `${b.provider}/${b.model}`}</div>
               <p className="line-clamp-3 text-sm">{b.description || "No description"}</p>
               <div className="text-xs text-zinc-500">{b.tool_names.length} tools{b.approval_tools.length ? ` · ${b.approval_tools.length} need approval` : ""}</div>
             </Card>

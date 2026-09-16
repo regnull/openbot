@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from openbot.bot_icons import DEFAULT_BOT_ICON, validate_bot_icon
 
-Provider = Literal["openai", "anthropic", "openrouter", "xai"]
+Provider = Literal["auto", "openai", "anthropic", "openrouter", "xai"]
 HANDLE_RE = r"^[a-z0-9_-]{2,32}$"
 
 
@@ -45,8 +45,8 @@ class BotCreate(BaseModel):
     description: str = ""
     icon: str = DEFAULT_BOT_ICON
     instructions: str = ""
-    provider: Provider
-    model: str = Field(min_length=1)
+    provider: Provider = "auto"
+    model: str = ""
     model_settings: dict[str, Any] = {}
     tool_names: list[str] = []
     approval_tools: list[str] = []
@@ -57,6 +57,13 @@ class BotCreate(BaseModel):
     @classmethod
     def validate_icon(cls, value: str) -> str:
         return validate_bot_icon(value)
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, value: str, info) -> str:
+        if info.data.get("provider", "auto") != "auto" and not value:
+            raise ValueError("model is required unless provider is \"auto\"")
+        return value
 
 
 class BotUpdate(BaseModel):

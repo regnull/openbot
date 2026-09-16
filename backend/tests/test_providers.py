@@ -9,6 +9,7 @@ from openbot.runtime.providers import (
     chat_model,
     configured_bot_model,
     default_provider,
+    effective_bot_profile,
     embeddings,
     provider_status,
 )
@@ -64,7 +65,17 @@ def test_status_and_default():
 
 async def test_providers_endpoint(client):
     r = await client.get("/api/v1/providers")
-    assert r.status_code == 200 and {p["id"] for p in r.json()["providers"]} == {"openai", "anthropic", "openrouter", "xai"}
+    assert r.status_code == 200 and {p["id"] for p in r.json()["providers"]} == {"auto", "openai", "anthropic", "openrouter", "xai"}
+
+
+def test_status_includes_auto_provider():
+    status = {p["id"]: p for p in provider_status(s(anthropic_api_key="k"))}
+    assert status["auto"]["configured"] is True
+    assert status["auto"]["default_model"] == "anthropic/claude-sonnet-5"
+    assert status["auto"]["models"] == []
+    assert provider_status(s())[0]["id"] == "auto"
+    assert provider_status(s())[0]["configured"] is False
+    assert provider_status(s())[0]["default_model"] == ""
 
 
 def test_configured_bot_model_default_and_env_override(monkeypatch):
@@ -100,3 +111,20 @@ def test_existing_provider_model_is_preserved_without_openrouter_config():
     m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={}), st)
     assert m.model_name == "gpt-4.1-mini"
     assert not m.openai_api_base
+
+
+def test_auto_provider_resolves_to_whatever_is_configured():
+    st = s(anthropic_api_key="k")
+    assert effective_bot_profile(BotProfile(provider="auto", model=""), st) == ("anthropic", "claude-sonnet-5")
+    m = chat_model(BotProfile(provider="auto", model="", model_settings={}), st)
+    assert isinstance(m, ChatAnthropic)
+
+
+def test_auto_provider_follows_openrouter_env_override():
+    st = s(openrouter_api_key="k", bot_model="google/gemini-2.0-flash-001")
+    assert effective_bot_profile(BotProfile(provider="auto", model=""), st) == ("openrouter", "google/gemini-2.0-flash-001")
+
+
+def test_auto_provider_without_any_key_raises():
+    with pytest.raises(ValueError, match="no provider is configured"):
+        chat_model(BotProfile(provider="auto", model="", model_settings={}), s())

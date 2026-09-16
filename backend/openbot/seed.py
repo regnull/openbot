@@ -75,18 +75,18 @@ permission to merge (include the PR link and test summary). Only after an explic
 
 
 async def seed_demo_bots(services) -> int:
-    dp = default_provider(services.settings)
-    if dp is None:
+    if default_provider(services.settings) is None:
         log.info("no provider configured; skipping demo bot seed")
         return 0
-    provider, model = dp
     async with services.session_factory() as session:
         if (await session.execute(select(Actor.id).where(Actor.kind == "bot").limit(1))).first():
             return 0
         for spec in DEMO_BOTS:
+            # provider "auto" (the default) means each bot always uses whichever provider is
+            # configured, so the demo team keeps working as keys are added, removed, or changed.
             session.add(Actor(kind="bot", handle=spec["handle"], name=spec["name"], description=spec["description"],
-                              bot=BotProfile(provider=provider, model=model, instructions=spec["instructions"],
+                              bot=BotProfile(provider="auto", model="", instructions=spec["instructions"],
                                              tool_names=spec["tool_names"], approval_tools=spec["approval_tools"])))
         await session.commit()
-    log.info("seeded %d demo bots using %s/%s", len(DEMO_BOTS), provider, model)
+    log.info("seeded %d demo bots using auto provider selection", len(DEMO_BOTS))
     return len(DEMO_BOTS)
