@@ -1,4 +1,4 @@
-.PHONY: dev backend frontend test smoke build run lint setup reset_db
+.PHONY: dev backend frontend test smoke build run lint setup reset_db sync_bots
 
 setup:          ## install backend and frontend dependencies, create .env from the template
 	cd backend && uv sync
@@ -23,6 +23,9 @@ smoke:          ## run the live provider smoke tests -- these call real APIs and
 
 reset_db:       ## delete the local SQLite databases (app + LangGraph state); migrations and demo bots re-run on next start
 	rm -f openbot.db openbot.db-* openbot.langgraph.db openbot.langgraph.db-*
+
+sync_bots:      ## update the demo bots' instructions/tools/limits from the seed definitions (no threads or memories touched), from the repo root
+	uv run --project backend python -m openbot.seed
 
 lint:           ## lint backend (ruff) and frontend (oxlint)
 	cd backend && uv run ruff check .

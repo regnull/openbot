@@ -204,3 +204,24 @@ async def test_thread_usage_is_zero_for_thread_without_runs(client, services):
     assert r.status_code == 200
     assert r.json() == {"model_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cache_read_tokens": 0}
     assert (await client.get("/api/v1/threads/nope/usage")).status_code == 404
+
+
+# --- read_file: oversized whole-file reads --------------------------------------------------------------
+
+async def test_whole_file_read_over_the_cap_returns_an_outline_not_a_dump(tmp_path):
+    """An 8k head-and-tail dump of a large file is content the model cannot use, and in practice it
+    re-reads the file by ranges right after, paying twice. Over the cap, a whole-file read says how
+    big the file is, shows only the start, and points at start_line/end_line."""
+    lines = [f"line {i:04d} " + "x" * 60 for i in range(1, 401)]
+    (tmp_path / "big.py").write_text("\n".join(lines))
+    out = await read_file.ainvoke({"path": "big.py", "runtime": rt(tmp_path, cap_chars=4000)})
+    assert "400 lines" in out and "start_line/end_line" in out
+    assert "line 0001" in out and "line 0400" not in out            # start shown, tail not dumped
+    assert len(out) <= 4000 // 2 + 200                                # well under the cap, not at it
+    small = await read_file.ainvoke({"path": "big.py", "start_line": 1, "end_line": 3, "runtime": rt(tmp_path, cap_chars=4000)})
+    assert small.startswith("lines 1-3 of 400:")
+
+
+def test_context_editing_triggers_before_a_long_exploration_ends():
+    from openbot.config import Settings
+    assert Settings(_env_file=None).context_trigger_tokens <= 25000
