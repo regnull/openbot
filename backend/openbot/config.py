@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = None
     xai_api_key: str | None = None
 
+    bot_model: str | None = None
+    openrouter_model: str | None = None
+
     embedding_model: str = "openai:text-embedding-3-small"
     embedding_dims: int = 1536
 
@@ -45,6 +48,13 @@ class Settings(BaseSettings):
     def _split_csv(cls, v):
         if isinstance(v, str):
             return [p.strip() for p in v.split(",") if p.strip()]
+        return v
+
+    @field_validator("bot_model", "openrouter_model", mode="before")
+    @classmethod
+    def _empty_model_env_means_default(cls, v):
+        if v == "":
+            return None
         return v
 
     @field_validator("frontend_dist", mode="before")
