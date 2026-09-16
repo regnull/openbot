@@ -232,3 +232,38 @@ async def test_drain_survives_item_bookkeeping_failure(settings):
     assert [r.thread_id for r in rs] == [t1.id, t2.id]
     assert [r.status for r in rs] == ["completed", "completed"]
     await services.actors.stop()
+
+
+async def test_run_is_created_only_when_a_slot_is_free(settings):
+    """Under load a bot used to create its run (and flip its items to processing) and then sit on
+    the semaphore, leaving a phantom queued run that blocked bot deletion and drew an active card.
+    Now the slot comes first: a waiting bot has no run row and its items stay queued."""
+    from langchain_core.messages import AIMessage
+
+    class Slow:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            import time
+            time.sleep(0.6)
+            return AIMessage(content="late")
+
+    settings.max_concurrent_runs = 1
+    services, t = await setup(settings, {}, handles=("eng", "rev"))
+    services.model_factory = lambda actor: ScriptedChatModel(messages=Slow())
+    await post(services, t, "@eng @rev go")
+
+    async def one_running():
+        rs = await runs(services)
+        return rs if any(r.status == "running" for r in rs) else None
+
+    rs = await until(one_running, timeout=2.0)
+    assert [r.status for r in rs] == ["running"]          # exactly one run row exists, and it is live
+    async with services.session_factory() as s:
+        waiting = (await s.execute(select(InboxItem).where(InboxItem.status == "queued", InboxItem.kind == "message"))).scalars().all()
+        bots = {a.id: a.handle for a in (await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars()}
+    assert len(waiting) == 1 and bots[waiting[0].actor_id] != bots[rs[0].actor_id]
+    await services.actors.wait_idle()
+    assert sorted(r.status for r in await runs(services)) == ["completed", "completed"]
+    await services.actors.stop()

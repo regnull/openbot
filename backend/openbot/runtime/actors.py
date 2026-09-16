@@ -84,8 +84,14 @@ class BotActor(_Worker):
         self.current_task: asyncio.Task | None = None
 
     async def _drain(self) -> None:
-        while (batch := await self._pick()) is not None:
+        # Take the concurrency slot before picking: _pick creates the Run row and flips the items to
+        # "processing", so picking first and then waiting on the semaphore left a phantom "queued"
+        # run (blocking bot deletion, drawing an active card) for as long as the wait lasted.
+        while True:
             async with self.system.sem:
+                batch = await self._pick()
+                if batch is None:
+                    return
                 await self._process(batch)
 
     async def _pick(self) -> Batch | None:
