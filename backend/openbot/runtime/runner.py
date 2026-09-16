@@ -183,6 +183,12 @@ class Runner:
         except (TypeError, ValueError):
             return int(self.s.settings.max_model_calls_per_run)
 
+    def recursion_limit(self, agent, bot: Actor) -> int:
+        """Graph steps to allow: one per node per model turn, for one turn more than the call limit, plus
+        room for the closing steps. Every middleware `before_model`/`after_model` hook is its own node."""
+        nodes = [n for n in agent.get_graph().nodes if n not in ("__start__", "__end__")]
+        return len(nodes) * (self.model_call_limit(bot) + 2) + 10
+
     def build_middleware(self, bot: Actor, model) -> list:
         """The run's context controls, in the order LangChain expects them to compose.
 
@@ -276,9 +282,7 @@ class Runner:
         # and linking it drops the reader into the middle of the trace.
         trace_id = uuid.uuid4()
         config = {"configurable": {"thread_id": run.id}, "metadata": {"bot": bot.handle, "thread_id": thread.id, "run_id": run.id},
-                  "run_name": f"bot:{bot.handle}", "run_id": trace_id,
-                  # Each model turn is 2+ graph steps (model, tools, middleware); the model-call limit is the real cap.
-                  "recursion_limit": self.model_call_limit(bot) * 4 + 20}
+                  "run_name": f"bot:{bot.handle}", "run_id": trace_id}
         started = time.monotonic()
         try:
             system_prompt, inputs, hop = await self._prepare(bot, thread, run)
@@ -292,6 +296,10 @@ class Runner:
                              thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap,
                              shell_output_cap=self.s.settings.shell_output_cap)
             agent = self._build_agent(bot, system_prompt)
+            # The model-call limit is the real cap; the graph's recursion limit only has to be high enough
+            # that the limit middleware ends the run first, and is derived from the graph so adding a
+            # middleware hook (each is a node every turn traverses) can never make it the binding limit.
+            config["recursion_limit"] = self.recursion_limit(agent, bot)
             with collect_runs() as cb:
                 final_text, interrupt, seq, usage = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq)
             ls_id = str(trace_id) if cb.traced_runs else None
