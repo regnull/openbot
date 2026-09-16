@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { backendUnavailableMessage, isUnavailableErrorText } from "../lib/backendFallback";
 
 const base = "rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-950";
 export const Input = (p: InputHTMLAttributes<HTMLInputElement>) => <input {...p} className={`${base} w-full border-zinc-300 dark:border-zinc-700 ${p.className ?? ""}`} />;
@@ -29,4 +30,12 @@ const toneClasses = {
 export const Badge = ({ children, tone = "zinc" }: { children: ReactNode; tone?: keyof typeof toneClasses }) =>
   <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${toneClasses[tone]}`}>{children}</span>;
 export const Spinner = () => <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />;
-export const ErrorText = ({ error }: { error: unknown }) => error ? <p className="text-sm text-red-600">{String((error as Error).message ?? error)}</p> : null;
+export const ErrorText = ({ error }: { error: unknown }) => {
+  if (!error) return null;
+  const raw = String((error as Error).message ?? error);
+  // Backend down/restarting: show friendly copy instead of the raw response body.
+  return <p className="text-sm text-red-600">{isUnavailableErrorText(raw) ? backendUnavailableMessage : raw}</p>;
+};
+export const OfflineNotice = () => (
+  <p className="text-sm text-amber-600" data-testid="backend-unavailable">{backendUnavailableMessage}</p>
+);

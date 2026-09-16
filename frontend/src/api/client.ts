@@ -1,17 +1,12 @@
 import type { Actor, Bot, BotInput, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import { ApiError, backendUnavailableEvent, isBackendUnavailable } from "./errors";
+
+export { ApiError } from "./errors";
 
 export const BASE = "/api/v1";
 const KEY = "openbot_api_key";
 export const getApiKey = (): string => { try { return localStorage.getItem(KEY) ?? ""; } catch { return ""; } };
 export const setApiKey = (k: string) => { try { if (k) localStorage.setItem(KEY, k); else localStorage.removeItem(KEY); } catch { /* ignore */ } };
-
-export class ApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
 
 async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
@@ -19,9 +14,22 @@ async function api<T>(path: string, init: RequestInit & { json?: unknown } = {})
   if (key) headers["X-API-Key"] = key;
   let body: BodyInit | undefined;
   if (init.json !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(init.json); }
-  const r = await fetch(BASE + path, { ...init, headers, body });
+  let r: Response;
+  try {
+    r = await fetch(BASE + path, { ...init, headers, body });
+  } catch (err) {
+    // Connection refused / backend down: surface the same "backend unavailable" signal
+    // as an error response so the UI can fall back to the home view.
+    if (err instanceof TypeError) window.dispatchEvent(new CustomEvent(backendUnavailableEvent));
+    throw err;
+  }
   if (r.status === 401) window.dispatchEvent(new CustomEvent("openbot:unauthorized"));
-  if (!r.ok) throw new ApiError(r.status, (await r.text()) || r.statusText);
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    const err = new ApiError(r.status, text || r.statusText);
+    if (isBackendUnavailable(err)) window.dispatchEvent(new CustomEvent(backendUnavailableEvent));
+    throw err;
+  }
   return r.status === 204 ? (undefined as T) : r.json();
 }
 
