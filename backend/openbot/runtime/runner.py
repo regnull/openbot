@@ -191,9 +191,16 @@ class Runner:
             *caching_middleware(model, st),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
-            # Once the transcript passes the trigger, old tool results are replaced by a placeholder so the
-            # context (and the bill for re-sending it) stops growing with every tool call.
+            # Once the transcript passes the trigger, old tool results (and the arguments of the calls that
+            # produced them, e.g. the full content passed to write_file) are replaced by a placeholder so the
+            # context, and the bill for re-sending it, stops growing with every tool call. Each clearing
+            # reclaims a big chunk at once: every edit to earlier context invalidates the provider's prompt
+            # cache from that point, so rare large clearings beat frequent small ones. Questions to the human
+            # and memory writes are the run's own decisions and stay.
             ContextEditingMiddleware(edits=[ClearToolUsesEdit(trigger=st.context_trigger_tokens, keep=3,
+                                                              clear_at_least=st.context_clear_at_least,
+                                                              clear_tool_inputs=True,
+                                                              exclude_tools=("ask_human", "manage_memory"),
                                                               placeholder=CLEARED_TOOL_RESULT)]),
         ]
         if p.approval_tools:

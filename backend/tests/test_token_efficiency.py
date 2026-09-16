@@ -1,6 +1,7 @@
 """Controls that keep a run's token bill bounded: capped tool output with line-range reads, a per-run
 model-call limit, clearing of old tool results, per-run usage accounting, and the seeded team's
 division of labour."""
+import json
 import logging
 from pathlib import Path
 
@@ -225,3 +226,44 @@ async def test_whole_file_read_over_the_cap_returns_an_outline_not_a_dump(tmp_pa
 def test_context_editing_triggers_before_a_long_exploration_ends():
     from openbot.config import Settings
     assert Settings(_env_file=None).context_trigger_tokens <= 25000
+
+
+# --- context editing: defaults that fire, and written content that goes away --------------------------
+
+def test_context_editing_defaults_fire_inside_a_normal_run():
+    """The engineer's transcript peaks near 24k tokens, so a 25k trigger never fired. The trigger sits
+    well inside that range and each clearing reclaims a big chunk, so clearings are rare (cache stays
+    warm) but real."""
+    from openbot.config import Settings
+    s = Settings(_env_file=None)
+    assert s.context_trigger_tokens <= 12000
+    assert 4000 <= s.context_clear_at_least <= s.context_trigger_tokens
+
+
+async def test_clearing_also_drops_write_file_contents_from_the_transcript(settings):
+    """Half the transcript growth was the bot's own write_file arguments: every file it wrote stayed in
+    context in full. Once the tool succeeded that content is on disk; the call parameters go too."""
+    settings.context_trigger_tokens = 50
+    settings.context_clear_at_least = 0
+    ScriptedChatModel.seen.clear()
+    body = "x" * 600
+    script = [ai(tool_calls=[call("write_file", cid=f"w{i}", path=f"f{i}.txt", content=body)]) for i in range(5)] + [ai("done")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["write_file"])
+    await services.runner.execute(run.id)
+    final_prompt = ScriptedChatModel.seen[-1]
+    first_ai = next(m for m in final_prompt if m.type == "ai")
+    assert first_ai.tool_calls and body not in json.dumps(first_ai.tool_calls[0]["args"])   # oldest args cleared
+    last_ai = [m for m in final_prompt if m.type == "ai"][-1]
+    assert body in json.dumps(last_ai.tool_calls[0]["args"])                                  # recent ones kept
+
+
+async def test_ask_human_and_memory_results_are_never_cleared(settings):
+    settings.context_trigger_tokens = 50
+    settings.context_clear_at_least = 0
+    ScriptedChatModel.seen.clear()
+    script = [ai(tool_calls=[call("manage_memory", cid="m1", content="always wait for CI")])] + _shell_loop(5) + [ai("done")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    final_prompt = ScriptedChatModel.seen[-1]
+    mem = next(m for m in final_prompt if m.type == "tool" and m.name == "manage_memory")
+    assert mem.content != CLEARED_TOOL_RESULT

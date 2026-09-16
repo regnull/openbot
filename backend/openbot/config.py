@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     prompt_caching: bool = True          # add Anthropic cache breakpoints to every model call
     direct_anthropic: bool = True        # send OpenRouter `anthropic/...` models to Anthropic directly when a key exists
     tool_output_cap: int = 8000          # max chars of any single tool result the model sees (head + tail kept)
-    context_trigger_tokens: int = 25000  # clear old tool results once a run's context exceeds this
+    context_trigger_tokens: int = 12000  # clear old tool results once a run's context exceeds this
+    context_clear_at_least: int = 6000   # ...and reclaim at least this many tokens per clearing, so clearings are rare
     max_model_calls_per_run: int = 40    # model turns per run before the agent is stopped (bots can lower it)
     history_token_budget: int = 24000
     history_max_messages: int = 80
