@@ -23,7 +23,9 @@ async def list_bots(runtime: ToolRuntime[RunContext]) -> str:
 @tool
 async def start_thread(title: str, handles: list[str], message: str, runtime: ToolRuntime[RunContext],
                        working_directory: str | None = None) -> str:
-    """Start a new thread with the given actor handles (bots, or "you" for the human) and post the first message.
+    """Start a separate, unrelated conversation with the given actor handles (bots, or "you" for the human) and post
+    the first message. Do not use this to delegate or hand off work from the current thread: reply in the current
+    thread and @mention the bot instead, so the human and other participants can follow.
     `working_directory`, when provided, must be an existing directory relative to this thread's current tool root.
     Mention bots with @handle in the message to wake them up."""
     from openbot.runtime.delivery import create_thread, post_message

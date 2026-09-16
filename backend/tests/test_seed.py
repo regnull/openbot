@@ -28,3 +28,9 @@ async def test_seed_uses_configured_bot_model(services):
         bots = {a.handle: a for a in (await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars()}
     assert bots["chief_of_staff"].bot.provider == "openrouter"
     assert bots["chief_of_staff"].bot.model == "google/gemini-2.0-flash-001"
+
+
+def test_chief_of_staff_delegates_in_the_same_thread():
+    chief = next(b for b in DEMO_BOTS if b["handle"] == "chief_of_staff")
+    assert "in this same thread" in chief["instructions"]
+    assert "Never use start_thread" in chief["instructions"]
