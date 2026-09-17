@@ -18,7 +18,8 @@ ACTORS = {a.handle: a for a in [mk("eng"), mk("rev"), mk("qa"), mk("off", enable
 def test_parse_mentions():
     assert parse_mentions("hi @eng and @rev, @eng again") == ["eng", "rev"]
     assert parse_mentions("email me@example.com") == []
-    assert parse_mentions("(@qa) @nope-bot!") == ["qa", "nope-bot"]
+    # @qa is preceded by ( so it doesn't match begin-of-line/after-space; @nope-bot preceded by a space does.
+    assert parse_mentions("(@qa) @nope-bot!") == ["nope-bot"]
     assert parse_mentions("@a") == []
 
 
