@@ -1,5 +1,6 @@
 """Minimal .env, settings in the database, first-run setup (docs/superpowers/specs/2026-09-17-setup-wizard-design.md)."""
 import json
+import os
 
 from sqlalchemy import select
 
@@ -126,3 +127,15 @@ def test_env_example_holds_only_what_the_process_needs_to_start():
     forbidden = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "OLLAMA_BASE_URL", "OLLAMA_MODEL",
                  "BOT_MODEL", "EMBEDDING_MODEL", "EMBEDDING_DIMS", "MAX_MODEL_CALLS_PER_RUN", "CONTEXT_TRIGGER_TOKENS"}
     assert not (forbidden & names), forbidden & names
+
+
+def test_create_app_loads_the_dotenv_next_to_the_working_directory_not_the_package(tmp_path, settings, monkeypatch):
+    # `make setup` copies .env.example into the directory the server is started from. Loading .env
+    # relative to the package would pick up a developer's repo-root .env when the server runs elsewhere.
+    (tmp_path / ".env").write_text("OPENBOT_DOTENV_PROBE=from-cwd\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENBOT_DOTENV_PROBE", raising=False)
+    from openbot.main import create_app
+
+    create_app(settings=settings)
+    assert os.environ.get("OPENBOT_DOTENV_PROBE") == "from-cwd"

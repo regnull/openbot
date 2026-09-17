@@ -185,7 +185,7 @@ class SpaStaticFiles(StaticFiles):
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     settings = settings or get_settings()
     configure_logging(settings)
 
