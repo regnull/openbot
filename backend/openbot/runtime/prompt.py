@@ -43,13 +43,22 @@ def build_history(messages: list[Message], actor_id: str, *, token_budget: int, 
 
 def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list[str], memories: list[str],
                         workspace_root: str, older_count: int, tool_names: list[str],
-                        default_bot_handle: str | None = None) -> str:
+                        default_bot_handle: str | None = None, scoped: bool = False) -> str:
+    """`scoped` is the view a delegate gets: only the messages addressed to it and its own replies, with
+    `older_count` other messages hidden. The default bot (or the only bot in a thread) sees the whole
+    thread, and `older_count` is then what fell outside the history budget."""
     roster = "\n".join(f"- @{b.handle} ({b.name}): {b.description or 'no description'}"
                        for b in all_bots
                        if b.kind == "bot" and b.enabled is not False and b.id != bot.id) or "- (no other bots)"
     mem = "\n".join(f"- {m}" for m in memories) or "- (none yet)"
-    older = (f"This thread has {older_count} older messages not shown. Use recall_messages (semantic search) or "
-             f"read_history (chronological paging) to fetch them.") if older_count else "The full thread history is shown."
+    if scoped:
+        older = (f"You see only the messages addressed to you (@{bot.handle}) and your own earlier replies in this thread; "
+                 f"{older_count} other messages exist but are not shown. The message that woke you should contain everything "
+                 f"you need. If it does not, use read_history (chronological, by message id) or recall_messages (semantic "
+                 f"search) to fetch the rest before asking a human.")
+    else:
+        older = (f"This thread has {older_count} older messages not shown. Use recall_messages (semantic search) or "
+                 f"read_history (chronological paging) to fetch them.") if older_count else "The full thread history is shown."
     default_note = (f" The default bot for this thread is @{default_bot_handle}; if the human sends a message without mentioning a bot, that bot is woken."
                     if default_bot_handle else "")
     return f"""You are {bot.name} (@{bot.handle}), a persistent AI bot on the OpenBot platform.

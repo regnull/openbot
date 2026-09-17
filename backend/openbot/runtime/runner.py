@@ -157,21 +157,32 @@ class Runner:
             parts = (await session.execute(select(ThreadParticipant).where(ThreadParticipant.thread_id == thread.id))).scalars().all()
             trigger_ids = [i.message_id for i in (await session.execute(select(InboxItem).where(InboxItem.run_id == run.id, InboxItem.kind == "message"))).scalars() if i.message_id]
             triggers = (await session.execute(select(Message).where(Message.id.in_(trigger_ids)))).scalars().all() if trigger_ids else []
-        history, older = build_history(list(rows), bot.id, token_budget=st.history_token_budget, max_messages=st.history_max_messages,
-                                       trigger_ids={m.id for m in triggers})
-        older += max(0, total - len(rows))
         by_id = {a.id: a for a in all_actors}
         by_handle = {a.handle: a for a in all_actors}
         participants = [by_id[p.actor_id].name for p in parts if p.actor_id in by_id]
         default_bot_handle = by_id[thread.default_bot_actor_id].handle if thread.default_bot_actor_id in by_id else None
         if default_bot_handle is None and DEFAULT_BOT_HANDLE in by_handle:
             default_bot_handle = DEFAULT_BOT_HANDLE
+        # Who sees the whole thread: the default bot (it coordinates, so it needs the conversation) and the
+        # only bot in a thread (nobody is delegating to it). Every other bot is a delegate and sees just the
+        # messages addressed to it plus its own earlier replies: the hand-off has to be self-contained, and
+        # read_history / recall_messages fetch the rest when it is not. Cuts each delegate call from
+        # thread-sized to hand-off-sized, and keeps one bot's chatter out of another's context.
+        bots_in_thread = {p.actor_id for p in parts if p.actor_id in by_id and by_id[p.actor_id].kind == "bot"}
+        is_default = default_bot_handle is not None and by_handle.get(default_bot_handle) is not None and by_handle[default_bot_handle].id == bot.id
+        scoped = not is_default and len(bots_in_thread) > 1
+        trigger_ids = {m.id for m in triggers}
+        if scoped:
+            rows = [m for m in rows if m.sender_actor_id == bot.id or bot.id in (m.mentions or []) or m.id in trigger_ids]
+        history, older = build_history(list(rows), bot.id, token_budget=st.history_token_budget, max_messages=st.history_max_messages,
+                                       trigger_ids=trigger_ids)
+        older += max(0, total - len(rows))
         query = "\n".join(m.content for m in triggers)
         memories = await memory.relevant_memories(self.s.store, bot.id, query) if self.s.store is not None else []
         workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
         prompt = build_system_prompt(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
                                      workspace_root=str(workspace_root), older_count=older,
-                                     tool_names=list(bot.bot.tool_names), default_bot_handle=default_bot_handle)
+                                     tool_names=list(bot.bot.tool_names), default_bot_handle=default_bot_handle, scoped=scoped)
         hop = max([m.hop for m in triggers], default=0) + 1
         return prompt, {"messages": history}, hop
 
