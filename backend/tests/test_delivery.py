@@ -33,7 +33,7 @@ async def test_post_creates_items_for_bots_and_notifies_humans(services):
         async with services.session_factory() as s:
             you = await human_actor(s)
             t = await create_thread(services, s, title="t", handles=["eng", "ci"], created_by=you)
-            res = await post_message(services, s, thread_id=t.id, sender=you, content="hi @rev")
+            res = await post_message(services, s, thread_id=t.id, sender=you, content="@rev hi")
         assert [a.handle for a in res.addressed] == ["rev"] and res.unaddressed is False
         assert res.message.hop == 0 and res.message.mentions == [rev.id] and res.message.sender_kind == "human"
         events = [q.get_nowait()["event"] for _ in range(q.qsize())]
