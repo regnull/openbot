@@ -94,6 +94,19 @@ def _text(m) -> str:
     return t() if callable(t) else ""
 
 
+class RunMessagesSummarization(SummarizationMiddleware):
+    """Summarize on the size of the run's own messages only.
+
+    The parent has a second trigger: it also summarizes whenever the model's reported `total_tokens` for
+    the previous call passes the threshold. That total counts the system prompt and every tool schema,
+    30k+ tokens for a bot with an MCP server, so it fired on every call, folded the model's fresh file
+    reads into a summary each time, and the model read them again: a deterministic loop that ran until
+    the model-call limit. `summary_trigger_tokens` means the run's messages, so that trigger is off."""
+
+    def _should_summarize_based_on_reported_tokens(self, messages, threshold) -> bool:
+        return False
+
+
 class Runner:
     def __init__(self, services) -> None:
         self.s = services
@@ -221,8 +234,8 @@ class Runner:
             *caching_middleware(model, st),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
-            SummarizationMiddleware(model, trigger=("tokens", st.summary_trigger_tokens),
-                                    keep=("messages", st.summary_keep_messages)),
+            RunMessagesSummarization(model, trigger=("tokens", st.summary_trigger_tokens),
+                                      keep=("messages", st.summary_keep_messages)),
             ContextEditingMiddleware(edits=[ClearToolUsesEdit(trigger=st.context_trigger_tokens, keep=3,
                                                               clear_at_least=st.context_clear_at_least,
                                                               clear_tool_inputs=True,
@@ -245,6 +258,10 @@ class Runner:
     async def _stream(self, agent, inputs, config, ctx: RunContext, run: Run, seq: int) -> tuple[str, dict | None, int, dict[str, int]]:
         final_text, interrupt = "", None
         usage = empty_usage()
+        # Middleware nodes that rewrite state (summarization: RemoveMessage(all) + summary + kept messages)
+        # re-emit earlier AI messages in their update. Those are not new model calls: counting them again
+        # tripled the usage totals, logged every old tool_call again and showed each reply twice in the UI.
+        seen_replies: set[str] = set()
         async for mode, data in agent.astream(inputs, config=config, context=ctx, stream_mode=["messages", "updates"]):
             if mode == "messages":
                 token, meta = data
@@ -267,6 +284,10 @@ class Runner:
                     for m in update.get("messages", []):
                         if not isinstance(m, AIMessage):
                             continue
+                        if m.id:
+                            if m.id in seen_replies:
+                                continue
+                            seen_replies.add(m.id)
                         inc = add_usage(usage, m)
                         if inc is not None:
                             log.info("run %s model call %d: prompt=%d (cache_read=%d) completion=%d", run.id, usage["model_calls"],
