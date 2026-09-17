@@ -11,7 +11,7 @@ import RunCard from "./RunCard";
 
 const ACTIVE = ["queued", "running", "waiting_human"];
 
-export default function MessageList({ state, participants, onRunLoaded, iconByActor }: { state: ThreadState; participants: Participant[]; onRunLoaded: (run: RunDetail) => void; iconByActor?: Record<string, string> }) {
+export default function MessageList({ state, participants, onRunLoaded, iconByActor, nameByActor }: { state: ThreadState; participants: Participant[]; onRunLoaded: (run: RunDetail) => void; iconByActor?: Record<string, string>; nameByActor?: Record<string, string> }) {
   const byActor = new Map(participants.map((p) => [p.actor_id, p]));
   // Runs referenced by a message whose events we do not have yet: fetch them lazily.
   // `onRunLoaded` folds the result into thread state, which drops the id from `missing`
@@ -42,6 +42,7 @@ export default function MessageList({ state, participants, onRunLoaded, iconByAc
   // of the active strip so it is not shown twice while it finishes.
   const shown = new Set(state.messages.map((m) => m.run_id).filter((r): r is string => !!r));
   const active = Object.values(state.runs).filter((r) => ACTIVE.includes(r.status) && !shown.has(r.id));
+  const botName = (actorId: string): string | undefined => byActor.get(actorId)?.name ?? nameByActor?.[actorId];
   return (
     <div className="space-y-4">
       {state.messages.map((m) => {
@@ -65,18 +66,18 @@ export default function MessageList({ state, participants, onRunLoaded, iconByAc
                 </div>
               )}
               {run && <RunCard run={run} events={eventsFor(run.id)} streaming={state.streaming[run.id]} />}
-              {run?.status === "waiting_human" && <InterruptCard run={run} botName={byActor.get(run.actor_id)?.name} />}
+              {run?.status === "waiting_human" && <InterruptCard run={run} botName={botName(run.actor_id)} />}
             </div>
           </div>
         );
       })}
       {active.map((r) => (
         <div key={r.id} className="flex gap-3">
-          <Avatar name={byActor.get(r.actor_id)?.name ?? "bot"} kind="bot" icon={iconByActor?.[r.actor_id]} />
+          <Avatar name={botName(r.actor_id) ?? "bot"} kind="bot" icon={iconByActor?.[r.actor_id]} />
           <div className="min-w-0 flex-1 space-y-1">
-            <div className="text-xs text-zinc-500">{byActor.get(r.actor_id)?.name ?? "bot"} · {r.status.replace("_", " ")}</div>
+            <div className="text-xs text-zinc-500">{botName(r.actor_id) ?? "bot"} · {r.status.replace("_", " ")}</div>
             <RunCard run={r} events={eventsFor(r.id)} streaming={state.streaming[r.id]} />
-            {r.status === "waiting_human" && <InterruptCard run={r} botName={byActor.get(r.actor_id)?.name} />}
+            {r.status === "waiting_human" && <InterruptCard run={r} botName={botName(r.actor_id)} />}
           </div>
         </div>
       ))}
