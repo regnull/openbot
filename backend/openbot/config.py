@@ -52,10 +52,10 @@ class Settings(BaseSettings):
     direct_anthropic: bool = True        # send OpenRouter `anthropic/...` models to Anthropic directly when a key exists
     tool_output_cap: int = 8000          # max chars of any single tool result the model sees (head + tail kept)
     shell_output_cap: int = 4000         # tighter cap for run_shell, so dumping a file through cat/git show loses to read_file ranges
-    context_trigger_tokens: int = 12000  # clear old tool results once a run's context exceeds this
-    context_clear_at_least: int = 6000   # ...and reclaim at least this many tokens per clearing, so clearings are rare
-    summary_trigger_tokens: int = 18000  # summarize older history into one message once a run's context exceeds this
-    summary_keep_messages: int = 12      # ...keeping this many recent messages verbatim
+    context_trigger_tokens: int = 40000  # clear tool results from older turns once a run's messages exceed this
+    context_clear_at_least: int = 10000  # ...and reclaim at least this many tokens per clearing, so clearings are rare
+    summary_trigger_tokens: int = 60000  # summarize older history into one message once a run's messages exceed this
+    summary_keep_messages: int = 24      # ...keeping this many recent messages verbatim (two turns of ~10 tool calls)
     max_model_calls_per_run: int = 60    # model turns per run before the agent is stopped (bots can lower it)
     history_token_budget: int = 24000
     history_max_messages: int = 80
