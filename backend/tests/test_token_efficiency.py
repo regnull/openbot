@@ -299,8 +299,9 @@ def test_middleware_order_is_limit_then_summarize_then_clear(settings):
     services = type("S", (), {"settings": settings, "registry": None, "store": None})()
     runner = Runner(services)
     mw = runner.build_middleware(bot_actor("eng"), ScriptedChatModel(messages=iter([])))
-    kinds = [type(m) for m in mw]
-    assert kinds.index(ModelCallLimitMiddleware) < kinds.index(SummarizationMiddleware) < kinds.index(ContextEditingMiddleware)
+    def index_of(kind):
+        return next(i for i, m in enumerate(mw) if isinstance(m, kind))
+    assert index_of(ModelCallLimitMiddleware) < index_of(SummarizationMiddleware) < index_of(ContextEditingMiddleware)
 
 
 def test_summarization_defaults_sit_above_the_clearing_trigger():
@@ -364,3 +365,53 @@ async def test_model_call_limit_is_reached_before_the_graph_recursion_limit(sett
     assert run.status == "completed", run.error
     assert [e.type for e in await events(services, run.id)].count("tool_call") == 40
     assert "limit" in (await messages(services, t.id))[-1].content.lower()
+
+
+# --- summarization must measure the run's messages, not the model's reported prompt size ----------------
+
+def test_summarization_ignores_the_reported_total_that_includes_the_prompt_prefix(settings):
+    """SummarizationMiddleware also fires when the last reply's usage_metadata.total_tokens passes the trigger.
+    That total counts the system prompt and every tool schema (30k+ tokens for a bot with an MCP server), so
+    it fired on every call: each call folded the model's fresh file reads into a summary and the model read
+    them again. Seen on LangSmith: 154 calls, half of them summaries, messages measuring 8.5k tokens."""
+    from langchain.agents.middleware import SummarizationMiddleware
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from tests.factories import bot_actor
+    settings.summary_trigger_tokens = 18000
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    model = ScriptedChatModel(messages=iter([]))
+    mw = next(m for m in Runner(services).build_middleware(bot_actor("eng"), model) if isinstance(m, SummarizationMiddleware))
+    reply = ai(tool_calls=[call("read_file", cid="c1", path="a.py")], usage={"input_tokens": 41000, "output_tokens": 79, "total_tokens": 41079})
+    reply.response_metadata = {"model_provider": model._get_ls_params().get("ls_provider")}
+    small = [HumanMessage("task"), reply, ToolMessage(content="x" * 4000, tool_call_id="c1", name="read_file")]
+    assert mw._should_summarize(small, mw.token_counter(small)) is False, "8.5k tokens of messages must not summarize"
+    big = [HumanMessage("task"), reply] + [ToolMessage(content="x" * 20000, tool_call_id="c1", name="read_file")] * 5
+    assert mw._should_summarize(big, mw.token_counter(big)) is True, "the messages themselves still trigger it"
+
+
+# --- middleware nodes re-emit earlier replies; they are not new model calls -----------------------------
+
+async def test_stream_counts_a_reply_once_even_when_a_middleware_node_re_emits_it(settings):
+    """SummarizationMiddleware rewrites state as [RemoveMessage(all), summary, *kept]; the kept AI messages
+    arrive again in an `updates` chunk. Counting them again inflated model_calls and token totals 3x, logged
+    every old tool_call again, and showed the same reply text twice in the UI."""
+    from langchain_core.messages import HumanMessage, RemoveMessage
+    from langgraph.graph.message import REMOVE_ALL_MESSAGES
+    services, _eng, _t, run = await make(settings, {"eng": []})
+    first = ai("I'm on it", tool_calls=[call("read_file", cid="c1", path="a.py")], usage={"input_tokens": 100, "output_tokens": 10, "total_tokens": 110})
+    first.id = "ai-1"
+    last = ai("done", usage={"input_tokens": 120, "output_tokens": 5, "total_tokens": 125})
+    last.id = "ai-2"
+
+    class Agent:
+        async def astream(self, *_a, **_k):
+            yield "updates", {"model": {"messages": [first]}}
+            yield "updates", {"SummarizationMiddleware.before_model": {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), HumanMessage("summary"), first]}}
+            yield "updates", {"model": {"messages": [last]}}
+
+    final_text, _interrupt, _seq, usage = await services.runner._stream(Agent(), {}, {}, None, run, 0)
+    assert final_text == "done"
+    assert usage["model_calls"] == 2 and usage["prompt_tokens"] == 220
+    kinds = [e.type for e in await events(services, run.id)]
+    assert kinds.count("tool_call") == 1 and kinds.count("text") == 2
