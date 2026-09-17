@@ -4,7 +4,7 @@ import { Api, getApiKey, setApiKey } from "../api/client";
 import type { AppSetting, McpServer, McpServerInput } from "../api/types";
 import { Badge, Button, Card, ErrorText, Field, Input, Textarea } from "../components/ui";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
-import { formatKeyValues, mcpActions, mcpInFlight, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer, type McpTransport } from "../lib/mcpServers";
+import { formatArgs, formatKeyValues, mcpActions, mcpInFlight, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer, type McpTransport } from "../lib/mcpServers";
 
 const emptyExt = { handle: "", name: "", webhook_url: "", webhook_secret: "" };
 
@@ -218,7 +218,7 @@ function McpServersCard() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono">{s.name}</span>
                 <Badge tone={badge.tone}>{badge.label}</Badge>
-                <span className="truncate text-xs text-zinc-500">{s.transport === "http" ? `remote${s.oauth ? " · OAuth" : ""} · ${s.url ?? ""}` : `local · ${s.command ?? ""} ${s.args.join(" ")}`}</span>
+                <span className="truncate text-xs text-zinc-500">{s.transport === "http" ? `remote${s.oauth ? " · OAuth" : ""} · ${s.url ?? ""}` : `local · ${s.command ?? ""} ${formatArgs(s.args)}`}</span>
                 {s.authorization_url && <a className="text-xs underline" href={s.authorization_url} target="_blank" rel="noopener noreferrer">Authorize</a>}
                 {s.tools.length > 0 && (
                   <button type="button" className="text-xs text-zinc-500 underline" onClick={() => setOpen((o) => ({ ...o, [s.name]: !o[s.name] }))}>
@@ -253,7 +253,7 @@ function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onC
   const [url, setUrl] = useState(server?.url ?? "");
   const [headers, setHeaders] = useState(formatKeyValues(server?.headers ?? {}));
   const [command, setCommand] = useState(server?.command ?? "");
-  const [args, setArgs] = useState((server?.args ?? []).join(" "));
+  const [args, setArgs] = useState(formatArgs(server?.args ?? []));
   const [env, setEnv] = useState(formatKeyValues(server?.env ?? {}));
   const [cwd, setCwd] = useState(server?.cwd ?? "");
   const [touched, setTouched] = useState(false);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "../api/types";
-import { formatKeyValues, mcpActions, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer } from "./mcpServers";
+import { formatArgs, formatKeyValues, mcpActions, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer } from "./mcpServers";
 
 const server = (status: McpServer["status"], oauth = false): McpServer =>
   ({ name: "linear", transport: "http", status, enabled: status !== "disabled", oauth, url: "https://x/mcp", error: null, tools: [], source: "file", authorization_url: null, command: null, args: [], cwd: null, env: {}, headers: {} });
@@ -60,5 +60,14 @@ describe("validateNewMcpServer for local servers and key/value parsing", () => {
     expect(parseKeyValues("")).toEqual({ values: {} });
     expect(parseArgs("-y  @modelcontextprotocol/server-github\n--flag")).toEqual(["-y", "@modelcontextprotocol/server-github", "--flag"]);
     expect(formatKeyValues({ A: "1", B: "••••••••" })).toBe("A=1\nB=••••••••");
+  });
+});
+
+describe("parseArgs and formatArgs with quoting", () => {
+  it("round-trips arguments that contain spaces", () => {
+    expect(parseArgs('--root "/Users/me/My Docs" -y')).toEqual(["--root", "/Users/me/My Docs", "-y"]);
+    expect(parseArgs("a 'b c' d")).toEqual(["a", "b c", "d"]);
+    expect(formatArgs(["--root", "/Users/me/My Docs", "-y"])).toBe('--root "/Users/me/My Docs" -y');
+    expect(parseArgs(formatArgs(["x y", "z"]))).toEqual(["x y", "z"]);
   });
 });

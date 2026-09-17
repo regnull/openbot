@@ -353,17 +353,10 @@ class McpServerOut(BaseModel):
 
 
 def _check_url(v: str) -> str:
-    from urllib.parse import urlparse
-    v = v.strip()
-    if "${" in v:                     # a variable reference; checked after expansion, when connecting
-        return v
-    u = urlparse(v)
-    if not u.netloc:
-        raise ValueError("url must be absolute, for example https://mcp.example.com/mcp")
-    local = u.hostname in ("localhost", "127.0.0.1", "::1")
-    if u.scheme != "https" and not (u.scheme == "http" and local):
-        raise ValueError("url must use https (http is allowed for localhost only)")
-    return v
+    from openbot.mcp.config import (
+        check_url,  # one rule, applied at write time and again after ${VAR} expansion
+    )
+    return check_url(v)
 
 
 class McpServerCreate(BaseModel):

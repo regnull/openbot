@@ -2,11 +2,25 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
-import type { BotInput, ToolInfo } from "../api/types";
+import type { BotInput } from "../api/types";
 import BotIcon from "../components/BotIcon";
 import { Button, Card, ErrorText, Field, Input, Select, Spinner, Textarea } from "../components/ui";
 import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
-import { groupState, groupTools, toggleGroup } from "../lib/toolGroups";
+import { groupState, groupTools, toggleGroup, toolLabel, unavailableGrants } from "../lib/toolGroups";
+
+function ToolRow({ name, label, description, on, approval, onToggle, onToggleApproval }:
+  { name: string; label: string; description: string; on: boolean; approval: boolean; onToggle: () => void; onToggleApproval: () => void }) {
+  return (
+    <div className="flex items-start gap-3 py-2">
+      <input type="checkbox" className="mt-1" checked={on} onChange={onToggle} aria-label={name} />
+      <div className="min-w-0 flex-1">
+        <div className="font-mono text-sm">{label}</div>
+        <div className="text-xs text-zinc-500">{description}</div>
+      </div>
+      {on && <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={approval} onChange={onToggleApproval} /> needs approval</label>}
+    </div>
+  );
+}
 
 const empty: BotInput = { handle: "", name: "", description: "", icon: DEFAULT_BOT_ICON, instructions: "", provider: "auto", model: "", model_settings: {},
   tool_names: [], approval_tools: [], memory_enabled: true, enabled: true };
@@ -43,20 +57,8 @@ export default function BotEditorPage() {
   const auto = providers.data?.providers.find((p) => p.id === "auto");
   const prov = providers.data?.providers.find((p) => p.id === form.provider);
   const grouped = groupTools(tools.data?.tools ?? []);
+  const unavailable = unavailableGrants(form.tool_names, tools.data?.tools ?? []);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const ToolRow = ({ tool: t, short = false }: { tool: ToolInfo; short?: boolean }) => {
-    const on = form.tool_names.includes(t.name);
-    return (
-      <div className="flex items-start gap-3 py-2">
-        <input type="checkbox" className="mt-1" checked={on} onChange={() => toggleTool(t.name)} />
-        <div className="min-w-0 flex-1">
-          <div className="font-mono text-sm">{short ? t.name.split("__").slice(1).join("__") || t.name : t.name}</div>
-          <div className="text-xs text-zinc-500">{t.description}</div>
-        </div>
-        {on && <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={form.approval_tools.includes(t.name)} onChange={() => toggleApproval(t.name)} /> needs approval</label>}
-      </div>
-    );
-  };
   if (!isNew && bot.isLoading) return <Spinner />;
 
   return (
@@ -105,12 +107,12 @@ export default function BotEditorPage() {
         <p className="text-xs text-amber-600">Warning: <code>run_shell</code> is not sandboxed. It runs any command as the server user, with access to the whole filesystem and the server environment (including your provider API keys). Only the file tools are confined to the workspace.</p>
         {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-red-600">{e.file}: {e.error}</p>)}
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-          {grouped.flat.map((t) => <ToolRow key={t.name} tool={t} />)}
+          {grouped.flat.map((t) => <ToolRow key={t.name} name={t.name} label={t.name} description={t.description} on={form.tool_names.includes(t.name)} approval={form.approval_tools.includes(t.name)} onToggle={() => toggleTool(t.name)} onToggleApproval={() => toggleApproval(t.name)} />)}
         </div>
         {grouped.servers.length > 0 && (
           <>
             <h3 className="pt-2 text-sm font-medium">MCP servers</h3>
-            <p className="text-xs text-zinc-500">Grant a whole server, or expand it and pick tools. Servers that are not connected right now still show the tools they had; the bot uses them once the server is back.</p>
+            <p className="text-xs text-zinc-500">Grant a whole server, or expand it and pick tools. Only connected servers list their tools; grants for a server that is disabled or down are kept and shown below so you can remove them.</p>
             <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {grouped.servers.map((g) => {
                 const names = g.tools.map((t) => t.name);
@@ -127,10 +129,19 @@ export default function BotEditorPage() {
                         <span className="ml-auto text-zinc-500">{expanded ? "▾" : "▸"}</span>
                       </button>
                     </div>
-                    {expanded && <div className="ml-6 divide-y divide-zinc-100 dark:divide-zinc-800/60">{g.tools.map((t) => <ToolRow key={t.name} tool={t} short />)}</div>}
+                    {expanded && <div className="ml-6 divide-y divide-zinc-100 dark:divide-zinc-800/60">{g.tools.map((t) => <ToolRow key={t.name} name={t.name} label={toolLabel(g.server, t.name)} description={t.description} on={form.tool_names.includes(t.name)} approval={form.approval_tools.includes(t.name)} onToggle={() => toggleTool(t.name)} onToggleApproval={() => toggleApproval(t.name)} />)}</div>}
                   </div>
                 );
               })}
+            </div>
+          </>
+        )}
+        {unavailable.length > 0 && (
+          <>
+            <h3 className="pt-2 text-sm font-medium">Granted but currently unavailable</h3>
+            <p className="text-xs text-zinc-500">These tools are granted to the bot but their server is not connected right now. They come back when it is; untick to remove the grant.</p>
+            <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {unavailable.map((n) => <ToolRow key={n} name={n} label={n} description="not available right now" on approval={form.approval_tools.includes(n)} onToggle={() => toggleTool(n)} onToggleApproval={() => toggleApproval(n)} />)}
             </div>
           </>
         )}

@@ -33,6 +33,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # Revision 0011 only knows remote servers with a URL; local (stdio) rows cannot be represented
+    # there, so they go rather than failing the NOT NULL re-imposition mid-batch.
+    op.execute("DELETE FROM mcp_servers WHERE url IS NULL")
     with op.batch_alter_table("mcp_servers") as batch:
         batch.add_column(sa.Column("headers", sa.JSON(), nullable=True))
         batch.alter_column("url", existing_type=sa.String(length=2000), nullable=False)

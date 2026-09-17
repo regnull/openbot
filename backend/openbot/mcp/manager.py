@@ -103,6 +103,7 @@ class McpManager:
         self._settings = settings
         self._storage = storage
         self.store = store          # McpServerStore; the API reads/writes specs through it
+        self.init_error: str | None = None   # set when the store could not be built (bad credential key)
         self.flows = flows or PendingFlows()
         self._connect_timeout = connect_timeout
         self._status: dict[str, ServerStatus] = {}
@@ -141,9 +142,12 @@ class McpManager:
         await self._close(cfg.name)
         st = self._register(cfg)
         if st.status not in ("disabled", "error"):
-            # Non-interactive: a PATCH must not wait minutes for a browser. An OAuth server without
-            # credentials lands in needs_auth and the UI offers "Connect & authorize".
-            await self.connect(cfg.name)
+            # In the background and non-interactively: a PATCH must return at once, not wait out a
+            # 30s transport timeout or minutes for a browser. An OAuth server without credentials
+            # lands in needs_auth and the UI offers "Connect & authorize".
+            st.status = "connecting"
+            task = asyncio.create_task(self.connect(cfg.name), name=f"mcp-connect:{cfg.name}")
+            self._tasks[cfg.name] = task
         return st
 
     async def remove_server(self, name: str) -> None:
