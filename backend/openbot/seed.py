@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
-from openbot.db.models import Actor, BotProfile
+from openbot.db.models import Actor, AppSetting, BotProfile, utcnow
+from openbot.runtime.app_settings import SETUP_COMPLETED_KEY
 from openbot.runtime.providers import default_provider
 
 log = logging.getLogger(__name__)
@@ -144,6 +146,7 @@ async def seed_demo_bots(services) -> int:
         log.info("no provider configured; skipping demo bot seed")
         return 0
     async with services.session_factory() as session:
+        # Already seeded: another call raced ahead and finished first.
         if (await session.execute(select(Actor.id).where(Actor.kind == "bot").limit(1))).first():
             return 0
         for spec in DEMO_BOTS:
@@ -153,7 +156,22 @@ async def seed_demo_bots(services) -> int:
                               bot=BotProfile(provider="auto", model="", instructions=spec["instructions"],
                                              model_settings=dict(spec.get("model_settings", {})),
                                              tool_names=spec["tool_names"], approval_tools=spec["approval_tools"])))
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError:
+            # Concurrent PATCH: the INSERTs conflicted with a parallel seed; treat as already seeded.
+            log.warning("demo bot seed raced with another writer; skipping")
+            await session.rollback()
+            return 0
+    # Mark setup as completed so future _after_change calls skip seeding entirely.
+    async with services.session_factory() as session:
+        row = await session.get(AppSetting, SETUP_COMPLETED_KEY)
+        if row is None:
+            session.add(AppSetting(key=SETUP_COMPLETED_KEY, value=True, updated_at=utcnow()))
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
     log.info("seeded %d demo bots using auto provider selection", len(DEMO_BOTS))
     return len(DEMO_BOTS)
 

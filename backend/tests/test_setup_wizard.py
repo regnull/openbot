@@ -1,11 +1,12 @@
 """Minimal .env, settings in the database, first-run setup (docs/superpowers/specs/2026-09-17-setup-wizard-design.md)."""
+import asyncio
 import json
 import os
 
 from sqlalchemy import select
 
 from openbot.db.models import Actor, AppSetting
-from openbot.runtime.app_settings import TUNABLES
+from openbot.runtime.app_settings import SETUP_COMPLETED_KEY, TUNABLES
 from openbot.runtime.secrets import resolve_secret_key
 from openbot.runtime.setup import setup_status
 
@@ -65,6 +66,46 @@ async def test_setup_endpoint_and_completion_seeds_the_demo_team(client, service
     await client.patch("/api/v1/settings", json={"bot_model": "openai/gpt-5.5"})
     async with services.session_factory() as s:
         assert len((await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars().all()) == 4   # only once
+
+
+async def test_setup_completed_marker_prevents_reseed(client, services):
+    """After setup completes, a subsequent PATCH to an unrelated field does not re-seed.
+    The _setup_completed marker gates seeding regardless of setup_status returning complete."""
+    settings = services.settings
+    for k in ("openai_api_key", "anthropic_api_key", "openrouter_api_key", "xai_api_key", "ollama_base_url"):
+        setattr(settings, k, None)
+    settings.seed_demo_bots = True
+    r = await client.patch("/api/v1/settings", json={"openrouter_api_key": "or-key", "bot_model": "z-ai/glm-5.3-flash", "embedding_model": ""})
+    assert r.status_code == 200, r.text
+    async with services.session_factory() as s:
+        assert await s.get(AppSetting, SETUP_COMPLETED_KEY) is not None
+    # Now PATCH a completely unrelated field — setup is already complete so seeding is skipped.
+    r = await client.patch("/api/v1/settings", json={"max_model_calls_per_run": 99})
+    assert r.status_code == 200, r.text
+    async with services.session_factory() as s:
+        handles = sorted(a.handle for a in (await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars())
+    assert handles == ["chief_of_staff", "engineer", "qa", "reviewer"]  # only once
+
+
+async def test_concurrent_patches_during_setup_do_not_500(client, services):
+    """Two PATCHes that both make setup complete concurrently should not race to a 500."""
+    settings = services.settings
+    for k in ("openai_api_key", "anthropic_api_key", "openrouter_api_key", "xai_api_key", "ollama_base_url"):
+        setattr(settings, k, None)
+    settings.seed_demo_bots = True
+    async with services.session_factory() as s:
+        assert (await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars().all() == []
+    # Fire two PATCH requests concurrently; each provides a different API key plus embedding_model="" so both
+    # independently make setup become complete.
+    r1, r2 = await asyncio.gather(
+        client.patch("/api/v1/settings", json={"openrouter_api_key": "or-key1", "bot_model": "z-ai/glm-5.3-flash", "embedding_model": ""}),
+        client.patch("/api/v1/settings", json={"openai_api_key": "sk-key2", "bot_model": "z-ai/glm-5.3-flash", "embedding_model": ""}),
+    )
+    assert r1.status_code == 200, (r1.status_code, r1.text[:200])
+    assert r2.status_code == 200, (r2.status_code, r2.text[:200])
+    async with services.session_factory() as s:
+        handles = sorted(a.handle for a in (await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars())
+    assert handles == ["chief_of_staff", "engineer", "qa", "reviewer"]  # seeded exactly once
 
 
 # --- secret tunables ----------------------------------------------------------------------------------------
