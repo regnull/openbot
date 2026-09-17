@@ -228,21 +228,17 @@ async def test_whole_file_read_over_the_cap_returns_an_outline_not_a_dump(tmp_pa
     assert small.startswith("lines 1-3 of 400:")
 
 
-def test_context_editing_triggers_before_a_long_exploration_ends():
-    from openbot.config import Settings
-    assert Settings(_env_file=None).context_trigger_tokens <= 25000
-
-
 # --- context editing: defaults that fire, and written content that goes away --------------------------
 
-def test_context_editing_defaults_fire_inside_a_normal_run():
-    """The engineer's transcript peaks near 24k tokens, so a 25k trigger never fired. The trigger sits
-    well inside that range and each clearing reclaims a big chunk, so clearings are rare (cache stays
-    warm) but real."""
+def test_context_editing_defaults_leave_room_for_a_few_turns_of_reading():
+    """A coding bot reads ~10 files per turn, about 10k tokens and 11 messages. With a 12k trigger one
+    such turn tripped clearing and summarization at once and the bot re-read what it lost, so the run
+    cycled without writing (2026-09-17). The defaults now allow three or four turns of reading before
+    anything is touched, and each clearing reclaims a big chunk so clearings stay rare (cache warm)."""
     from openbot.config import Settings
     s = Settings(_env_file=None)
-    assert s.context_trigger_tokens <= 12000
-    assert 4000 <= s.context_clear_at_least <= s.context_trigger_tokens
+    assert 30000 <= s.context_trigger_tokens <= 60000
+    assert 8000 <= s.context_clear_at_least <= s.context_trigger_tokens // 2
 
 
 async def test_clearing_also_drops_write_file_contents_from_the_transcript(settings):
@@ -305,10 +301,11 @@ def test_middleware_order_is_limit_then_summarize_then_clear(settings):
 
 
 def test_summarization_defaults_sit_above_the_clearing_trigger():
+    """Summarize well after clearing, and keep two full turns of ~10 reads (11 messages each) verbatim."""
     from openbot.config import Settings
     s = Settings(_env_file=None)
-    assert s.context_trigger_tokens < s.summary_trigger_tokens <= 20000
-    assert 6 <= s.summary_keep_messages <= 20
+    assert s.context_trigger_tokens < s.summary_trigger_tokens <= 80000
+    assert 22 <= s.summary_keep_messages <= 40
 
 
 async def test_long_runs_get_their_history_summarized(settings):
