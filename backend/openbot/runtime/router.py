@@ -4,7 +4,7 @@ import re
 
 from openbot.db.models import Actor
 
-MENTION_RE = re.compile(r"^@([a-z0-9_-]{2,32})(?![\w-])(?!\.\w)", re.MULTILINE)
+MENTION_RE = re.compile(r"(?:^|\s)@([a-z0-9_-]{2,32})(?![\w-])(?!\.\w)", re.MULTILINE)
 
 
 def parse_mentions(content: str) -> list[str]:
