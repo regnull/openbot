@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # the OAuth redirect URI; credentials are Fernet-encrypted with MCP_TOKEN_KEY, or a key generated once into the file.
     mcp_config: Path = Path("./mcp.json")
     public_url: str = "http://127.0.0.1:8000"
+    # The one key protecting every secret stored in the database (provider keys, MCP headers/env, OAuth
+    # tokens): SECRET_KEY, or generated once into SECRET_KEY_FILE. MCP_TOKEN_KEY* are the older names.
+    secret_key: str | None = None
+    secret_key_file: Path = Path("./secret.key")
     mcp_token_key: str | None = None
     mcp_token_key_file: Path = Path("./mcp_token.key")
 

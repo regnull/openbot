@@ -34,21 +34,22 @@ webhook-driven external system all participate in the same conversation the same
 
 ## Quick start
 
-Prerequisites: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 24+ with
-[pnpm](https://pnpm.io/) 10, and an OpenRouter API key (recommended), another
-LLM provider API key (OpenAI, Anthropic, or xAI), or a local [Ollama](https://ollama.com) server.
+Prerequisites: Python 3.12+ with [uv](https://docs.astral.sh/uv/) and Node 24+ with
+[pnpm](https://pnpm.io/) 10. You will also want an LLM provider: an OpenRouter API key
+(recommended), an OpenAI, Anthropic or xAI key, or a local [Ollama](https://ollama.com) server.
 
 ```bash
 make setup            # uv sync (backend), pnpm install (frontend), copy .env.example -> .env
-$EDITOR .env           # add OPENROUTER_API_KEY (recommended) or another provider key
 make dev               # backend on :8000, frontend dev server on :5173
 ```
 
-Open http://localhost:5173. The Vite dev server proxies `/api` to the backend, so no CORS setup
-is needed in development.
+Open http://localhost:5173. The first load shows a short setup wizard: pick a chat provider (paste a
+key, or point at Ollama) and choose how memory search should work (OpenAI embeddings, Ollama
+embeddings, or none). Both are stored encrypted in OpenBot's database and can be changed later under
+Settings; nothing goes into `.env`. When the wizard completes, OpenBot seeds the human actor `@you`
+and four demo bots: `chief_of_staff`, `engineer`, `reviewer`, `qa`.
 
-On first start (with a provider key configured and an empty bot table) OpenBot seeds the human
-actor `@you` and four demo bots: `chief_of_staff`, `engineer`, `reviewer`, `qa`.
+The Vite dev server proxies `/api` to the backend, so no CORS setup is needed in development.
 
 For a single-process, production-style run that serves the built frontend from the backend on
 port 8000:
@@ -98,8 +99,8 @@ before exposing OpenBot to a network or pointing a bot at untrusted input.
 - **`run_shell` is not sandboxed.** It executes arbitrary commands with `bash -lc` as the user
   running the server, with that user's full filesystem and network access. The only thing the
   thread working directory gives you is the command's *starting working directory*: `cd /`, `../`, absolute paths
-  and anything else all work normally. It also inherits the server's environment, including the
-  provider API keys loaded from `.env`, so a command can read or exfiltrate them. There is no
+  and anything else all work normally. It also inherits the server's environment and can read the
+  database file and the secret key, so a command can exfiltrate every stored provider key. There is no
   container, no chroot, no seccomp, and no allowlist — giving a bot `run_shell` is equivalent to
   giving whoever can talk to that bot a shell on the host.
 - **Only the file tools are path-confined.** `read_file`, `write_file` and `list_files` resolve
@@ -161,8 +162,8 @@ Settings → MCP servers → Add server and stored in the database:
 - **Remote (HTTPS)**: the URL where the server accepts MCP requests, plus optional headers such as
   `Authorization=Bearer ${LINEAR_KEY}`. Without an Authorization header the server is asked to
   authorize with OAuth: "Connect & authorize" opens its authorization page and the browser returns
-  to `PUBLIC_URL/api/v1/mcp/oauth/callback`. Tokens are stored Fernet-encrypted (`MCP_TOKEN_KEY`, or a
-  key generated once into `MCP_TOKEN_KEY_FILE`), refreshed automatically, and forgettable from the card.
+  to `PUBLIC_URL/api/v1/mcp/oauth/callback`. Tokens are stored Fernet-encrypted with the secret key
+  (`SECRET_KEY`, or one generated once into `SECRET_KEY_FILE`), refreshed automatically, and forgettable from the card.
 - **Local (command)**: a command run over stdio (`npx -y @modelcontextprotocol/server-github`), with
   optional environment variables and working directory.
 - `${VAR}` in any value is read from the server environment (`.env`) when connecting, so a secret
@@ -257,60 +258,64 @@ route except `/health` requires an `X-API-Key` header.
 
 ## Configuration
 
-All variables live in `.env` at the repo root (also readable from `backend/.env`). Copy
-`.env.example` to `.env` and fill in what you need — everything has a sensible default except the
-provider keys. Every bot's model defaults to `auto`: it always uses whichever provider is configured
-on the server (OpenRouter with the cost-effective `openai/gpt-4o-mini` if `OPENROUTER_API_KEY` is set,
-else the first configured provider), so it keeps working as keys are added, removed, or changed. Set
-`BOT_MODEL` to any OpenRouter model id to change what "auto" resolves to without editing bot records.
-Pick an explicit provider/model per bot in the bot editor (or via the API) to opt out of "auto" for
-that bot.
+Configuration lives in two places, by design:
+
+- **`.env`** holds only what the process needs before it can read its own database: where the
+  database is, the secret key that protects stored secrets, the API-key gate, paths, how the server
+  is reached, logging, and boot-time behaviour. `make setup` copies `.env.example` into place and the
+  defaults start the server with SQLite and no keys.
+- **Settings (the database)** holds everything an operator configures: provider API keys, Ollama,
+  embeddings, the default model, and the run/context/memory/routing tunables. Edit them on the
+  Settings page; changes apply to the next run (embeddings apply at once) with no restart. Secrets are
+  Fernet-encrypted with the secret key and never returned by the API. Precedence is database override,
+  then environment, then built-in default, so a value still set in `.env` works as the default under
+  whatever Settings says.
+
+Every bot's model defaults to `auto`: it uses whichever provider is configured (OpenRouter with the
+default bot model if an OpenRouter key is set, else the first configured provider), so it keeps working
+as keys are added, removed, or changed. Pick an explicit provider/model per bot in the bot editor to
+opt out for that bot.
+
+### `.env`
 
 | Variable | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///./openbot.db` | Any SQLAlchemy async URL. `postgresql+asyncpg://...` is supported by the same schema and Alembic migrations, but is untested in v1. |
-| `OPENBOT_API_KEY` | *(unset)* | When set, every API route except `/health` requires header `X-API-Key: <value>`. |
-| `OPENAI_API_KEY` | *(unset)* | Enables the `openai` provider. |
-| `ANTHROPIC_API_KEY` | *(unset)* | Enables the `anthropic` provider. |
-| `OPENROUTER_API_KEY` | *(unset)* | Enables the `openrouter` provider. |
-| `XAI_API_KEY` | *(unset)* | Enables the `xai` provider (OpenAI-compatible). |
-| `OLLAMA_BASE_URL` | *(unset)* | Enables the `ollama` provider for local models, e.g. `http://localhost:11434`. No key. The bot editor lists the models installed on that server (`GET /api/tags`); bots on `ollama` keep their own model even when `OPENROUTER_API_KEY` is set. `EMBEDDING_MODEL=ollama:nomic-embed-text` works too (set `EMBEDDING_DIMS` to match). |
-| `OLLAMA_MODEL` | `llama3.1` | Default model suggested for new `ollama` bots, and the seed model when Ollama is the only configured provider. |
-| `BOT_MODEL` | `openai/gpt-4o-mini` | OpenRouter model used for bot LLM calls for seeded bots and any bot whose provider is `openrouter`. Set this in `.env` to switch the whole bot team to a different OpenRouter model; `BOT_MODEL` takes precedence over `OPENROUTER_MODEL`. |
-| `OPENROUTER_MODEL` | *(unset)* | Backward-compatible alias for `BOT_MODEL`. |
-| `OPENROUTER_PROVIDER_ORDER` | *(unset)* | CSV of OpenRouter upstream provider slugs (e.g. `z-ai`) to prefer; others are used only when the preferred ones cannot serve a request. A model can be served by dozens of upstreams, each with its own prompt cache; staying on one keeps it warm. |
-| `EMBEDDING_MODEL` | `openai:text-embedding-3-small` | Used for semantic memory search; without a matching key, memory search degrades to non-semantic. |
-| `EMBEDDING_DIMS` | `1536` | Must match the embedding model's output size. |
-| `LANGSMITH_TRACING` | `false` | Enable LangSmith tracing. |
-| `LANGSMITH_API_KEY` | *(unset)* | LangSmith API key. |
-| `LANGSMITH_PROJECT` | `openbot` | LangSmith project name. |
-| `LANGSMITH_ENDPOINT` | *(unset)* | LangSmith endpoint override, for self-hosted/EU instances. |
-| `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the maximum confinement root for file tools. New threads can choose an existing relative subdirectory; `run_shell` only *starts* in the thread directory — it is not sandboxed to it. |
-| `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
-| `MCP_CONFIG` | `./mcp.json` | Optional `mcpServers` file imported into the database once at startup, then ignored. Servers are managed in Settings. See [MCP servers](#mcp-servers). |
+| `SECRET_KEY` | *(unset)* | Fernet key protecting every secret stored in the database (provider keys, MCP headers/env, OAuth tokens). Unset: generated once into `SECRET_KEY_FILE`. `MCP_TOKEN_KEY` is accepted as an older name. |
+| `SECRET_KEY_FILE` | `./secret.key` | Where the generated key lives (owner-only permissions). An existing `mcp_token.key` is picked up. |
+| `OPENBOT_API_KEY` | *(unset)* | When set, every API route except `/health` and the MCP OAuth callback requires header `X-API-Key: <value>`. |
 | `PUBLIC_URL` | `http://127.0.0.1:8000` | Where browsers reach this server; builds the OAuth redirect URI for remote MCP servers. |
-| `MCP_TOKEN_KEY` | *(unset)* | Fernet key for MCP OAuth credentials at rest. Unset: generated once into `MCP_TOKEN_KEY_FILE`. |
-| `MCP_TOKEN_KEY_FILE` | `./mcp_token.key` | Where the generated credential key lives (owner-only permissions). |
-| `MAX_CONCURRENT_RUNS` | `4` | Global cap on simultaneous bot runs. |
-| `MAX_BOT_HOPS` | `20` | Bot-to-bot mention chain limit per thread before a human message is required. |
-| `PROMPT_CACHING` | `true` | Add Anthropic prompt-cache breakpoints to every model call. Direct Anthropic caches the whole growing transcript, tool results included; through OpenRouter only the system prompt and human turns can carry a breakpoint. OpenAI-style providers cache automatically and are unaffected. |
-| `DIRECT_ANTHROPIC` | `true` | When the effective model is an OpenRouter `anthropic/...` id and `ANTHROPIC_API_KEY` is set, call Anthropic directly (`anthropic/claude-opus-4.6` -> `claude-opus-4-6`) so caching fully applies and no OpenRouter fee is paid. |
-| `TOOL_OUTPUT_CAP` | `8000` | Maximum characters of any single tool result the model sees; longer output keeps its head and tail with a note on how to get the rest (`read_file` takes `start_line`/`end_line`). Everything a tool returns is re-sent on every later turn, so this bounds the quadratic part of a run's cost. |
-| `SHELL_OUTPUT_CAP` | `4000` | Tighter cap for `run_shell` output, so dumping a file through `cat` or `git show` loses to `read_file` with a line range. |
-| `CONTEXT_TRIGGER_TOKENS` | `12000` | Once a run's context exceeds this, tool results older than the three most recent, and the arguments of the calls that produced them, are replaced with a placeholder in the model's view. The run's event log keeps the real output. |
-| `CONTEXT_CLEAR_AT_LEAST` | `6000` | Each clearing reclaims at least this many tokens, so clearings are rare and the provider's prompt cache stays warm between them. |
-| `SUMMARY_TRIGGER_TOKENS` | `18000` | Once a run's context exceeds this, older history is folded into one structured summary message (decisions, artifacts, next steps) by the bot's own model. |
-| `SUMMARY_KEEP_MESSAGES` | `12` | How many recent messages summarization keeps verbatim. |
-| `MAX_MODEL_CALLS_PER_RUN` | `60` | Model turns allowed per run; when reached the agent stops and posts a notice as its reply. A bot can lower it for itself with `model_settings: {"max_model_calls": n}` (the seeded Chief of Staff uses 6). `model_settings` also accepts `reasoning_effort` (e.g. `"low"`) for reasoning models on OpenAI-compatible providers, and `temperature` / `max_tokens`. |
-| `HISTORY_TOKEN_BUDGET` | `24000` | Approximate token budget (chars / 4) for conversation history included in a run. |
-| `HISTORY_MAX_MESSAGES` | `80` | Hard cap on the number of history messages included in a run. |
-| `MEMORY_REFLECTION_DELAY` | `30` | Seconds to debounce background memory reflection after a run completes. |
-| `SEED_DEMO_BOTS` | `true` | Seed `chief_of_staff`, `engineer`, `reviewer`, `qa` on first start if the bot table is empty. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed origins. |
-| `WEBHOOK_RETRY_DELAYS` | `5,30,120` | Comma-separated seconds between webhook delivery retries before an item is marked `failed`. |
-| `LOG_LEVEL` | `INFO` | Console verbosity (`DEBUG`, `INFO`, `WARNING`, ...). Does not affect the log file, which always records `DEBUG` detail. |
+| `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the confinement root for file tools. `run_shell` only *starts* there. |
+| `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
+| `FRONTEND_DIST` | `frontend/dist` | Built frontend served at `/` when it exists. Empty means this default. |
+| `MCP_CONFIG` | `./mcp.json` | Optional `mcpServers` file imported into the database once at startup, then ignored. See [MCP servers](#mcp-servers). |
+| `MAX_CONCURRENT_RUNS` | `4` | Global cap on simultaneous bot runs (the semaphore is created at startup). |
+| `SEED_DEMO_BOTS` | `true` | Seed the demo team when the bot table is empty and a provider is configured (at startup, or when the setup wizard completes). |
+| `WEBHOOK_RETRY_DELAYS` | `5,30,120` | Seconds between webhook delivery retries before an item is marked `failed`. |
+| `LOG_LEVEL` | `INFO` | Console verbosity. The log file always records `DEBUG` detail. |
 | `LOG_FILE` | `logs/openbot.log` | Rotating diagnostic log (10 MB x 5). See [Troubleshooting](#troubleshooting). |
-| `FRONTEND_DIST` | `frontend/dist` | Directory of the built frontend to serve at `/` when it exists. Leave empty in `.env` to use this default; set to a blank value explicitly resolves to the same default, not "disabled". |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | `false`, unset, `openbot`, unset | LangSmith tracing; the SDK reads these from the environment. |
+
+### Settings
+
+Edited on the Settings page (`GET/PATCH /api/v1/settings`). The environment variable of the same
+name, if set, is the default the page shows and the value a reset returns to.
+
+| Group | Setting | Notes |
+|---|---|---|
+| Providers | `openrouter_api_key`, `openai_api_key`, `anthropic_api_key`, `xai_api_key` | Enable the respective provider. Secret: encrypted at rest, masked in the API. |
+| Providers | `ollama_base_url`, `ollama_model` | A local Ollama server (e.g. `http://localhost:11434`) enables the `ollama` provider; the bot editor lists the models installed there. Bots on `ollama` keep their model even when an OpenRouter key is set. |
+| Embeddings | `embedding_model`, `embedding_dims` | `provider:model` for semantic memory search (`openai:text-embedding-3-small`/1536, `ollama:nomic-embed-text`/768). Empty turns semantic search off. Applies immediately: the memory store is reopened. |
+| Run limits | `max_model_calls_per_run` (60), `max_bot_hops` (20) | Model turns per run before the agent stops with a notice (a bot can lower it in `model_settings.max_model_calls`; the seeded Chief of Staff uses 6); bot-to-bot mention chain limit per thread. `model_settings` also accepts `reasoning_effort`, `temperature`, `max_tokens`. |
+| Context | `tool_output_cap` (8000), `shell_output_cap` (4000) | Longest single tool result the model sees; shorter cap for `run_shell` so dumping files through the shell loses to `read_file` ranges. |
+| Context | `context_trigger_tokens` (12000), `context_clear_at_least` (6000) | Once a run's context passes the trigger, tool results older than the three most recent, and their call arguments, become a placeholder; each clearing reclaims at least the second value so clearings are rare and the prompt cache stays warm. |
+| Context | `summary_trigger_tokens` (18000), `summary_keep_messages` (12) | Older history folds into one structured summary by the bot's own model once the context passes the trigger. |
+| Context | `history_token_budget` (24000), `history_max_messages` (80) | Thread history included in a run's prompt. |
+| Memory | `memory_reflection_delay` (30) | Seconds to debounce background memory reflection after a run. |
+| Model routing | `bot_model` | OpenRouter model for bots on `auto` (default `openai/gpt-4o-mini`). |
+| Model routing | `openrouter_provider_order` | Preferred OpenRouter upstream slugs (e.g. `z-ai`); each upstream has its own prompt cache. |
+| Model routing | `prompt_caching` (true), `direct_anthropic` (true) | Anthropic cache breakpoints on every call; send OpenRouter `anthropic/...` models straight to Anthropic when a key exists so caching covers tool results. |
 
 ## Database
 

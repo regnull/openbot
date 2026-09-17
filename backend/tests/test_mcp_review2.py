@@ -99,9 +99,9 @@ async def test_fresh_install_does_not_write_a_key_file_until_a_secret_needs_it(s
     async with LifespanManager(app), AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         assert (await c.get("/api/v1/mcp/servers")).json() == []
         assert (await c.post("/api/v1/mcp/servers", json={"name": "s", "command": sys.executable, "args": [STUB]})).status_code == 201
-        assert not settings.mcp_token_key_file.exists()                                        # no secret yet
+        assert not settings.secret_key_file.exists()                                        # no secret yet
         assert (await c.post("/api/v1/mcp/servers", json={"name": "t", "command": sys.executable, "args": [STUB], "env": {"K": "v"}})).status_code == 201
-        assert settings.mcp_token_key_file.exists()
+        assert settings.secret_key_file.exists()
 
 
 async def test_patch_returns_promptly_and_connects_in_the_background(settings, tmp_path):

@@ -162,6 +162,9 @@ def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
 
 
 def embeddings(settings: Settings) -> Embeddings | None:
+    """None when semantic memory search is off (empty model) or the model's provider is not configured."""
+    if not (settings.embedding_model or "").strip():
+        return None
     provider, _, model = settings.embedding_model.partition(":")
     if not provider_configured(settings, provider):
         return None
