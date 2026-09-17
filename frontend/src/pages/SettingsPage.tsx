@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Api, getApiKey, setApiKey } from "../api/client";
-import type { AppSetting, McpServer } from "../api/types";
-import { Badge, Button, Card, ErrorText, Field, Input } from "../components/ui";
+import type { AppSetting, McpServer, McpServerInput } from "../api/types";
+import { Badge, Button, Card, ErrorText, Field, Input, Textarea } from "../components/ui";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
-import { mcpActions, mcpInFlight, mcpStatusBadge, validateNewMcpServer } from "../lib/mcpServers";
+import { formatKeyValues, mcpActions, mcpInFlight, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer, type McpTransport } from "../lib/mcpServers";
 
 const emptyExt = { handle: "", name: "", webhook_url: "", webhook_secret: "" };
 
@@ -168,6 +168,7 @@ function SettingsGroupCard({ group }: { group: SettingGroup }) {
   );
 }
 
+
 function McpServersCard() {
   const qc = useQueryClient();
   const servers = useQuery({
@@ -183,9 +184,10 @@ function McpServersCard() {
   const disconnect = useMutation({ mutationFn: (name: string) => Api.disconnectMcpServer(name), onSuccess: refresh });
   const forget = useMutation({ mutationFn: (name: string) => Api.forgetMcpCredentials(name), onSuccess: refresh });
   const remove = useMutation({ mutationFn: (name: string) => Api.removeMcpServer(name), onSuccess: refresh });
-  const busy = connect.isPending || disconnect.isPending || forget.isPending || remove.isPending;
+  const toggleEnabled = useMutation({ mutationFn: (s: McpServer) => Api.updateMcpServer(s.name, { enabled: !s.enabled }), onSuccess: refresh });
+  const busy = connect.isPending || disconnect.isPending || forget.isPending || remove.isPending || toggleEnabled.isPending;
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [adding, setAdding] = useState(false);
+  const [dialog, setDialog] = useState<null | { mode: "add" } | { mode: "edit"; server: McpServer }>(null);
   // A server that starts authorizing on its own (just added, or Connect from another tab) publishes its
   // authorization URL on the listing; open each one once.
   const opened = useRef(new Set<string>());
@@ -201,12 +203,12 @@ function McpServersCard() {
     <Card className="space-y-2">
       <div className="flex items-center justify-between">
         <h2 className="font-medium">MCP servers</h2>
-        <Button variant="secondary" onClick={() => setAdding(true)}>Add server</Button>
+        <Button variant="secondary" onClick={() => setDialog({ mode: "add" })}>Add server</Button>
       </div>
-      <p className="text-sm text-zinc-500">Tools from Model Context Protocol servers. Add a remote server here, or configure any server (including local stdio ones) in <code>mcp.json</code>, see <code>mcp.example.json</code>. Tools appear in the tool list as <code>server__tool</code> and are picked per bot like any other tool.</p>
-      {adding && <AddMcpServerDialog onClose={() => setAdding(false)} onAdded={() => { setAdding(false); refresh(); }} />}
-      <ErrorText error={servers.error ?? connect.error ?? disconnect.error ?? forget.error ?? remove.error} />
-      {servers.data?.length === 0 && <p className="text-sm text-zinc-500">No servers configured.</p>}
+      <p className="text-sm text-zinc-500">Tools from Model Context Protocol servers, remote (HTTPS, OAuth when the server asks) or local (a command run over stdio). Tools appear in the tool list as <code>server__tool</code>; grant them per bot in the bot editor, by server or one at a time.</p>
+      {dialog && <McpServerDialog server={dialog.mode === "edit" ? dialog.server : undefined} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); refresh(); }} />}
+      <ErrorText error={servers.error ?? connect.error ?? disconnect.error ?? forget.error ?? remove.error ?? toggleEnabled.error} />
+      {servers.data?.length === 0 && <p className="text-sm text-zinc-500">No servers yet.</p>}
       <ul className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
         {servers.data?.map((s: McpServer) => {
           const badge = mcpStatusBadge(s);
@@ -216,22 +218,24 @@ function McpServersCard() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono">{s.name}</span>
                 <Badge tone={badge.tone}>{badge.label}</Badge>
-                <span className="text-xs text-zinc-500">{s.transport}{s.oauth ? " · OAuth" : ""}{s.url ? ` · ${s.url}` : ""}{s.source === "file" ? " · mcp.json" : ""}</span>
+                <span className="truncate text-xs text-zinc-500">{s.transport === "http" ? `remote${s.oauth ? " · OAuth" : ""} · ${s.url ?? ""}` : `local · ${s.command ?? ""} ${s.args.join(" ")}`}</span>
                 {s.authorization_url && <a className="text-xs underline" href={s.authorization_url} target="_blank" rel="noopener noreferrer">Authorize</a>}
                 {s.tools.length > 0 && (
                   <button type="button" className="text-xs text-zinc-500 underline" onClick={() => setOpen((o) => ({ ...o, [s.name]: !o[s.name] }))}>
                     {s.tools.length} tool{s.tools.length === 1 ? "" : "s"}
                   </button>
                 )}
-                <span className="ml-auto flex gap-1">
+                <span className="ml-auto flex flex-wrap gap-1">
                   {actions.includes("connect") && <Button variant="secondary" disabled={busy} onClick={() => connect.mutate(s.name)}>{s.oauth && s.status === "needs_auth" ? "Connect & authorize" : "Connect"}</Button>}
                   {actions.includes("reconnect") && <Button variant="secondary" disabled={busy} onClick={() => connect.mutate(s.name)}>Reconnect</Button>}
                   {actions.includes("disconnect") && <Button variant="secondary" disabled={busy} onClick={() => disconnect.mutate(s.name)}>Disconnect</Button>}
                   {actions.includes("forget") && <Button variant="secondary" disabled={busy} onClick={() => confirm(`Forget the stored credentials for ${s.name}?`) && forget.mutate(s.name)}>Forget credentials</Button>}
-                  {actions.includes("remove") && <Button variant="danger" disabled={busy} onClick={() => confirm(`Remove ${s.name} and forget its credentials?`) && remove.mutate(s.name)}>Remove</Button>}
+                  <Button variant="secondary" disabled={busy} onClick={() => setDialog({ mode: "edit", server: s })}>Edit</Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => toggleEnabled.mutate(s)}>{s.enabled ? "Disable" : "Enable"}</Button>
+                  <Button variant="danger" disabled={busy} onClick={() => confirm(`Remove ${s.name} and forget its credentials?`) && remove.mutate(s.name)}>Remove</Button>
                 </span>
               </div>
-              {s.status === "authorizing" && <p className="text-xs text-amber-600">A browser tab was opened to authorize. If it did not appear, click Connect again and allow pop-ups.</p>}
+              {s.status === "authorizing" && <p className="text-xs text-amber-600">A browser tab was opened to authorize. If it did not appear, click Authorize above and allow pop-ups.</p>}
               {s.error && <p className="text-xs text-red-600">{s.error}</p>}
               {open[s.name] && <p className="font-mono text-xs text-zinc-500">{s.tools.join(", ")}</p>}
             </li>
@@ -242,37 +246,83 @@ function McpServersCard() {
   );
 }
 
-function AddMcpServerDialog({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onClose: () => void; onSaved: () => void }) {
+  const editing = !!server;
+  const [transport, setTransport] = useState<McpTransport>(server?.transport ?? "http");
+  const [name, setName] = useState(server?.name ?? "");
+  const [url, setUrl] = useState(server?.url ?? "");
+  const [headers, setHeaders] = useState(formatKeyValues(server?.headers ?? {}));
+  const [command, setCommand] = useState(server?.command ?? "");
+  const [args, setArgs] = useState((server?.args ?? []).join(" "));
+  const [env, setEnv] = useState(formatKeyValues(server?.env ?? {}));
+  const [cwd, setCwd] = useState(server?.cwd ?? "");
   const [touched, setTouched] = useState(false);
-  const errors = validateNewMcpServer(name, url);
-  const add = useMutation({ mutationFn: () => Api.addMcpServer({ name: name.trim(), url: url.trim() }), onSuccess: onAdded });
-  const submit = () => { setTouched(true); if (Object.keys(errors).length === 0) add.mutate(); };
+  const errors = validateNewMcpServer(name, url, transport, command);
+  const kv = parseKeyValues(transport === "http" ? headers : env);
+  const save = useMutation({
+    mutationFn: () => {
+      const body: McpServerInput = transport === "http"
+        ? { url: url.trim(), headers: kv.values }
+        : { command: command.trim(), args: parseArgs(args), env: kv.values, cwd: cwd.trim() || null };
+      return editing ? Api.updateMcpServer(server!.name, body) : Api.addMcpServer({ name: name.trim(), ...body });
+    },
+    onSuccess: onSaved,
+  });
+  const submit = () => { setTouched(true); if (Object.keys(errors).length === 0 && !kv.error) save.mutate(); };
+  const tab = (t: McpTransport, label: string) => (
+    <button type="button" className={`rounded-md px-3 py-1 text-sm ${transport === t ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}
+      onClick={() => setTransport(t)} disabled={editing}>{label}</button>
+  );
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="add-mcp-title">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="mcp-dialog-title">
       <form className="w-full max-w-lg space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div className="flex items-start justify-between">
-          <h2 id="add-mcp-title" className="text-lg font-semibold">Add MCP server</h2>
+          <h2 id="mcp-dialog-title" className="text-lg font-semibold">{editing ? `Edit ${server!.name}` : "Add MCP server"}</h2>
           <button type="button" aria-label="Close" className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200" onClick={onClose}>✕</button>
         </div>
-        <p className="text-sm text-zinc-500">Connect your bots to a remote MCP server's tools. Local (stdio) servers and servers that need a secret header are configured in <code>mcp.json</code> instead.</p>
-        <div className="space-y-1">
-          <Input value={name} placeholder="Name" autoFocus onChange={(e) => setName(e.target.value)} />
-          <p className="text-xs text-zinc-500">Shown in the servers list; tools appear as <code>{name.trim() || "name"}__tool</code>.</p>
-          {touched && errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
-        </div>
-        <div className="space-y-1">
-          <Input value={url} placeholder="MCP server URL" onChange={(e) => setUrl(e.target.value)} />
-          <p className="text-xs text-zinc-500">The HTTPS address where the server accepts MCP requests, for example https://mcp.example.com/mcp.</p>
-          {touched && errors.url && <p className="text-xs text-red-600">{errors.url}</p>}
-        </div>
-        <p className="text-xs text-zinc-500">Only add servers from developers you trust. OpenBot does not control which tools a server exposes or what they do, and every bot you give those tools acts with whatever access you authorize. Mark tools that write as needing approval in the bot editor.</p>
-        <ErrorText error={add.error} />
+        <p className="text-sm text-zinc-500">Connect your bots to an MCP server's tools. Use <code>{"${VAR}"}</code> in any value to read a secret from the server environment instead of storing it here.</p>
+        <div className="flex gap-1">{tab("http", "Remote (HTTPS)")}{tab("stdio", "Local (command)")}</div>
+        {!editing && (
+          <div className="space-y-1">
+            <Input value={name} placeholder="Name" autoFocus onChange={(e) => setName(e.target.value)} />
+            <p className="text-xs text-zinc-500">Shown in the servers list; tools appear as <code>{name.trim() || "name"}__tool</code>.</p>
+            {touched && errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
+          </div>
+        )}
+        {transport === "http" ? (
+          <>
+            <div className="space-y-1">
+              <Input value={url} placeholder="MCP server URL" autoFocus={editing} onChange={(e) => setUrl(e.target.value)} />
+              <p className="text-xs text-zinc-500">The HTTPS address where the server accepts MCP requests, for example https://mcp.example.com/mcp.</p>
+              {touched && errors.url && <p className="text-xs text-red-600">{errors.url}</p>}
+            </div>
+            <div className="space-y-1">
+              <Textarea rows={2} value={headers} placeholder={"Authorization=Bearer ${LINEAR_KEY}"} onChange={(e) => setHeaders(e.target.value)} />
+              <p className="text-xs text-zinc-500">Optional headers, one <code>Name=value</code> per line. Leave a masked value as is to keep it. Without an Authorization header the server is asked to authorize with OAuth.</p>
+              {touched && kv.error && <p className="text-xs text-red-600">{kv.error}</p>}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-1">
+              <Input value={command} placeholder="Command, for example npx" autoFocus={editing} onChange={(e) => setCommand(e.target.value)} />
+              {touched && errors.command && <p className="text-xs text-red-600">{errors.command}</p>}
+            </div>
+            <Input value={args} placeholder="Arguments, for example -y @modelcontextprotocol/server-github" onChange={(e) => setArgs(e.target.value)} />
+            <div className="space-y-1">
+              <Textarea rows={2} value={env} placeholder={"GITHUB_TOKEN=${GITHUB_TOKEN}"} onChange={(e) => setEnv(e.target.value)} />
+              <p className="text-xs text-zinc-500">Environment for the process, one <code>NAME=value</code> per line, added to the server's own environment. Leave a masked value as is to keep it.</p>
+              {touched && kv.error && <p className="text-xs text-red-600">{kv.error}</p>}
+            </div>
+            <Input value={cwd} placeholder="Working directory (optional)" onChange={(e) => setCwd(e.target.value)} />
+          </>
+        )}
+        <p className="text-xs text-zinc-500">Only add servers from developers you trust. OpenBot does not control which tools a server exposes or what they do, and every bot you grant those tools acts with whatever access you provide. Mark tools that write as needing approval in the bot editor.</p>
+        <ErrorText error={save.error} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={add.isPending || (touched && Object.keys(errors).length > 0)}>{add.isPending ? "Adding…" : "Continue"}</Button>
+          <Button type="submit" disabled={save.isPending || (touched && (Object.keys(errors).length > 0 || !!kv.error))}>{save.isPending ? "Saving…" : editing ? "Save" : "Continue"}</Button>
         </div>
       </form>
     </div>

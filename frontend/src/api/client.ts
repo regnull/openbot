@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, McpConnectResult, McpServer, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import type { Actor, AppSetting, Bot, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface AttachmentIn { url: string; name?: string; }
@@ -65,7 +65,8 @@ export const Api = {
   cancelRun: (id: string) => api<Run>(`/runs/${id}/cancel`, { method: "POST" }),
   listTools: () => api<{ tools: ToolInfo[]; errors: { file: string; error: string }[] }>("/tools"),
   listMcpServers: () => api<McpServer[]>("/mcp/servers"),
-  addMcpServer: (body: { name: string; url: string }) => api<McpServer>("/mcp/servers", { method: "POST", json: body }),
+  addMcpServer: (body: McpServerInput) => api<McpServer>("/mcp/servers", { method: "POST", json: body }),
+  updateMcpServer: (name: string, body: McpServerInput) => api<McpServer>(`/mcp/servers/${name}`, { method: "PATCH", json: body }),
   removeMcpServer: (name: string) => api<void>(`/mcp/servers/${name}`, { method: "DELETE" }),
   connectMcpServer: (name: string) => api<McpConnectResult>(`/mcp/servers/${name}/connect`, { method: "POST" }),
   disconnectMcpServer: (name: string) => api<McpServer>(`/mcp/servers/${name}/disconnect`, { method: "POST" }),

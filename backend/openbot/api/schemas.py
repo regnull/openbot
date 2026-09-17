@@ -342,27 +342,69 @@ class McpServerOut(BaseModel):
     url: str | None
     error: str | None
     tools: list[str]
-    source: str = "file"
+    source: str = "db"
     authorization_url: str | None = None    # present while the server waits for the operator to authorize
+    # The stored spec, secrets masked, for the edit dialog.
+    command: str | None = None
+    args: list[str] = []
+    cwd: str | None = None
+    env: dict[str, str] = {}
+    headers: dict[str, str] = {}
+
+
+def _check_url(v: str) -> str:
+    from urllib.parse import urlparse
+    v = v.strip()
+    if "${" in v:                     # a variable reference; checked after expansion, when connecting
+        return v
+    u = urlparse(v)
+    if not u.netloc:
+        raise ValueError("url must be absolute, for example https://mcp.example.com/mcp")
+    local = u.hostname in ("localhost", "127.0.0.1", "::1")
+    if u.scheme != "https" and not (u.scheme == "http" and local):
+        raise ValueError("url must use https (http is allowed for localhost only)")
+    return v
 
 
 class McpServerCreate(BaseModel):
-    """A remote MCP server added from Settings: a name and the URL where it accepts MCP requests."""
+    """An MCP server added from Settings: remote (url, headers) or local stdio (command, args, env, cwd).
+    `${VAR}` in any value expands from the server environment when connecting."""
     name: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,40}$")
-    url: str = Field(min_length=8, max_length=2000)
+    url: str | None = Field(default=None, max_length=2000)
+    headers: dict[str, str] = {}
+    command: str | None = Field(default=None, max_length=2000)
+    args: list[str] = []
+    env: dict[str, str] = {}
+    cwd: str | None = Field(default=None, max_length=2000)
+    enabled: bool = True
 
     @field_validator("url")
     @classmethod
-    def _https_or_local(cls, v: str) -> str:
-        from urllib.parse import urlparse
-        v = v.strip()
-        u = urlparse(v)
-        if not u.netloc:
-            raise ValueError("url must be absolute, for example https://mcp.example.com/mcp")
-        local = u.hostname in ("localhost", "127.0.0.1", "::1")
-        if u.scheme != "https" and not (u.scheme == "http" and local):
-            raise ValueError("url must use https (http is allowed for localhost only)")
-        return v
+    def _url(cls, v: str | None) -> str | None:
+        return _check_url(v) if v else None
+
+    @model_validator(mode="after")
+    def _one_transport(self):
+        if bool(self.url) == bool(self.command):
+            raise ValueError('exactly one of "url" (remote) or "command" (local stdio) is required')
+        return self
+
+
+class McpServerUpdate(BaseModel):
+    """Partial edit. For headers/env the dict replaces the stored one, except that an empty value keeps
+    the stored secret for that key (the UI shows masks and sends them back blank)."""
+    url: str | None = Field(default=None, max_length=2000)
+    headers: dict[str, str] | None = None
+    command: str | None = Field(default=None, max_length=2000)
+    args: list[str] | None = None
+    env: dict[str, str] | None = None
+    cwd: str | None = Field(default=None, max_length=2000)
+    enabled: bool | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, v: str | None) -> str | None:
+        return _check_url(v) if v else v
 
 
 class McpConnectOut(BaseModel):

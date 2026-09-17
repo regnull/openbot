@@ -4,12 +4,10 @@ import asyncio
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from openbot.api.deps import get_services, get_session
-from openbot.api.schemas import McpConnectOut, McpServerCreate, McpServerOut
-from openbot.db.models import McpServer
-from openbot.mcp import server_from_row
+from openbot.api.deps import get_services
+from openbot.api.schemas import McpConnectOut, McpServerCreate, McpServerOut, McpServerUpdate
+from openbot.mcp.config import McpConfigError
 from openbot.services import Services
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -18,51 +16,72 @@ AUTH_URL_WAIT = 15.0     # how long connect waits for the OAuth flow to produce 
 
 
 def _mgr(services: Services):
-    if services.mcp is None:
+    if services.mcp is None or services.mcp.store is None:
         raise HTTPException(503, "MCP is not initialised")
     return services.mcp
 
 
-def _out(mgr, st) -> McpServerOut:
-    return McpServerOut(**asdict(st), authorization_url=mgr.flows.authorization_url(st.name))
+async def _out(mgr, st) -> McpServerOut:
+    spec = await mgr.store.get(st.name) or {}
+    return McpServerOut(**asdict(st), authorization_url=mgr.flows.authorization_url(st.name),
+                        command=spec.get("command"), args=list(spec.get("args") or []), cwd=spec.get("cwd"),
+                        env=dict(spec.get("env") or {}), headers=dict(spec.get("headers") or {}))
+
+
+async def _config_for(mgr, name: str):
+    cfgs = {c.name: c for c in await mgr.store.configs()}
+    return cfgs[name]
 
 
 @router.get("/servers", response_model=list[McpServerOut])
 async def list_servers(services: Services = Depends(get_services)):
     mgr = _mgr(services)
-    return [_out(mgr, s) for s in mgr.statuses()]
+    return [await _out(mgr, s) for s in mgr.statuses()]
 
 
 @router.post("/servers", response_model=McpServerOut, status_code=201)
-async def add_server(body: McpServerCreate, session: AsyncSession = Depends(get_session),
-                     services: Services = Depends(get_services)):
-    """Add a remote server from Settings. It is stored, then connected in the background; if it needs
-    the operator's authorization, `authorization_url` appears on the listing for the UI to open."""
+async def add_server(body: McpServerCreate, services: Services = Depends(get_services)):
+    """Add a server (remote or local stdio) from Settings. It is stored, then connected in the background;
+    if it needs the operator's authorization, `authorization_url` appears on the listing for the UI to open."""
     mgr = _mgr(services)
-    if mgr.has(body.name) or await session.get(McpServer, body.name) is not None:
+    if mgr.has(body.name) or await mgr.store.raw(body.name) is not None:
         raise HTTPException(409, f"an MCP server named {body.name!r} already exists")
-    row = McpServer(name=body.name, url=body.url)
-    session.add(row)
-    await session.commit()
-    st = await mgr.add_server(server_from_row(row), connect=False)
-    mgr.begin_connect(body.name)
-    await asyncio.sleep(0)                      # let the connect task publish "connecting"
-    return _out(mgr, mgr.status(body.name) if mgr.has(body.name) else st)
+    try:
+        await mgr.store.upsert(body.model_dump())
+    except McpConfigError as e:
+        raise HTTPException(422, str(e)) from e
+    st = await mgr.add_server(await _config_for(mgr, body.name), connect=False)
+    if st.status not in ("disabled", "error"):
+        mgr.begin_connect(body.name)
+        await asyncio.sleep(0)                  # let the connect task publish "connecting"
+    return await _out(mgr, mgr.status(body.name))
 
 
-@router.delete("/servers/{name}", status_code=204)
-async def remove_server(name: str, session: AsyncSession = Depends(get_session), services: Services = Depends(get_services)):
-    """Remove a server that was added from Settings (servers from mcp.json are edited in the file)."""
+@router.patch("/servers/{name}", response_model=McpServerOut)
+async def update_server(name: str, body: McpServerUpdate, services: Services = Depends(get_services)):
+    """Edit a server. The connection is restarted with the new spec (or stopped when disabled)."""
     mgr = _mgr(services)
     if not mgr.has(name):
         raise HTTPException(404, "unknown MCP server")
-    if mgr.status(name).source != "db":
-        raise HTTPException(409, f"{name} comes from the config file; remove it there")
+    changes = body.model_dump(exclude_unset=True)
+    try:
+        await mgr.store.update(name, changes)
+    except KeyError as e:
+        raise HTTPException(404, "unknown MCP server") from e
+    except McpConfigError as e:
+        raise HTTPException(422, str(e)) from e
+    st = await mgr.update_server(await _config_for(mgr, name))
+    return await _out(mgr, st)
+
+
+@router.delete("/servers/{name}", status_code=204)
+async def remove_server(name: str, services: Services = Depends(get_services)):
+    """Remove a server: disconnect, forget its credentials, delete its spec."""
+    mgr = _mgr(services)
+    if not mgr.has(name):
+        raise HTTPException(404, "unknown MCP server")
     await mgr.remove_server(name)
-    row = await session.get(McpServer, name)
-    if row is not None:
-        await session.delete(row)
-        await session.commit()
+    await mgr.store.delete(name)
     return Response(status_code=204)
 
 
@@ -76,7 +95,7 @@ async def connect_server(name: str, services: Services = Depends(get_services)):
         raise HTTPException(404, "unknown MCP server")
     st = mgr.status(name)
     if st.status == "disabled":
-        raise HTTPException(409, "server is disabled in the config file")
+        raise HTTPException(409, "server is disabled; enable it first")
     if st.error and st.status == "error" and "environment variable" in st.error:
         raise HTTPException(409, st.error)
     task = mgr.begin_connect(name)
@@ -93,7 +112,7 @@ async def disconnect_server(name: str, services: Services = Depends(get_services
     mgr = _mgr(services)
     if not mgr.has(name):
         raise HTTPException(404, "unknown MCP server")
-    return _out(mgr, await mgr.disconnect(name))
+    return await _out(mgr, await mgr.disconnect(name))
 
 
 @router.delete("/servers/{name}/credentials", response_model=McpServerOut)
@@ -102,4 +121,4 @@ async def forget_credentials(name: str, services: Services = Depends(get_service
     mgr = _mgr(services)
     if not mgr.has(name):
         raise HTTPException(404, "unknown MCP server")
-    return _out(mgr, await mgr.forget_credentials(name))
+    return await _out(mgr, await mgr.forget_credentials(name))

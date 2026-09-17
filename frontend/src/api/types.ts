@@ -20,6 +20,7 @@ export interface ToolInfo { name: string; description: string; source: string; a
 export interface ProviderInfo { id: string; configured: boolean; models: string[]; default_model: string; }
 export interface ProvidersOut { providers: ProviderInfo[]; embedding_model: string; embeddings_configured: boolean; }
 export interface BusEvent { event: string; thread_id: string | null; data: any; }
-export interface McpServer { name: string; transport: "stdio" | "http"; status: "connected" | "connecting" | "authorizing" | "needs_auth" | "disconnected" | "error" | "disabled"; enabled: boolean; oauth: boolean; url: string | null; error: string | null; tools: string[]; source: "file" | "db"; authorization_url: string | null; }
+export interface McpServer { name: string; transport: "stdio" | "http"; status: "connected" | "connecting" | "authorizing" | "needs_auth" | "disconnected" | "error" | "disabled"; enabled: boolean; oauth: boolean; url: string | null; error: string | null; tools: string[]; source: "file" | "db"; authorization_url: string | null; command: string | null; args: string[]; cwd: string | null; env: Record<string, string>; headers: Record<string, string>; }
+export interface McpServerInput { name?: string; url?: string | null; headers?: Record<string, string>; command?: string | null; args?: string[]; env?: Record<string, string>; cwd?: string | null; enabled?: boolean; }
 export interface McpConnectResult { status: string; authorization_url: string | null; }
 export interface AppSetting { key: string; group: string; label: string; description: string; type: "int" | "float" | "bool" | "str" | "list"; value: unknown; default: unknown; overridden: boolean; }

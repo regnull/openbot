@@ -155,34 +155,31 @@ def get_time() -> str:
 ### MCP servers
 
 Bots can also use tools from [Model Context Protocol](https://modelcontextprotocol.io) servers
-(Linear, Slack, GitHub, filesystem, anything that speaks MCP). Remote servers can be added from
-Settings → MCP servers → Add server (a name and the server's HTTPS URL; OAuth follows if the server
-requires it). Any server, including local stdio ones and servers that need a secret header, can be
-configured the way Claude Code does, in `mcp.json` at the repo root (`MCP_CONFIG`); see
-`mcp.example.json`:
+(Linear, Slack, GitHub, filesystem, anything that speaks MCP). Servers are configured in
+Settings → MCP servers → Add server and stored in the database:
 
-```json
-{
-  "mcpServers": {
-    "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
-               "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"}},
-    "linear": {"url": "https://mcp.linear.app/mcp"}
-  }
-}
-```
+- **Remote (HTTPS)**: the URL where the server accepts MCP requests, plus optional headers such as
+  `Authorization=Bearer ${LINEAR_KEY}`. Without an Authorization header the server is asked to
+  authorize with OAuth: "Connect & authorize" opens its authorization page and the browser returns
+  to `PUBLIC_URL/api/v1/mcp/oauth/callback`. Tokens are stored Fernet-encrypted (`MCP_TOKEN_KEY`, or a
+  key generated once into `MCP_TOKEN_KEY_FILE`), refreshed automatically, and forgettable from the card.
+- **Local (command)**: a command run over stdio (`npx -y @modelcontextprotocol/server-github`), with
+  optional environment variables and working directory.
+- `${VAR}` in any value is read from the server environment (`.env`) when connecting, so a secret
+  never has to be stored. Stored headers and environment values are encrypted at rest and shown
+  masked in the UI.
+- Each server can be edited, disabled, reconnected or removed from the card.
 
-- `command` starts a stdio server as a child process; `url` connects to a remote server over
-  streamable HTTP. `${VAR}` expands from the server environment (`.env`), so secrets stay out of
-  the file; an unset variable marks that server as errored without affecting the others.
-- Tools appear in the registry as `server__tool` (`github__create_issue`) with source `mcp:github`,
-  so per-bot tool selection, `approval_tools` and `TOOL_OUTPUT_CAP` apply unchanged.
-- A remote server with no static `Authorization` header authenticates with OAuth when it asks to.
-  Settings → MCP servers shows each server's status; "Connect & authorize" opens the server's
-  authorization page and the browser returns to `PUBLIC_URL/api/v1/mcp/oauth/callback`. Tokens are
-  stored Fernet-encrypted (`MCP_TOKEN_KEY`, or a key generated once into `MCP_TOKEN_KEY_FILE`),
-  refreshed automatically, and forgettable from the same card.
-- Whatever you authorize is shared by every bot given that tool: a bot calling Linear acts as you.
-  Use `approval_tools` for anything that writes.
+Tools appear in the registry as `server__tool` (`Linear__create_issue`) with source `mcp:Linear`.
+In the bot editor, MCP tools are grouped by server: grant a whole server with one checkbox, or expand
+it and pick individual tools. `approval_tools` and `TOOL_OUTPUT_CAP` apply to them like any other tool.
+
+Whatever you authorize is shared by every bot given that tool: a bot calling Linear acts as you.
+Use `approval_tools` for anything that writes.
+
+Migrating from a file: if `MCP_CONFIG` (default `./mcp.json`, Claude Code's `mcpServers` shape, see
+`mcp.example.json`) exists at startup, each server it names is imported into the database once and
+the file is then ignored; later edits or deletions in Settings win.
 
 Only `read_file`, `write_file`, `list_files` and `search_code` are path-confined to the thread working directory,
 which defaults to `WORKSPACE_ROOT` and can be set to an existing relative subdirectory when the
@@ -290,7 +287,7 @@ that bot.
 | `LANGSMITH_ENDPOINT` | *(unset)* | LangSmith endpoint override, for self-hosted/EU instances. |
 | `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the maximum confinement root for file tools. New threads can choose an existing relative subdirectory; `run_shell` only *starts* in the thread directory — it is not sandboxed to it. |
 | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
-| `MCP_CONFIG` | `./mcp.json` | MCP servers file in Claude Code's `mcpServers` shape; `${VAR}` expands from the environment. See [MCP servers](#mcp-servers). |
+| `MCP_CONFIG` | `./mcp.json` | Optional `mcpServers` file imported into the database once at startup, then ignored. Servers are managed in Settings. See [MCP servers](#mcp-servers). |
 | `PUBLIC_URL` | `http://127.0.0.1:8000` | Where browsers reach this server; builds the OAuth redirect URI for remote MCP servers. |
 | `MCP_TOKEN_KEY` | *(unset)* | Fernet key for MCP OAuth credentials at rest. Unset: generated once into `MCP_TOKEN_KEY_FILE`. |
 | `MCP_TOKEN_KEY_FILE` | `./mcp_token.key` | Where the generated credential key lives (owner-only permissions). |
