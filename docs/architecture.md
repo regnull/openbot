@@ -174,9 +174,24 @@ semaphore was acquired, so under load a bot could hold a phantom `queued` run th
 
 **Model.** A bot has no memory of a thread between runs. Each run rebuilds context from persisted
 truth: the thread's messages, the bot's memories relevant to the trigger, the participants, and the
-working directory.
+working directory. How much of the thread a bot sees depends on its role in it. The thread's
+**default bot** coordinates, so it sees the whole conversation. So does the **only bot** in a thread,
+since nobody is delegating to it. Every other bot is a **delegate** and sees only the messages
+addressed to it plus its own earlier replies: a hand-off must be self-contained, and two tools,
+`read_history` and `recall_messages`, fetch the rest of the thread when it is not. This keeps each
+delegate's call hand-off-sized instead of thread-sized and keeps one bot's chatter out of another's
+context.
 
-**As built** (`runtime/runner.py::_prepare`, `runtime/prompt.py`).
+**As built** (`runtime/runner.py::_prepare`, `runtime/prompt.py`; scoping added 2026-09-16).
+
+The scope decision: `scoped = not is_default and len(bots_in_thread) > 1`, where the default bot is
+the thread's `default_bot_actor_id` falling back to `@chief_of_staff`. A scoped bot's candidate
+messages are those it sent, those whose `mentions` include it, and this run's triggers. The count of
+everything else is reported to the model as "N other messages exist but are not shown", with the
+two retrieval tools named. Direct-post threads (§3) have one bot and are therefore never scoped.
+The seeded chief is told that delegates see only the message addressed to them and that every
+hand-off must carry goal, paths or PR number, acceptance criteria and what to report back; the
+engineer, reviewer and QA are told what they see and which tools fetch more.
 
 The system prompt contains, in order:
 
