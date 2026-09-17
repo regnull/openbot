@@ -25,6 +25,10 @@ log = logging.getLogger(__name__)
 
 MASK = "••••••••"
 
+# Key in the AppSetting table that records whether setup (and demo bot seeding) has been completed.
+# Once set, future settings PATCHes and resets do NOT re-seed demo bots.
+SETUP_COMPLETED_KEY = "_setup_completed"
+
 
 @dataclass(frozen=True)
 class Tunable:
@@ -172,20 +176,36 @@ def _apply(services, key: str, value: Any) -> None:
         services.reflector.delay = value
 
 
+async def _setup_already_completed(services) -> bool:
+    """Check if the `_setup_completed` marker exists in the AppSetting table."""
+    async with services.session_factory() as session:
+        return (await session.get(AppSetting, SETUP_COMPLETED_KEY)) is not None
+
+
 async def _after_change(services, keys: set[str]) -> None:
     """Side effects of a settings change: embeddings reopen the memory store; meeting the minimum
-    configuration seeds the demo team (boot skips seeding while no provider is configured)."""
+    configuration seeds the demo team (only once, on the first completion transition)."""
     if keys & set(EMBEDDING_KEYS):
         from openbot.runtime.persistence import reopen_memory_store
         try:
             await reopen_memory_store(services)
         except Exception:
             log.exception("could not reopen the memory store with the new embedding settings")
-    if services.settings.seed_demo_bots:
-        from openbot.runtime.setup import setup_status
-        from openbot.seed import seed_demo_bots
-        if setup_status(services.settings)["complete"]:
-            await seed_demo_bots(services)
+    if not services.settings.seed_demo_bots:
+        return
+    # Once the `_setup_completed` marker exists, never seed again.
+    if await _setup_already_completed(services):
+        return
+    from openbot.runtime.setup import setup_status
+    from openbot.seed import seed_demo_bots
+    if not setup_status(services.settings)["complete"]:
+        return
+    # Serialize seeding so concurrent PATCHes do not race.
+    async with services._seed_lock:
+        # Double-check: another coroutine may have seeded while we waited for the lock.
+        if await _setup_already_completed(services):
+            return
+        await seed_demo_bots(services)
 
 
 async def apply_stored_overrides(services) -> dict[str, Any]:
@@ -198,11 +218,11 @@ async def apply_stored_overrides(services) -> dict[str, Any]:
             continue                                   # undecryptable: keep the environment value
         try:
             _apply(services, key, coerce(key, value))
-        except ValueError as e:
-            log.warning("ignoring stored setting %s=%r: %s", key, value, e)
+        except ValueError:
+            log.warning("stored override %r=%r is invalid; keeping the default", key, value)
     if overrides:
         shown = ", ".join(f"{k}={'<secret>' if TUNABLES[k].secret else repr(v)}" for k, v in overrides.items())
-        log.info("runtime settings overriding the environment: %s", shown)
+        log.info("runtime overrides applied on startup: %s", shown)
     return overrides
 
 

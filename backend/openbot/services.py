@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,3 +28,4 @@ class Services:
     langgraph_stack: Any = None  # AsyncExitStack holding the checkpointer/store; replaced when embeddings change
     env_defaults: dict = field(default_factory=dict)  # tunables' values before stored overrides (see runtime/app_settings.py)
     _owned_resources: list = field(default_factory=list)
+    _seed_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
