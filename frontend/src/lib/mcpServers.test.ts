@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "../api/types";
-import { mcpActions, mcpStatusBadge, validateNewMcpServer } from "./mcpServers";
+import { formatKeyValues, mcpActions, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer } from "./mcpServers";
 
 const server = (status: McpServer["status"], oauth = false): McpServer =>
-  ({ name: "linear", transport: "http", status, enabled: status !== "disabled", oauth, url: "https://x/mcp", error: null, tools: [], source: "file", authorization_url: null });
+  ({ name: "linear", transport: "http", status, enabled: status !== "disabled", oauth, url: "https://x/mcp", error: null, tools: [], source: "file", authorization_url: null, command: null, args: [], cwd: null, env: {}, headers: {} });
 
 describe("mcpStatusBadge", () => {
   it("maps each server status to a label and tone", () => {
@@ -46,5 +46,19 @@ describe("mcpActions for servers added from Settings", () => {
     expect(mcpActions(db)).toEqual(["reconnect", "disconnect", "remove"]);
     expect(mcpActions({ ...server("needs_auth", true), source: "db" })).toEqual(["connect", "remove"]);
     expect(mcpActions({ ...server("connected"), source: "file" })).toEqual(["reconnect", "disconnect"]);
+  });
+});
+
+describe("validateNewMcpServer for local servers and key/value parsing", () => {
+  it("requires a command for stdio and accepts variable references in URLs", () => {
+    expect(validateNewMcpServer("gh", "", "stdio", "npx")).toEqual({});
+    expect(validateNewMcpServer("gh", "", "stdio", "")).toEqual({ command: "Command is required" });
+    expect(validateNewMcpServer("x", "https://${HOST}/mcp", "http", "")).toEqual({});
+  });
+  it("parses key=value lines and whitespace-separated args", () => {
+    expect(parseKeyValues("A=1\nB = two words \n\nBAD\nC=")).toEqual({ values: { A: "1", B: "two words", C: "" }, error: "Line 4 is not KEY=value" });
+    expect(parseKeyValues("")).toEqual({ values: {} });
+    expect(parseArgs("-y  @modelcontextprotocol/server-github\n--flag")).toEqual(["-y", "@modelcontextprotocol/server-github", "--flag"]);
+    expect(formatKeyValues({ A: "1", B: "••••••••" })).toBe("A=1\nB=••••••••");
   });
 });

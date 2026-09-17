@@ -5,13 +5,21 @@ export type McpAction = "connect" | "reconnect" | "disconnect" | "forget" | "rem
 
 const NAME_RE = /^[a-zA-Z0-9_-]{1,40}$/;
 
-/** Client-side check for the Add server dialog; the server re-validates. */
-export function validateNewMcpServer(name: string, url: string): { name?: string; url?: string } {
-  const errors: { name?: string; url?: string } = {};
+export type McpTransport = "http" | "stdio";
+export interface ServerFormErrors { name?: string; url?: string; command?: string }
+
+/** Client-side check for the Add/Edit server dialog; the server re-validates. */
+export function validateNewMcpServer(name: string, url: string, transport: McpTransport = "http", command = ""): ServerFormErrors {
+  const errors: ServerFormErrors = {};
   const n = name.trim();
   if (!n) errors.name = "Name is required";
   else if (!NAME_RE.test(n)) errors.name = "Letters, digits, _ and - only (up to 40)";
+  if (transport === "stdio") {
+    if (!command.trim()) errors.command = "Command is required";
+    return errors;
+  }
   const u = url.trim();
+  if (u.includes("${")) return errors;                      // a variable reference; checked when connecting
   let parsed: URL | null = null;
   try { parsed = new URL(u); } catch { parsed = null; }
   if (!parsed || !parsed.host) errors.url = "Enter an absolute URL, for example https://mcp.example.com/mcp";
@@ -21,6 +29,25 @@ export function validateNewMcpServer(name: string, url: string): { name?: string
   }
   return errors;
 }
+
+/** `KEY=value` per line (values may contain `=`); blank lines ignored; the first bad line is reported. */
+export function parseKeyValues(text: string): { values: Record<string, string>; error?: string } {
+  const values: Record<string, string> = {};
+  let error: string | undefined;
+  text.split("\n").forEach((line, i) => {
+    const raw = line.trim();
+    if (!raw) return;
+    const eq = raw.indexOf("=");
+    if (eq <= 0) { error ??= `Line ${i + 1} is not KEY=value`; return; }
+    values[raw.slice(0, eq).trim()] = raw.slice(eq + 1).trim();
+  });
+  return error ? { values, error } : { values };
+}
+
+export const formatKeyValues = (values: Record<string, string>): string => Object.entries(values).map(([k, v]) => `${k}=${v}`).join("\n");
+
+/** Whitespace-separated arguments, one or many per line. */
+export const parseArgs = (text: string): string[] => text.split(/\s+/).map((s) => s.trim()).filter(Boolean);
 
 export function mcpStatusBadge(s: McpServer): { label: string; tone: McpTone } {
   switch (s.status) {

@@ -97,11 +97,12 @@ def _wrap(tool: BaseTool, name: str, cap_chars: int) -> BaseTool:
 class McpManager:
     def __init__(self, servers: list[McpServerConfig], registry, settings,
                  storage: Callable[..., DbTokenStorage] | None, flows: PendingFlows | None = None,
-                 connect_timeout: float = 30.0) -> None:
+                 connect_timeout: float = 30.0, store=None) -> None:
         self._servers = {s.name: s for s in servers}
         self._registry = registry
         self._settings = settings
         self._storage = storage
+        self.store = store          # McpServerStore; the API reads/writes specs through it
         self.flows = flows or PendingFlows()
         self._connect_timeout = connect_timeout
         self._status: dict[str, ServerStatus] = {}
@@ -130,6 +131,19 @@ class McpManager:
         st = self._register(cfg)
         if connect and st.status not in ("disabled", "error"):
             await self.connect(cfg.name, interactive=True)
+        return st
+
+    async def update_server(self, cfg: McpServerConfig) -> ServerStatus:
+        """Replace a server's spec (edited in Settings): reconnect if enabled, otherwise stop it."""
+        if (t := self._tasks.pop(cfg.name, None)) and not t.done():
+            t.cancel()
+            await asyncio.gather(t, return_exceptions=True)
+        await self._close(cfg.name)
+        st = self._register(cfg)
+        if st.status not in ("disabled", "error"):
+            # Non-interactive: a PATCH must not wait minutes for a browser. An OAuth server without
+            # credentials lands in needs_auth and the UI offers "Connect & authorize".
+            await self.connect(cfg.name)
         return st
 
     async def remove_server(self, name: str) -> None:

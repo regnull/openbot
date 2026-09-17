@@ -70,6 +70,7 @@ def settings(tmp_path) -> Settings:
     return Settings(database_url=f"sqlite+aiosqlite:///{tmp_path}/test.db", workspace_root=tmp_path / "workspace",
                     tools_dir=tmp_path / "tools", log_file=tmp_path / "logs" / "openbot.log",
                     seed_demo_bots=False, memory_reflection_delay=0.01,
+                    mcp_config=tmp_path / "mcp.json", mcp_token_key_file=tmp_path / "mcp_token.key",
                     webhook_retry_delays=[0.01, 0.01, 0.01], _env_file=None)
 
 

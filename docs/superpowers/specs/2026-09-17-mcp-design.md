@@ -140,6 +140,19 @@ removes a database server and forgets its credentials; file servers answer 409 a
 `mcp.json`. The card labels file servers "mcp.json" and offers Remove only for database ones. Stdio
 servers and servers that need a secret header stay file-only, so secrets never pass through the UI.
 
+## Configuration moved to the database (2026-09-17, follow-up)
+
+The `mcp_servers` table is the single source of truth (migration 0012): both transports, with
+`headers`/`env` Fernet-encrypted in a `secrets` column and masked in the API, `${VAR}` stored as
+written and expanded at connect time. `mcp.json` is only an import source: each entry is imported
+once, by name, recorded in an `app_settings` marker so an operator's later edits or deletions are
+never undone by the file. The API gained `PATCH /mcp/servers/{name}` (partial edit; blank secret
+values keep the stored ones; the connection restarts non-interactively, so an OAuth server lands in
+`needs_auth` rather than holding the request) and `DELETE` for every server. The Settings dialog
+has a Remote/Local switch with key/value editors, and Edit / Enable / Disable / Remove on every row.
+The bot editor groups MCP tools by server with a select-all checkbox (indeterminate when partial) and
+an expand for individual tools.
+
 ## Out of scope for v1
 
 Editing servers' details from the browser, MCP resources and prompts, deferred tool loading (a
