@@ -39,6 +39,15 @@ export default function Layout() {
           <NavLink to="/bots" className={link} end>Bots</NavLink>
           <NavLink to="/settings" className={link}>Settings</NavLink>
         </nav>
+        <div className="mt-4 px-2">
+          <NavLink to="/threads" end className="flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New Thread
+          </NavLink>
+        </div>
         <section className="mt-6" aria-label="Recent threads">
           <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Recent threads</div>
           <div className="space-y-1">
