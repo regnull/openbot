@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
-import type { BotInput } from "../api/types";
+import type { BotInput, ToolInfo } from "../api/types";
 import BotIcon from "../components/BotIcon";
 import { Button, Card, ErrorText, Field, Input, Select, Spinner, Textarea } from "../components/ui";
 import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
+import { groupState, groupTools, toggleGroup } from "../lib/toolGroups";
 
 const empty: BotInput = { handle: "", name: "", description: "", icon: DEFAULT_BOT_ICON, instructions: "", provider: "auto", model: "", model_settings: {},
   tool_names: [], approval_tools: [], memory_enabled: true, enabled: true };
@@ -41,6 +42,21 @@ export default function BotEditorPage() {
   const isAuto = form.provider === "auto";
   const auto = providers.data?.providers.find((p) => p.id === "auto");
   const prov = providers.data?.providers.find((p) => p.id === form.provider);
+  const grouped = groupTools(tools.data?.tools ?? []);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const ToolRow = ({ tool: t, short = false }: { tool: ToolInfo; short?: boolean }) => {
+    const on = form.tool_names.includes(t.name);
+    return (
+      <div className="flex items-start gap-3 py-2">
+        <input type="checkbox" className="mt-1" checked={on} onChange={() => toggleTool(t.name)} />
+        <div className="min-w-0 flex-1">
+          <div className="font-mono text-sm">{short ? t.name.split("__").slice(1).join("__") || t.name : t.name}</div>
+          <div className="text-xs text-zinc-500">{t.description}</div>
+        </div>
+        {on && <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={form.approval_tools.includes(t.name)} onChange={() => toggleApproval(t.name)} /> needs approval</label>}
+      </div>
+    );
+  };
   if (!isNew && bot.isLoading) return <Spinner />;
 
   return (
@@ -89,17 +105,35 @@ export default function BotEditorPage() {
         <p className="text-xs text-amber-600">Warning: <code>run_shell</code> is not sandboxed. It runs any command as the server user, with access to the whole filesystem and the server environment (including your provider API keys). Only the file tools are confined to the workspace.</p>
         {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-red-600">{e.file}: {e.error}</p>)}
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-          {tools.data?.tools.map((t) => {
-            const on = form.tool_names.includes(t.name);
-            return (
-              <div key={t.name} className="flex items-start gap-3 py-2">
-                <input type="checkbox" className="mt-1" checked={on} onChange={() => toggleTool(t.name)} />
-                <div className="min-w-0 flex-1"><div className="font-mono text-sm">{t.name}</div><div className="text-xs text-zinc-500">{t.description}</div></div>
-                {on && <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={form.approval_tools.includes(t.name)} onChange={() => toggleApproval(t.name)} /> needs approval</label>}
-              </div>
-            );
-          })}
+          {grouped.flat.map((t) => <ToolRow key={t.name} tool={t} />)}
         </div>
+        {grouped.servers.length > 0 && (
+          <>
+            <h3 className="pt-2 text-sm font-medium">MCP servers</h3>
+            <p className="text-xs text-zinc-500">Grant a whole server, or expand it and pick tools. Servers that are not connected right now still show the tools they had; the bot uses them once the server is back.</p>
+            <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {grouped.servers.map((g) => {
+                const names = g.tools.map((t) => t.name);
+                const state = groupState(names, form.tool_names);
+                const expanded = !!openGroups[g.server];
+                return (
+                  <div key={g.server} className="py-2">
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={state === "all"} ref={(el) => { if (el) el.indeterminate = state === "some"; }}
+                        onChange={() => setForm((f) => ({ ...f, ...toggleGroup(f, names) }))} aria-label={`All ${g.server} tools`} />
+                      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setOpenGroups((o) => ({ ...o, [g.server]: !expanded }))}>
+                        <span className="font-mono text-sm">{g.server}</span>
+                        <span className="text-xs text-zinc-500">{state === "all" ? `all ${names.length}` : state === "some" ? `${names.filter((n) => form.tool_names.includes(n)).length} of ${names.length}` : `${names.length}`} tools</span>
+                        <span className="ml-auto text-zinc-500">{expanded ? "▾" : "▸"}</span>
+                      </button>
+                    </div>
+                    {expanded && <div className="ml-6 divide-y divide-zinc-100 dark:divide-zinc-800/60">{g.tools.map((t) => <ToolRow key={t.name} tool={t} short />)}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </Card>
       <ErrorText error={save.error ?? remove.error} />
       <div className="flex gap-2">
