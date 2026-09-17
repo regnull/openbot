@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Api } from "../api/client";
+import { Api, type AttachmentIn } from "../api/client";
 import { isBackendUnavailable } from "../api/errors";
 import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
@@ -42,7 +42,7 @@ export default function ThreadPage() {
     qc.invalidateQueries({ queryKey: ["thread-usage", id] });
   });
   const send = useMutation({
-    mutationFn: (content: string) => Api.postMessage(id, { content }),
+    mutationFn: ({ content, attachments }: { content: string; attachments: AttachmentIn[] }) => Api.postMessage(id, { content, attachments: attachments.length ? attachments : undefined }),
     onSuccess: (r) => setNotice(r.unaddressed ? "No bot was addressed. Mention a bot with @handle or set a default bot to wake one up." : null),
   });
   const loadOlder = useMutation({
@@ -108,7 +108,7 @@ export default function ThreadPage() {
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         {notice && <p className="mb-1 text-xs text-amber-600">{notice}</p>}
         <ErrorText error={send.error} />
-        <Composer handles={handles} onSend={async (text) => { await send.mutateAsync(text); }} />
+        <Composer handles={handles} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />
       </div>
     </div>
   );
