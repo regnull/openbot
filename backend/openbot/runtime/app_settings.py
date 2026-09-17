@@ -189,7 +189,8 @@ async def _after_change(services, keys: set[str]) -> None:
 
 
 async def apply_stored_overrides(services) -> dict[str, Any]:
-    """Snapshot the environment values, then lay the stored overrides over them. Run once at startup."""
+    """Snapshot the environment values, then lay the stored overrides over them. Run once at startup,
+    before anything that is configured from `Settings` at construction time (the memory store's index)."""
     services.env_defaults = {k: getattr(services.settings, k) for k in TUNABLES}
     overrides = await load_overrides(services.session_factory, services)
     for key, value in overrides.items():

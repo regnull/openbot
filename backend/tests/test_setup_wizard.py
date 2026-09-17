@@ -117,6 +117,31 @@ async def test_changing_embeddings_reopens_the_memory_store(client, services):
     assert services.store.index_config and services.store.index_config["dims"] == 768
 
 
+async def test_embeddings_stored_only_in_the_database_survive_a_restart(settings):
+    # STO-2323. Boot 1: a fresh install (no embedding configuration in the environment) completes the
+    # wizard with Ollama embeddings, which are stored in the database only.
+    from openbot.main import build_services, close_services
+    from openbot.runtime.app_settings import update_settings
+    fresh_env = settings.model_copy(deep=True)
+    settings.embedding_model = ""
+    fresh_env.embedding_model = ""
+    first = await build_services(settings)
+    try:
+        assert getattr(first.store, "index_config", None) in (None, {})
+        await update_settings(first, {"ollama_base_url": "http://localhost:11434",
+                                      "embedding_model": "ollama:nomic-embed-text", "embedding_dims": 768})
+        assert first.store.index_config["dims"] == 768                                 # applied live
+    finally:
+        await close_services(first)
+    # Boot 2: same database, the environment still knows nothing about embeddings.
+    second = await build_services(fresh_env)
+    try:
+        assert second.settings.embedding_model == "ollama:nomic-embed-text"            # override applied...
+        assert second.store.index_config and second.store.index_config["dims"] == 768  # ...and the store opened with it
+    finally:
+        await close_services(second)
+
+
 # --- .env.example ------------------------------------------------------------------------------------------
 
 def test_env_example_holds_only_what_the_process_needs_to_start():
