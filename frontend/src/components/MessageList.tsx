@@ -11,7 +11,7 @@ import RunCard from "./RunCard";
 
 const ACTIVE = ["queued", "running", "waiting_human"];
 
-export default function MessageList({ state, participants, onRunLoaded }: { state: ThreadState; participants: Participant[]; onRunLoaded: (run: RunDetail) => void }) {
+export default function MessageList({ state, participants, onRunLoaded, iconByActor }: { state: ThreadState; participants: Participant[]; onRunLoaded: (run: RunDetail) => void; iconByActor?: Record<string, string> }) {
   const byActor = new Map(participants.map((p) => [p.actor_id, p]));
   // Runs referenced by a message whose events we do not have yet: fetch them lazily.
   // `onRunLoaded` folds the result into thread state, which drops the id from `missing`
@@ -48,7 +48,7 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
         const run = m.run_id ? state.runs[m.run_id] : undefined;
         return (
           <div key={m.id} className={`flex gap-3 ${m.sender_kind === "system" ? "opacity-70" : ""}`}>
-            <Avatar name={m.sender_name} kind={m.sender_kind} />
+            <Avatar name={m.sender_name} kind={m.sender_kind} icon={m.sender_actor_id ? iconByActor?.[m.sender_actor_id] : undefined} />
             <div className="min-w-0 flex-1">
               <div className="text-xs text-zinc-500">
                 <span className="font-medium text-zinc-700 dark:text-zinc-300">{m.sender_name}</span> · {parseTs(m.created_at).toLocaleTimeString()}{m.hop > 0 && ` · hop ${m.hop}`}
@@ -72,7 +72,7 @@ export default function MessageList({ state, participants, onRunLoaded }: { stat
       })}
       {active.map((r) => (
         <div key={r.id} className="flex gap-3">
-          <Avatar name={byActor.get(r.actor_id)?.name ?? "bot"} kind="bot" />
+          <Avatar name={byActor.get(r.actor_id)?.name ?? "bot"} kind="bot" icon={iconByActor?.[r.actor_id]} />
           <div className="min-w-0 flex-1 space-y-1">
             <div className="text-xs text-zinc-500">{byActor.get(r.actor_id)?.name ?? "bot"} · {r.status.replace("_", " ")}</div>
             <RunCard run={r} events={eventsFor(r.id)} streaming={state.streaming[r.id]} />

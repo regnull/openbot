@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Api, type AttachmentIn } from "../api/client";
 import { isBackendUnavailable } from "../api/errors";
@@ -66,6 +66,15 @@ export default function ThreadPage() {
     if (el && shouldStickToBottom.current) scrollToBottom(el);
   }, [id, latestMessageId, streamedChars, runEventCount, runStatuses]);
 
+  // Build actor_id → bot icon key lookup
+  const iconByActor = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const bot of bots.data ?? []) {
+      map[bot.id] = bot.icon;
+    }
+    return map;
+  }, [bots.data]);
+
   if (detail.isLoading) return <Spinner />;
   if (!detail.data) {
     if (isBackendUnavailable(detail.error)) return <OfflineNotice />;
@@ -103,7 +112,7 @@ export default function ThreadPage() {
             <ErrorText error={loadOlder.error} />
           </div>
         )}
-        <MessageList state={state} participants={t.participants} onRunLoaded={(run) => setState((s) => mergeRun(s, run))} />
+        <MessageList state={state} participants={t.participants} onRunLoaded={(run) => setState((s) => mergeRun(s, run))} iconByActor={iconByActor} />
       </div>
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         {notice && <p className="mb-1 text-xs text-amber-600">{notice}</p>}

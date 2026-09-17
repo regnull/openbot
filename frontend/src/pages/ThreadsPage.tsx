@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Api } from "../api/client";
 import Avatar from "../components/Avatar";
@@ -18,9 +18,10 @@ export default function ThreadsPage() {
   const [defaultBot, setDefaultBot] = useState("chief_of_staff");
   const [workingDirectory, setWorkingDirectory] = useState("");
   const [browseLoading, setBrowseLoading] = useState(false);
-  const enabledBots = bots.data?.filter((b) => b.enabled) ?? [];
+  const enabledBots = (bots.data ?? []).filter((b) => b.enabled);
   const effectiveDefaultBot = enabledBots.some((b) => b.handle === defaultBot) ? defaultBot : enabledBots[0]?.handle;
   const workingDirectoryValidation = normalizeWorkingDirectory(workingDirectory);
+  const botIconByHandle = useMemo(() => new Map((bots.data ?? []).map((b) => [b.handle, b.icon])), [bots.data]);
   const create = useMutation({
     mutationFn: () => {
       if (!workingDirectoryValidation.ok) throw new Error(workingDirectoryValidation.error ?? "Invalid working directory");
@@ -88,7 +89,7 @@ export default function ThreadsPage() {
         {threads.data?.map((t) => (
           <Link key={t.id} to={`/threads/${t.id}`} className="block">
             <Card className="flex items-center gap-3 hover:border-blue-400">
-              <div className="flex -space-x-2">{t.participants.map((p) => <Avatar key={p.actor_id} name={p.name} kind={p.kind} small />)}</div>
+              <div className="flex -space-x-2">{t.participants.map((p) => <Avatar key={p.actor_id} name={p.name} kind={p.kind} small icon={p.kind === "bot" ? botIconByHandle.get(p.handle) : undefined} />)}</div>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{t.title || t.participants.map((p) => p.handle).join(", ")}</div>
                 <div className="text-xs text-zinc-500">{t.participants.map((p) => `@${p.handle}`).join(" ")} · default @{t.default_bot_handle ?? "chief_of_staff"} · cwd {t.working_directory ?? "."}</div>
