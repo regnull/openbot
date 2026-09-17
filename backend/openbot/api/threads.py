@@ -31,6 +31,7 @@ from openbot.runtime.delivery import (
     create_thread,
     human_actor,
 )
+from openbot.runtime.waiters import waiters_for
 from openbot.services import Services
 
 router = APIRouter(prefix="/threads", tags=["threads"])
@@ -115,6 +116,9 @@ async def get_thread(thread_id: str, before: str | None = None, limit: int = Que
     d.messages = [MessageOut.model_validate(m) for m in reversed(rows[:limit])]
     d.has_more = len(rows) > limit
     d.runs = [RunOut.model_validate(r) for r in runs]
+    # Waiting bots are computed from the inbox queue, not stored, so a freshly opened page is right
+    # even if every waiters.updated event was published before the SSE socket existed.
+    d.waiters = await waiters_for(session, thread_id)
     return d
 
 
