@@ -155,8 +155,11 @@ def get_time() -> str:
 ### MCP servers
 
 Bots can also use tools from [Model Context Protocol](https://modelcontextprotocol.io) servers
-(Linear, Slack, GitHub, filesystem, anything that speaks MCP). Configure them the way Claude Code
-does, in `mcp.json` at the repo root (`MCP_CONFIG`); see `mcp.example.json`:
+(Linear, Slack, GitHub, filesystem, anything that speaks MCP). Remote servers can be added from
+Settings → MCP servers → Add server (a name and the server's HTTPS URL; OAuth follows if the server
+requires it). Any server, including local stdio ones and servers that need a secret header, can be
+configured the way Claude Code does, in `mcp.json` at the repo root (`MCP_CONFIG`); see
+`mcp.example.json`:
 
 ```json
 {

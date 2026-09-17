@@ -342,6 +342,27 @@ class McpServerOut(BaseModel):
     url: str | None
     error: str | None
     tools: list[str]
+    source: str = "file"
+    authorization_url: str | None = None    # present while the server waits for the operator to authorize
+
+
+class McpServerCreate(BaseModel):
+    """A remote MCP server added from Settings: a name and the URL where it accepts MCP requests."""
+    name: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,40}$")
+    url: str = Field(min_length=8, max_length=2000)
+
+    @field_validator("url")
+    @classmethod
+    def _https_or_local(cls, v: str) -> str:
+        from urllib.parse import urlparse
+        v = v.strip()
+        u = urlparse(v)
+        if not u.netloc:
+            raise ValueError("url must be absolute, for example https://mcp.example.com/mcp")
+        local = u.hostname in ("localhost", "127.0.0.1", "::1")
+        if u.scheme != "https" and not (u.scheme == "http" and local):
+            raise ValueError("url must use https (http is allowed for localhost only)")
+        return v
 
 
 class McpConnectOut(BaseModel):

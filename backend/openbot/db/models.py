@@ -198,6 +198,17 @@ class RunEvent(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
 
+class McpServer(Base):
+    """A remote MCP server added from the Settings UI. Servers from mcp.json are not stored here; a
+    row whose name collides with the file is ignored (the file wins)."""
+    __tablename__ = "mcp_servers"
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    headers: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
 class McpCredential(Base):
     """OAuth client registration and tokens for one remote MCP server, Fernet-encrypted (see mcp/oauth.py)."""
     __tablename__ = "mcp_credentials"

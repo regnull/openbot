@@ -33,6 +33,7 @@ class McpServerConfig:
     headers: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     error: str | None = None              # set when expansion failed; the server is listed but not started
+    source: str = "file"                  # "file" (mcp.json, read-only in the UI) | "db" (added from Settings)
 
     @property
     def oauth(self) -> bool:

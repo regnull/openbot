@@ -46,6 +46,7 @@ class ServerStatus:
     url: str | None = None
     error: str | None = None
     tools: list[str] = field(default_factory=list)
+    source: str = "file"        # "file" (mcp.json) | "db" (added from Settings; removable there)
 
 
 def tool_name(server: str, name: str) -> str:
@@ -108,12 +109,37 @@ class McpManager:
         self._tasks: dict[str, asyncio.Task] = {}
         self._interactive: dict[str, bool] = {}
         for s in servers:
-            st = ServerStatus(name=s.name, transport=s.transport, status="disconnected", enabled=s.enabled, oauth=s.oauth, url=s.url)
-            if not s.enabled:
-                st.status = "disabled"
-            elif s.error:
-                st.status, st.error = "error", s.error
-            self._status[s.name] = st
+            self._register(s)
+
+    def _register(self, s: McpServerConfig) -> ServerStatus:
+        st = ServerStatus(name=s.name, transport=s.transport, status="disconnected", enabled=s.enabled, oauth=s.oauth,
+                          url=s.url, source=s.source)
+        if not s.enabled:
+            st.status = "disabled"
+        elif s.error:
+            st.status, st.error = "error", s.error
+        self._servers[s.name] = s
+        self._status[s.name] = st
+        return st
+
+    async def add_server(self, cfg: McpServerConfig, connect: bool = True) -> ServerStatus:
+        """Add a server at runtime (from the Settings UI). With `connect`, connect it now, interactively:
+        the caller is an operator who can open the authorization page."""
+        if cfg.name in self._servers:
+            raise ValueError(f"MCP server {cfg.name} already exists")
+        st = self._register(cfg)
+        if connect and st.status not in ("disabled", "error"):
+            await self.connect(cfg.name, interactive=True)
+        return st
+
+    async def remove_server(self, name: str) -> None:
+        """Disconnect, forget its credentials, and drop it from the manager."""
+        if name not in self._servers:
+            return
+        await self.forget_credentials(name)
+        self._servers.pop(name, None)
+        self._status.pop(name, None)
+        self._interactive.pop(name, None)
 
     # --- queries -------------------------------------------------------------------------------------
 
