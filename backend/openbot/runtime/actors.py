@@ -14,6 +14,7 @@ from sqlalchemy import select
 from openbot.api.schemas import InboxItemOut, MessageOut, RunOut, to_json
 from openbot.db.models import Actor, InboxItem, Message, Run, utcnow
 from openbot.runtime.delivery import post_message
+from openbot.runtime.waiters import publish_waiters, refresh_waiters_at_start
 
 log = logging.getLogger(__name__)
 
@@ -118,6 +119,9 @@ class BotActor(_Worker):
             await session.commit()
             await s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             await s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": True})
+            # The items are "processing" now: this thread no longer waits for this bot, and the
+            # thread window should say so the moment the run starts, not when it finishes.
+            await publish_waiters(s, session, run.thread_id)
             return Batch(run_id=run.id, items=group)
 
     async def _process(self, batch: Batch) -> None:
@@ -261,6 +265,7 @@ class ActorSystem:
                 log.exception("could not post the restart notice for thread %s", thread_id)
         for aid in pending:
             await self.notify(aid)
+        await refresh_waiters_at_start(self.s)
 
     async def stop(self) -> None:
         self._started = False
@@ -302,6 +307,7 @@ class ActorSystem:
             await session.commit()
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             await self.s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": False})
+            await publish_waiters(self.s, session, run.thread_id)
         await self._drop_checkpoint(run_id)
         await self.notify(run.actor_id)     # parked thread may now have waiting mail
         return True

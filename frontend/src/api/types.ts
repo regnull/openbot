@@ -11,7 +11,9 @@ export interface Interrupt { kind: "question" | "approval"; question?: string; a
 export interface Run { id: string; actor_id: string; thread_id: string; status: string; interrupt: Interrupt | null; error: string | null; langsmith_run_id: string | null; prompt_tokens?: number | null; completion_tokens?: number | null; cache_read_tokens?: number | null; total_tokens?: number | null; model_calls?: number | null; created_at: string; started_at: string | null; finished_at: string | null; }
 export interface RunEvent { id: string; run_id: string; seq: number; type: string; payload: Record<string, any>; created_at: string; }
 export interface RunDetail extends Run { events: RunEvent[]; }
-export interface ThreadDetail extends Thread { messages: Message[]; has_more: boolean; runs: Run[]; }
+/** A bot with queued, unpicked mail in this thread (see the backend WaiterOut schema). */
+export interface Waiter { actor_id: string; handle: string | null; name: string | null; position: number; count: number; queue_len: number; }
+export interface ThreadDetail extends Thread { messages: Message[]; has_more: boolean; runs: Run[]; waiters?: Waiter[]; }
 export interface ThreadUsage { model_calls: number; prompt_tokens: number; completion_tokens: number; cache_read_tokens: number; }
 export interface InboxItem { id: string; actor_id: string; thread_id: string; kind: "message" | "question" | "resume"; message_id: string | null; run_id: string | null; payload: Record<string, any>; status: string; attempts: number; last_error: string | null; created_at: string; processed_at: string | null; message: Message | null; }
 export interface BotInboxItem extends InboxItem { thread_kind: "chat" | "direct"; run_status: string | null; reply: Message | null; }

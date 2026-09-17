@@ -1,8 +1,8 @@
-import type { BusEvent, Message, Run, RunDetail, RunEvent, ThreadDetail } from "../api/types";
+import type { BusEvent, Message, Run, RunDetail, RunEvent, ThreadDetail, Waiter } from "../api/types";
 
-export interface ThreadState { messages: Message[]; runs: Record<string, Run>; runEvents: Record<string, RunEvent[]>; streaming: Record<string, string>; }
+export interface ThreadState { threadId?: string; messages: Message[]; runs: Record<string, Run>; runEvents: Record<string, RunEvent[]>; streaming: Record<string, string>; waiters: Waiter[]; }
 
-export const emptyThreadState = (): ThreadState => ({ messages: [], runs: {}, runEvents: {}, streaming: {} });
+export const emptyThreadState = (threadId?: string): ThreadState => ({ threadId, messages: [], runs: {}, runEvents: {}, streaming: {}, waiters: [] });
 
 const sortMsgs = (ms: Message[]) => [...ms].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
 
@@ -11,7 +11,8 @@ export function hydrate(state: ThreadState, detail: ThreadDetail): ThreadState {
   detail.messages.forEach((m) => byId.set(m.id, m));
   const runs = { ...state.runs };
   detail.runs.forEach((r) => (runs[r.id] = r));
-  return { ...state, messages: sortMsgs([...byId.values()]), runs };
+  // detail.waiters is optional so a page rendered against an older backend degrades to "no waiters".
+  return { ...state, messages: sortMsgs([...byId.values()]), runs, waiters: detail.waiters ?? [] };
 }
 
 /**
@@ -44,6 +45,10 @@ export function reduceThreadEvent(state: ThreadState, e: BusEvent): ThreadState 
       if (run.status !== "running") delete streaming[run.id];
       return { ...state, runs: { ...state.runs, [run.id]: run }, streaming };
     }
+    case "waiters.updated":
+      // Same thread only: the SSE subscription filters, but the reducer is also the last line of
+      // defense for events that reach it from anywhere else.
+      return e.thread_id === state.threadId ? { ...state, waiters: e.data?.waiters ?? [] } : state;
     case "run.event": {
       const d = e.data;
       if (d.type === "text_delta") {

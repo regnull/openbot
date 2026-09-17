@@ -20,6 +20,7 @@ from openbot.db.models import (
 )
 from openbot.runtime import memory
 from openbot.runtime.router import parse_mentions, resolve_targets
+from openbot.runtime.waiters import publish_waiters
 from openbot.tools.builtin.workspace import thread_workspace_root, validate_workspace_directory
 
 log = logging.getLogger(__name__)
@@ -198,6 +199,9 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
             await memory.index_message(services.store, m)
         await services.bus.publish("message.created", thread_id, to_json(MessageOut, m))
     await _publish_items(services, items)
+    # Delivering to a bot that cannot pick the items up right now is what makes the thread window
+    # show its waiting state, so publish it in the same breath as the inbox items themselves.
+    await publish_waiters(services, session, thread_id)
     await notify(services, [it.actor_id for it in items])
     return PostResult(message=msg, addressed=targets, unaddressed=unaddressed, items=items)
 
@@ -217,7 +221,11 @@ async def deliver_question(services, run: Run, interrupt: dict) -> list[InboxIte
 
 
 async def ack_items(services, session: AsyncSession, items: list[InboxItem]) -> None:
+    threads = {it.thread_id for it in items}
     for it in items:
         it.status, it.processed_at = "done", utcnow()
     await session.commit()
     await _publish_items(services, items)
+    # Acking queued mail settles it without a run, so the waiting state it produced has to go too.
+    for thread_id in threads:
+        await publish_waiters(services, session, thread_id)

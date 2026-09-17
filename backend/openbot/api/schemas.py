@@ -193,10 +193,26 @@ class RunDetail(RunOut):
     events: list[RunEventOut] = []
 
 
+class WaiterOut(BaseModel):
+    """A bot with queued, unpicked mail in a thread: the thread window shows it as
+    "@eng - waiting to pick up this thread" until a worker turns the items into a run.
+
+    position/count/queue_len are 1-based positions in that bot's FIFO queue: position is where this
+    thread's items start, count how many items this thread has, queue_len how many the bot has
+    overall (across threads) - the gap is mail queued in other threads."""
+    actor_id: str
+    handle: str | None = None
+    name: str | None = None
+    position: int = 1
+    count: int = 1
+    queue_len: int = 1
+
+
 class ThreadDetail(ThreadOut):
     messages: list[MessageOut] = []
     has_more: bool = False
     runs: list[RunOut] = []
+    waiters: list[WaiterOut] = []
 
 
 class ThreadUsage(BaseModel):

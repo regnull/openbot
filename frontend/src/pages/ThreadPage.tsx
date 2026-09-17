@@ -5,6 +5,7 @@ import { Api, type AttachmentIn } from "../api/client";
 import { isBackendUnavailable } from "../api/errors";
 import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
+import WaitingIndicator from "../components/WaitingIndicator";
 import MessageList from "../components/MessageList";
 import { Button, ErrorText, OfflineNotice, Spinner } from "../components/ui";
 import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
@@ -18,7 +19,7 @@ export default function ThreadPage() {
   const detail = useQuery({ queryKey: ["thread", id], queryFn: () => Api.getThread(id) });
   const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
   const usage = useQuery({ queryKey: ["thread-usage", id], queryFn: () => Api.getThreadUsage(id) });
-  const [state, setState] = useState<ThreadState>(emptyThreadState());
+  const [state, setState] = useState<ThreadState>(emptyThreadState(id));
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const scrollContainer = useRef<HTMLDivElement>(null);
@@ -27,7 +28,7 @@ export default function ThreadPage() {
     const el = scrollContainer.current;
     if (el) shouldStickToBottom.current = isNearBottom(el);
   }, []);
-  useEffect(() => { setState(emptyThreadState()); setHasMore(false); shouldStickToBottom.current = true; }, [id]);
+  useEffect(() => { setState(emptyThreadState(id)); setHasMore(false); shouldStickToBottom.current = true; }, [id]);
   useEffect(() => { if (detail.data) { setState((s) => hydrate(s, detail.data)); setHasMore(detail.data.has_more); } }, [id, detail.data]);
   // Ack on open and whenever new messages land, so the inbox badge stays honest.
   useEffect(() => { Api.ackThread(id).then(() => qc.invalidateQueries({ queryKey: ["inbox"] })).catch(() => {}); }, [id, qc, state.messages.length]);
@@ -114,6 +115,9 @@ export default function ThreadPage() {
         </div>
         <Button variant="secondary" onClick={() => window.confirm("Delete thread?") && del.mutate()}>Delete</Button>
       </div>
+      {/* Above the scroll area on purpose: in a long thread a banner inside it would scroll out
+          of view, and the whole point is a waiting state the reader cannot miss. */}
+      <WaitingIndicator waiters={state.waiters} />
       <div ref={scrollContainer} onScroll={updateScrollStickiness} className="flex-1 overflow-y-auto py-4">
         {hasMore && state.messages.length > 0 && (
           <div className="mb-3 space-y-1 text-center">
