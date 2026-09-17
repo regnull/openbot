@@ -405,7 +405,7 @@ def test_clearing_reclaims_from_older_turns_and_stops_at_clear_at_least(settings
     from langchain_core.messages.utils import count_tokens_approximately
     settings.context_trigger_tokens, settings.context_clear_at_least = 1000, 2500
     edit = _clearing_edit(settings)
-    history = [HumanMessage("task")] + sum((_turn(1, f"t{i}", 4000) for i in range(6)), [])
+    history = [HumanMessage("task")] + [m for i in range(6) for m in _turn(1, f"t{i}", 4000)]
     before = count_tokens_approximately(history)
     edit.apply(history, count_tokens=count_tokens_approximately)
     cleared = {m.tool_call_id for m in history if isinstance(m, ToolMessage) and m.content == CLEARED_TOOL_RESULT}
