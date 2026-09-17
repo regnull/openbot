@@ -1,5 +1,5 @@
 export type ChatChoice = "openrouter" | "openai" | "anthropic" | "xai" | "ollama";
-export type EmbeddingChoice = "openai" | "ollama" | "none";
+export type EmbeddingChoice = "openrouter" | "openai" | "ollama" | "none";
 
 export interface WizardState {
   chat: ChatChoice;
@@ -9,6 +9,7 @@ export interface WizardState {
   botModel: string;
   embeddings: EmbeddingChoice;
   openaiKeyForEmbeddings: string;
+  openrouterKeyForEmbeddings: string;
   ollamaEmbeddingModel: string;
 }
 
@@ -24,10 +25,10 @@ export const KEY_LABEL: Record<Exclude<ChatChoice, "ollama">, string> = { openro
 
 export const initialWizardState = (): WizardState => ({
   chat: "openrouter", apiKey: "", ollamaUrl: "http://localhost:11434", ollamaModel: "llama3.1", botModel: "z-ai/glm-5.3-flash",
-  embeddings: "none", openaiKeyForEmbeddings: "", ollamaEmbeddingModel: "nomic-embed-text",
+  embeddings: "none", openaiKeyForEmbeddings: "", openrouterKeyForEmbeddings: "", ollamaEmbeddingModel: "nomic-embed-text",
 });
 
-export interface WizardErrors { apiKey?: string; ollamaUrl?: string; ollamaModel?: string; openaiKeyForEmbeddings?: string }
+export interface WizardErrors { apiKey?: string; ollamaUrl?: string; ollamaModel?: string; openaiKeyForEmbeddings?: string; openrouterKeyForEmbeddings?: string }
 
 export function validateWizard(s: WizardState): WizardErrors {
   const errors: WizardErrors = {};
@@ -39,6 +40,9 @@ export function validateWizard(s: WizardState): WizardErrors {
   }
   if (s.embeddings === "openai" && s.chat !== "openai" && !s.openaiKeyForEmbeddings.trim()) {
     errors.openaiKeyForEmbeddings = "OpenAI embeddings need an OpenAI API key";
+  }
+  if (s.embeddings === "openrouter" && s.chat !== "openrouter" && !s.openrouterKeyForEmbeddings.trim()) {
+    errors.openrouterKeyForEmbeddings = "OpenRouter embeddings need an OpenRouter API key";
   }
   if (s.embeddings === "ollama" && s.chat !== "ollama" && !s.ollamaUrl.trim()) {
     errors.ollamaUrl = "Ollama embeddings need the Ollama base URL";
@@ -56,7 +60,11 @@ export function wizardPayload(s: WizardState): Record<string, unknown> {
     body[`${s.chat}_api_key`] = s.apiKey.trim();
     if (s.chat === "openrouter" && s.botModel.trim()) body.bot_model = s.botModel.trim();
   }
-  if (s.embeddings === "openai") {
+  if (s.embeddings === "openrouter") {
+    if (s.chat !== "openrouter") body.openrouter_api_key = s.openrouterKeyForEmbeddings.trim();
+    body.embedding_model = "openrouter:openai/text-embedding-3-small";
+    body.embedding_dims = 1536;
+  } else if (s.embeddings === "openai") {
     if (s.chat !== "openai") body.openai_api_key = s.openaiKeyForEmbeddings.trim();
     body.embedding_model = "openai:text-embedding-3-small";
     body.embedding_dims = 1536;

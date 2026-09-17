@@ -172,6 +172,14 @@ def embeddings(settings: Settings) -> Embeddings | None:
         from langchain_ollama import OllamaEmbeddings
 
         return OllamaEmbeddings(model=model, base_url=settings.ollama_base_url)
+    if provider == "openrouter":
+        # OpenRouter serves embeddings at /api/v1/embeddings in the OpenAI wire format, so one key can power
+        # chat and memory search. Its model names (openai/text-embedding-3-small) are unknown to tiktoken, so
+        # the client must not tokenize inputs locally to check their length.
+        from langchain_openai import OpenAIEmbeddings
+
+        return OpenAIEmbeddings(model=model, api_key=api_key_for(settings, provider), base_url=_BASE_URL["openrouter"],
+                                check_embedding_ctx_length=False)
     return init_embeddings(settings.embedding_model, api_key=api_key_for(settings, provider))
 
 
