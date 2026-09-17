@@ -154,3 +154,14 @@ def test_openrouter_provider_order_prefers_the_upstream_but_keeps_fallbacks():
     assert not m.extra_body
     m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini"), s(openai_api_key="k", openrouter_provider_order="z-ai"))
     assert not m.extra_body                                        # pinning is an OpenRouter concept only
+
+
+def test_openrouter_embeddings_use_its_openai_compatible_endpoint():
+    """OpenRouter serves embeddings at /api/v1/embeddings with the OpenAI wire format, so one OpenRouter key
+    can power both chat and memory search. The model name is OpenRouter's (openai/text-embedding-3-small),
+    which tiktoken does not know, so the client must not try to tokenize inputs locally."""
+    from langchain_openai import OpenAIEmbeddings
+    e = embeddings(s(openrouter_api_key="k", embedding_model="openrouter:openai/text-embedding-3-small"))
+    assert isinstance(e, OpenAIEmbeddings) and e.model == "openai/text-embedding-3-small"
+    assert e.openai_api_base == "https://openrouter.ai/api/v1" and e.check_embedding_ctx_length is False
+    assert embeddings(s(embedding_model="openrouter:openai/text-embedding-3-small")) is None      # no key: off

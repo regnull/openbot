@@ -53,7 +53,8 @@ TUNABLES: dict[str, Tunable] = {
     "ollama_model": Tunable("Providers", "Ollama default model", "Model offered first for bots on the ollama provider."),
     # --- Embeddings ----------------------------------------------------------------------------------------
     "embedding_model": Tunable("Embeddings", "Embedding model",
-        "provider:model for semantic memory search, e.g. openai:text-embedding-3-small or ollama:nomic-embed-text. "
+        "provider:model for semantic memory search, e.g. openrouter:openai/text-embedding-3-small, "
+        "openai:text-embedding-3-small or ollama:nomic-embed-text. "
         "Leave empty to turn semantic search off (memory still works by recency). Applies immediately."),
     "embedding_dims": Tunable("Embeddings", "Embedding dimensions",
         "Must match the model: 1536 for text-embedding-3-small, 768 for nomic-embed-text.", 1),

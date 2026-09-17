@@ -72,7 +72,8 @@ export default function SetupWizard({ status, onDone }: { status: SetupStatus; o
             <p className="text-sm">Bots remember things between runs. Semantic search over those memories needs an embedding model. You can turn it off; memory then works by recency only.</p>
             <div className="grid gap-2">
               {([
-                { id: "openai", label: "OpenAI text-embedding-3-small", hint: "Good quality, low cost. Uses an OpenAI API key." },
+                { id: "openrouter", label: "OpenRouter: openai/text-embedding-3-small", hint: "Good quality, low cost, through your OpenRouter key." },
+                { id: "openai", label: "OpenAI text-embedding-3-small", hint: "The same model billed to an OpenAI API key." },
                 { id: "ollama", label: "Ollama nomic-embed-text (local)", hint: "Runs on this machine; pull the model first." },
                 { id: "none", label: "No semantic search", hint: "Skip embeddings for now. Can be enabled later in Settings." },
               ] as { id: EmbeddingChoice; label: string; hint: string }[]).map((c) => (
@@ -82,6 +83,12 @@ export default function SetupWizard({ status, onDone }: { status: SetupStatus; o
                 </button>
               ))}
             </div>
+            {state.embeddings === "openrouter" && state.chat !== "openrouter" && (
+              <div className="space-y-1">
+                <Input type="password" value={state.openrouterKeyForEmbeddings} placeholder="OpenRouter API key" autoComplete="off" onChange={(e) => set("openrouterKeyForEmbeddings", e.target.value)} />
+                {touched && errors.openrouterKeyForEmbeddings && <p className="text-xs text-red-600">{errors.openrouterKeyForEmbeddings}</p>}
+              </div>
+            )}
             {state.embeddings === "openai" && state.chat !== "openai" && (
               <div className="space-y-1">
                 <Input type="password" value={state.openaiKeyForEmbeddings} placeholder="OpenAI API key" autoComplete="off" onChange={(e) => set("openaiKeyForEmbeddings", e.target.value)} />

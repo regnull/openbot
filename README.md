@@ -44,8 +44,8 @@ make dev               # backend on :8000, frontend dev server on :5173
 ```
 
 Open http://localhost:5173. The first load shows a short setup wizard: pick a chat provider (paste a
-key, or point at Ollama) and choose how memory search should work (OpenAI embeddings, Ollama
-embeddings, or none). Both are stored encrypted in OpenBot's database and can be changed later under
+key, or point at Ollama) and choose how memory search should work (embeddings through OpenRouter,
+OpenAI or Ollama, or none). Both are stored encrypted in OpenBot's database and can be changed later under
 Settings; nothing goes into `.env`. When the wizard completes, OpenBot seeds the human actor `@you`
 and four demo bots: `chief_of_staff`, `engineer`, `reviewer`, `qa`.
 
@@ -306,7 +306,7 @@ name, if set, is the default the page shows and the value a reset returns to.
 |---|---|---|
 | Providers | `openrouter_api_key`, `openai_api_key`, `anthropic_api_key`, `xai_api_key` | Enable the respective provider. Secret: encrypted at rest, masked in the API. |
 | Providers | `ollama_base_url`, `ollama_model` | A local Ollama server (e.g. `http://localhost:11434`) enables the `ollama` provider; the bot editor lists the models installed there. Bots on `ollama` keep their model even when an OpenRouter key is set. |
-| Embeddings | `embedding_model`, `embedding_dims` | `provider:model` for semantic memory search (`openai:text-embedding-3-small`/1536, `ollama:nomic-embed-text`/768). Empty turns semantic search off. Applies immediately: the memory store is reopened. |
+| Embeddings | `embedding_model`, `embedding_dims` | `provider:model` for semantic memory search (`openrouter:openai/text-embedding-3-small`/1536 using the OpenRouter key, `openai:text-embedding-3-small`/1536, `ollama:nomic-embed-text`/768). Empty turns semantic search off. Applies immediately: the memory store is reopened. |
 | Run limits | `max_model_calls_per_run` (60), `max_bot_hops` (20) | Model turns per run before the agent stops with a notice (a bot can lower it in `model_settings.max_model_calls`; the seeded Chief of Staff uses 6); bot-to-bot mention chain limit per thread. `model_settings` also accepts `reasoning_effort`, `temperature`, `max_tokens`. |
 | Context | `tool_output_cap` (8000), `shell_output_cap` (4000) | Longest single tool result the model sees; shorter cap for `run_shell` so dumping files through the shell loses to `read_file` ranges. |
 | Context | `context_trigger_tokens` (40000), `context_clear_at_least` (10000) | Once a run's messages pass the trigger, tool results from turns before the last two, and their call arguments, become a placeholder, oldest first; each clearing reclaims at least the second value so clearings are rare and the prompt cache stays warm. What the last two model turns fetched is never cleared. |
