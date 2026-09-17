@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Api, getApiKey, setApiKey } from "../api/client";
-import type { AppSetting } from "../api/types";
+import type { AppSetting, McpServer } from "../api/types";
 import { Badge, Button, Card, ErrorText, Field, Input } from "../components/ui";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
+import { mcpActions, mcpInFlight, mcpStatusBadge } from "../lib/mcpServers";
 
 const emptyExt = { handle: "", name: "", webhook_url: "", webhook_secret: "" };
 
@@ -25,6 +26,8 @@ export default function SettingsPage() {
       <h1 className="text-xl font-semibold">Settings</h1>
 
       <RuntimeSettings />
+
+      <McpServersCard />
 
       <Card className="space-y-2">
         <h2 className="font-medium">Providers</h2>
@@ -161,6 +164,61 @@ function SettingsGroupCard({ group }: { group: SettingGroup }) {
         <Button onClick={submit} disabled={!dirty || save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
         {dirty && <Button variant="secondary" onClick={() => { setDrafts({}); setErrors({}); }}>Discard</Button>}
       </div>
+    </Card>
+  );
+}
+
+function McpServersCard() {
+  const qc = useQueryClient();
+  const servers = useQuery({
+    queryKey: ["mcp-servers"],
+    queryFn: Api.listMcpServers,
+    refetchInterval: (q) => (mcpInFlight(q.state.data ?? []) ? 2000 : false),
+  });
+  const refresh = () => { qc.invalidateQueries({ queryKey: ["mcp-servers"] }); qc.invalidateQueries({ queryKey: ["tools"] }); };
+  const connect = useMutation({
+    mutationFn: (name: string) => Api.connectMcpServer(name),
+    onSuccess: (r) => { if (r.authorization_url) window.open(r.authorization_url, "_blank", "noopener"); refresh(); },
+  });
+  const disconnect = useMutation({ mutationFn: (name: string) => Api.disconnectMcpServer(name), onSuccess: refresh });
+  const forget = useMutation({ mutationFn: (name: string) => Api.forgetMcpCredentials(name), onSuccess: refresh });
+  const busy = connect.isPending || disconnect.isPending || forget.isPending;
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  return (
+    <Card className="space-y-2">
+      <h2 className="font-medium">MCP servers</h2>
+      <p className="text-sm text-zinc-500">Tools from Model Context Protocol servers, configured in <code>mcp.json</code> (see <code>mcp.example.json</code>). They appear in the tool list as <code>server__tool</code> and are picked per bot like any other tool.</p>
+      <ErrorText error={servers.error ?? connect.error ?? disconnect.error ?? forget.error} />
+      {servers.data?.length === 0 && <p className="text-sm text-zinc-500">No servers configured.</p>}
+      <ul className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
+        {servers.data?.map((s: McpServer) => {
+          const badge = mcpStatusBadge(s);
+          const actions = mcpActions(s);
+          return (
+            <li key={s.name} className="space-y-1 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono">{s.name}</span>
+                <Badge tone={badge.tone}>{badge.label}</Badge>
+                <span className="text-xs text-zinc-500">{s.transport}{s.oauth ? " · OAuth" : ""}{s.url ? ` · ${s.url}` : ""}</span>
+                {s.tools.length > 0 && (
+                  <button type="button" className="text-xs text-zinc-500 underline" onClick={() => setOpen((o) => ({ ...o, [s.name]: !o[s.name] }))}>
+                    {s.tools.length} tool{s.tools.length === 1 ? "" : "s"}
+                  </button>
+                )}
+                <span className="ml-auto flex gap-1">
+                  {actions.includes("connect") && <Button variant="secondary" disabled={busy} onClick={() => connect.mutate(s.name)}>{s.oauth && s.status === "needs_auth" ? "Connect & authorize" : "Connect"}</Button>}
+                  {actions.includes("reconnect") && <Button variant="secondary" disabled={busy} onClick={() => connect.mutate(s.name)}>Reconnect</Button>}
+                  {actions.includes("disconnect") && <Button variant="secondary" disabled={busy} onClick={() => disconnect.mutate(s.name)}>Disconnect</Button>}
+                  {actions.includes("forget") && <Button variant="secondary" disabled={busy} onClick={() => confirm(`Forget the stored credentials for ${s.name}?`) && forget.mutate(s.name)}>Forget credentials</Button>}
+                </span>
+              </div>
+              {s.status === "authorizing" && <p className="text-xs text-amber-600">A browser tab was opened to authorize. If it did not appear, click Connect again and allow pop-ups.</p>}
+              {s.error && <p className="text-xs text-red-600">{s.error}</p>}
+              {open[s.name] && <p className="font-mono text-xs text-zinc-500">{s.tools.join(", ")}</p>}
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }

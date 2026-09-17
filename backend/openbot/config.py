@@ -34,6 +34,12 @@ class Settings(BaseSettings):
 
     workspace_root: Path = Path("./workspace")
     tools_dir: Path = Path("./tools")
+    # MCP servers (docs/superpowers/specs/2026-09-17-mcp-design.md): Claude Code's mcpServers file; PUBLIC_URL builds
+    # the OAuth redirect URI; credentials are Fernet-encrypted with MCP_TOKEN_KEY, or a key generated once into the file.
+    mcp_config: Path = Path("./mcp.json")
+    public_url: str = "http://127.0.0.1:8000"
+    mcp_token_key: str | None = None
+    mcp_token_key_file: Path = Path("./mcp_token.key")
 
     max_concurrent_runs: int = 4
     max_bot_hops: int = 20

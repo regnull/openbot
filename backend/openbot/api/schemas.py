@@ -333,6 +333,22 @@ def bot_out(actor, *, active: bool = False) -> BotOut:
                   created_at=actor.created_at, updated_at=actor.updated_at)
 
 
+class McpServerOut(BaseModel):
+    name: str
+    transport: str
+    status: str
+    enabled: bool
+    oauth: bool
+    url: str | None
+    error: str | None
+    tools: list[str]
+
+
+class McpConnectOut(BaseModel):
+    status: str
+    authorization_url: str | None = None
+
+
 class SettingOut(BaseModel):
     key: str
     group: str
