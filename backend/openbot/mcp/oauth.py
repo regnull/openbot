@@ -9,7 +9,6 @@ URL from, and a future the public callback endpoint resolves.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from collections.abc import Awaitable, Callable
@@ -17,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -27,6 +26,12 @@ from openbot.db.models import McpCredential, utcnow
 log = logging.getLogger(__name__)
 
 CALLBACK_PATH = "/api/v1/mcp/oauth/callback"   # on the public router: the browser arrives without an API key
+
+
+class AuthorizationRequired(RuntimeError):
+    """The server wants the operator to authorize, but nobody is there to open a browser (boot, a
+    reconnect, or a bot's tool call). Fail fast so the caller can report needs_auth or a tool error
+    instead of waiting on a callback that cannot arrive."""
 
 
 def load_or_create_key(explicit: str | None, key_file: Path) -> str:
@@ -47,9 +52,10 @@ def load_or_create_key(explicit: str | None, key_file: Path) -> str:
 class DbTokenStorage:
     """`mcp.client.auth.TokenStorage` over the mcp_credentials table, one row per server, encrypted."""
 
-    def __init__(self, session_factory: async_sessionmaker, server: str, key: str) -> None:
+    def __init__(self, session_factory: async_sessionmaker, server: str, key: str, url: str | None = None) -> None:
         self._sf = session_factory
         self.server = server
+        self.url = url
         self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
 
     def _enc(self, obj) -> str:
@@ -58,35 +64,53 @@ class DbTokenStorage:
     def _dec(self, blob: str | None, model):
         if not blob:
             return None
-        return model.model_validate_json(self._fernet.decrypt(blob.encode()))
+        try:
+            return model.model_validate_json(self._fernet.decrypt(blob.encode()))
+        except (InvalidToken, ValueError) as e:
+            # A rotated key or a corrupt row: behave as "no credentials" so the operator can re-authorize,
+            # rather than failing every connect.
+            log.warning("MCP credentials for %s cannot be read (%s); treating as absent", self.server, type(e).__name__)
+            return None
 
     async def _row(self, session) -> McpCredential:
         row = await session.get(McpCredential, self.server)
         if row is None:
-            row = McpCredential(server=self.server, client_info=None, tokens=None, updated_at=utcnow())
+            row = McpCredential(server=self.server, resource_url=self.url, client_info=None, tokens=None, updated_at=utcnow())
             session.add(row)
+        return row
+
+    async def _current_row(self, session) -> McpCredential | None:
+        """The stored row, unless it was issued for a different server URL: credentials are bound to the
+        resource they were granted for, so re-pointing a config name at another host must never send
+        the old bearer token there. Such a row is dropped."""
+        row = await session.get(McpCredential, self.server)
+        if row is not None and self.url and row.resource_url and row.resource_url != self.url:
+            log.warning("MCP server %s now points at %s; dropping credentials issued for %s", self.server, self.url, row.resource_url)
+            await session.delete(row)
+            await session.commit()
+            return None
         return row
 
     async def get_tokens(self) -> OAuthToken | None:
         async with self._sf() as s:
-            row = await s.get(McpCredential, self.server)
-        return self._dec(row.tokens if row else None, OAuthToken)
+            row = await self._current_row(s)
+            return self._dec(row.tokens if row else None, OAuthToken)
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         async with self._sf() as s:
             row = await self._row(s)
-            row.tokens, row.updated_at = self._enc(tokens), utcnow()
+            row.tokens, row.resource_url, row.updated_at = self._enc(tokens), self.url or row.resource_url, utcnow()
             await s.commit()
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         async with self._sf() as s:
-            row = await s.get(McpCredential, self.server)
-        return self._dec(row.client_info if row else None, OAuthClientInformationFull)
+            row = await self._current_row(s)
+            return self._dec(row.client_info if row else None, OAuthClientInformationFull)
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         async with self._sf() as s:
             row = await self._row(s)
-            row.client_info, row.updated_at = self._enc(client_info), utcnow()
+            row.client_info, row.resource_url, row.updated_at = self._enc(client_info), self.url or row.resource_url, utcnow()
             await s.commit()
 
     async def clear(self) -> None:
@@ -118,11 +142,17 @@ class PendingFlows:
     _by_server: dict[str, _Flow] = field(default_factory=dict)
     _by_state: dict[str, _Flow] = field(default_factory=dict)
 
-    def handlers(self, server: str) -> tuple[Callable[[str], Awaitable[None]], Callable[[], Awaitable[tuple[str, str | None]]]]:
+    def handlers(self, server: str, allow: Callable[[], bool] | None = None,
+                 ) -> tuple[Callable[[str], Awaitable[None]], Callable[[], Awaitable[tuple[str, str | None]]]]:
+        """`allow` says whether a browser flow may start right now. The SDK keeps these handlers for the
+        life of the session, so a 401 long after connect (expired token, revoked grant) would otherwise
+        park a bot's tool call on a callback nobody is waiting to answer."""
         flow = _Flow(server=server)
-        self._by_server[server] = flow
 
         async def redirect(url: str) -> None:
+            if allow is not None and not allow():
+                raise AuthorizationRequired(f"MCP server {server} needs authorization; connect it from Settings")
+            self._by_server[server] = flow
             flow.url = url
             flow.state = (parse_qs(urlparse(url).query).get("state") or [None])[0]
             if flow.state:
@@ -179,8 +209,8 @@ class PendingFlows:
 
 
 def build_oauth_provider(server_url: str, public_url: str, storage: DbTokenStorage, flows: PendingFlows,
-                         server: str, timeout: float = 300.0) -> OAuthClientProvider:
-    redirect, callback = flows.handlers(server)
+                         server: str, allow: Callable[[], bool] | None = None, timeout: float = 300.0) -> OAuthClientProvider:
+    redirect, callback = flows.handlers(server, allow=allow)
     metadata = OAuthClientMetadata(
         client_name="OpenBot",
         redirect_uris=[f"{public_url.rstrip('/')}{CALLBACK_PATH}"],
@@ -192,17 +222,11 @@ def build_oauth_provider(server_url: str, public_url: str, storage: DbTokenStora
                                redirect_handler=redirect, callback_handler=callback, timeout=timeout)
 
 
-def credential_summary(tokens: OAuthToken | None) -> dict:
-    """What the UI may know about stored credentials: presence and scope, never the tokens."""
-    return {"has_tokens": tokens is not None, "scope": tokens.scope if tokens else None}
-
-
 __all__ = [
     "CALLBACK_PATH",
+    "AuthorizationRequired",
     "DbTokenStorage",
     "PendingFlows",
     "build_oauth_provider",
-    "credential_summary",
-    "json",
     "load_or_create_key",
 ]

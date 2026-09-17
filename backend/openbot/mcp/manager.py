@@ -9,22 +9,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp.client.stdio import get_default_environment
 
 from openbot.mcp.config import McpServerConfig
-from openbot.mcp.oauth import DbTokenStorage, PendingFlows, build_oauth_provider
+from openbot.mcp.oauth import (
+    AuthorizationRequired,
+    DbTokenStorage,
+    PendingFlows,
+    build_oauth_provider,
+)
 from openbot.tools.builtin.workspace import cap
 
 log = logging.getLogger(__name__)
 
 OAUTH_FLOW_TIMEOUT = 300.0
+MAX_TOOL_NAME = 64                      # OpenAI-compatible providers reject longer function names
+_NAME_BAD = re.compile(r"[^a-zA-Z0-9_-]")
 
 
 @dataclass
@@ -39,35 +48,55 @@ class ServerStatus:
     tools: list[str] = field(default_factory=list)
 
 
-def _flatten(result: Any) -> str:
-    """MCP tools return content blocks; the model (and the cap) want text."""
-    if isinstance(result, str):
-        return result
-    if isinstance(result, list):
+def tool_name(server: str, name: str) -> str:
+    """`<server>__<tool>`, fitted to provider function-name rules (`^[a-zA-Z0-9_-]{1,64}$`)."""
+    return f"{server}__{_NAME_BAD.sub('_', name)}"[:MAX_TOOL_NAME]
+
+
+def _flatten(content: Any) -> str:
+    """MCP tools return content blocks; the model (and the cap) want text. Binary blocks become a
+    placeholder rather than kilobytes of base64 the model cannot use."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
         parts = []
-        for block in result:
-            if isinstance(block, dict) and block.get("type") == "text":
-                parts.append(str(block.get("text", "")))
-            elif isinstance(block, dict):
-                parts.append(str({k: v for k, v in block.items() if k != "id"}))
-            else:
+        for block in content:
+            if not isinstance(block, dict):
                 parts.append(str(block))
+            elif block.get("type") == "text":
+                parts.append(str(block.get("text", "")))
+            else:
+                mime = block.get("mime_type") or block.get("mimeType") or block.get("type", "content")
+                parts.append(f"[{mime} content omitted]")
         return "\n".join(parts)
-    return str(result)
+    return str(content)
 
 
 def _wrap(tool: BaseTool, name: str, cap_chars: int) -> BaseTool:
+    """The registered face of an MCP tool: same schema, capped text output, and every failure (the
+    server's isError, a dead transport, a lapsed authorization) returned as an "error: ..." result
+    the model can react to, instead of an exception that fails the whole run."""
+
     async def run(**kwargs: Any) -> str:
-        result = await tool.ainvoke(kwargs)
-        return cap(_flatten(result), cap_chars, hint="ask the tool for less, or page through results")
+        try:
+            # Invoking with a tool call (not a bare dict) yields a ToolMessage, which is the only place
+            # the adapter surfaces the server's isError status.
+            msg = await tool.ainvoke({"name": tool.name, "args": kwargs, "id": "mcp", "type": "tool_call"})
+        except Exception as e:  # noqa: BLE001 - see docstring
+            return cap(f"error: {type(e).__name__}: {e}", cap_chars)
+        text = _flatten(msg.content if isinstance(msg, ToolMessage) else msg)
+        if isinstance(msg, ToolMessage) and msg.status == "error":
+            text = f"error: {text}"
+        return cap(text, cap_chars, hint="ask the tool for less, or page through results")
 
     return StructuredTool.from_function(coroutine=run, name=name, description=tool.description or name,
                                         args_schema=tool.args_schema)
 
 
 class McpManager:
-    def __init__(self, servers: list[McpServerConfig], registry, settings, storage: Callable[[str], DbTokenStorage] | None,
-                 flows: PendingFlows | None = None, connect_timeout: float = 30.0) -> None:
+    def __init__(self, servers: list[McpServerConfig], registry, settings,
+                 storage: Callable[..., DbTokenStorage] | None, flows: PendingFlows | None = None,
+                 connect_timeout: float = 30.0) -> None:
         self._servers = {s.name: s for s in servers}
         self._registry = registry
         self._settings = settings
@@ -77,6 +106,7 @@ class McpManager:
         self._status: dict[str, ServerStatus] = {}
         self._sessions: dict[str, tuple[asyncio.Task, asyncio.Event]] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        self._interactive: dict[str, bool] = {}
         for s in servers:
             st = ServerStatus(name=s.name, transport=s.transport, status="disconnected", enabled=s.enabled, oauth=s.oauth, url=s.url)
             if not s.enabled:
@@ -96,23 +126,39 @@ class McpManager:
     def has(self, name: str) -> bool:
         return name in self._servers
 
+    def interactive(self, name: str) -> bool:
+        """True only while an operator-initiated connect is running: the one time the OAuth flow may
+        wait for a browser. At boot, on reconnect, and during a bot's tool call it must fail fast."""
+        return self._interactive.get(name, False)
+
     def _store(self, name: str) -> DbTokenStorage | None:
-        return self._storage(name) if self._storage is not None else None
+        if self._storage is None:
+            return None
+        return self._storage(name, self._servers[name].url)
+
+    async def _stored_tokens(self, name: str):
+        store = self._store(name)
+        return None if store is None else await store.get_tokens()
 
     # --- lifecycle -----------------------------------------------------------------------------------
 
     async def start(self) -> None:
-        """Connect every enabled server concurrently. OAuth servers without stored credentials wait for the
-        operator (status needs_auth) instead of holding the boot for a browser that is not there."""
+        """Connect every enabled server concurrently, never interactively: OAuth servers without usable
+        credentials wait for the operator (needs_auth) instead of holding the boot for a browser."""
         to_connect = []
         for cfg in self._servers.values():
             st = self._status[cfg.name]
             if st.status in ("disabled", "error"):
                 continue
-            store = self._store(cfg.name) if cfg.oauth else None
-            if cfg.oauth and store is not None and await store.get_tokens() is None:
-                st.status = "needs_auth"
-                continue
+            if cfg.oauth:
+                try:
+                    if await self._stored_tokens(cfg.name) is None:
+                        st.status = "needs_auth"
+                        continue
+                except Exception as e:  # noqa: BLE001 - a bad key or corrupt row must not take the boot down
+                    st.status, st.error = "error", f"credential storage: {type(e).__name__}: {e}"[:500]
+                    log.warning("MCP server %s: %s", cfg.name, st.error)
+                    continue
             to_connect.append(cfg.name)
         await asyncio.gather(*(self.connect(n) for n in to_connect), return_exceptions=True)
         summary = ", ".join(f"{s.name}={s.status}({len(s.tools)} tools)" for s in self.statuses())
@@ -120,39 +166,48 @@ class McpManager:
             log.info("MCP servers: %s", summary)
 
     def begin_connect(self, name: str) -> asyncio.Task:
-        """Connect in the background (the API uses this so an OAuth flow can wait for the browser)."""
+        """Operator-initiated connect in the background; the API reads the authorization URL from `flows`."""
         if (t := self._tasks.get(name)) and not t.done():
             return t
-        task = asyncio.create_task(self.connect(name), name=f"mcp-connect:{name}")
+        task = asyncio.create_task(self.connect(name, interactive=True), name=f"mcp-connect:{name}")
         self._tasks[name] = task
         return task
 
-    async def connect(self, name: str) -> ServerStatus:
+    async def connect(self, name: str, interactive: bool = False) -> ServerStatus:
         cfg = self._servers[name]
         st = self._status[name]
         if not cfg.enabled or cfg.error:
             return st
-        await self._close(name)
         st.status, st.error = "connecting", None
-        timeout = OAUTH_FLOW_TIMEOUT + self._connect_timeout if cfg.oauth else self._connect_timeout
+        self._interactive[name] = interactive
+        timeout = OAUTH_FLOW_TIMEOUT + self._connect_timeout if (cfg.oauth and interactive) else self._connect_timeout
         try:
             await asyncio.wait_for(self._open(cfg, st), timeout)
         except asyncio.CancelledError:
             await self._close(name)
             st.status = "disconnected"
             raise
+        except AuthorizationRequired:
+            await self._close(name)
+            st.status, st.error = "needs_auth", None
         except Exception as e:  # noqa: BLE001 - anything a transport or the OAuth flow raises becomes the server's status
             await self._close(name)
             msg = f"{type(e).__name__}: {e}"[:500]
-            store = self._store(name) if cfg.oauth else None
-            if cfg.oauth and store is not None and await store.get_tokens() is None:
-                st.status, st.error = "needs_auth", msg if not isinstance(e, asyncio.TimeoutError) else None
+            if cfg.oauth and (interactive or await self._safe_no_tokens(name)):
+                st.status, st.error = "needs_auth", None if isinstance(e, asyncio.TimeoutError) else msg
             else:
                 st.status, st.error = "error", msg
             log.warning("MCP server %s: %s", name, msg)
         finally:
+            self._interactive[name] = False
             self.flows.cancel(name)
         return st
+
+    async def _safe_no_tokens(self, name: str) -> bool:
+        try:
+            return await self._stored_tokens(name) is None
+        except Exception:  # noqa: BLE001
+            return False
 
     async def _open(self, cfg: McpServerConfig, st: ServerStatus) -> None:
         if cfg.transport == "stdio":
@@ -169,55 +224,83 @@ class McpManager:
                 if await store.get_tokens() is None:
                     st.status = "authorizing"
                 conn["auth"] = build_oauth_provider(cfg.url, self._settings.public_url, store, self.flows, cfg.name,
-                                                    timeout=OAUTH_FLOW_TIMEOUT)
-        client = MultiServerMCPClient({cfg.name: conn})
+                                                    allow=lambda: self.interactive(cfg.name), timeout=OAUTH_FLOW_TIMEOUT)
+        await self._start_session(cfg.name, MultiServerMCPClient({cfg.name: conn}), None)
+
+    async def _start_session(self, name: str, client, tools: list[BaseTool] | None) -> None:
+        """Open a session in its own task, load and register its tools, then retire the previous
+        session. The old tools stay registered until the new ones replace them, so a reconnect never
+        leaves a window in which runs cannot find the server's tools."""
         # The session's context manager (anyio task groups and cancel scopes underneath) must be
         # entered and exited by the same task, and connect() runs in whichever task asked (startup,
-        # an API request), while disconnect runs in another. So each server gets a task of its own
-        # that holds the session open until told to stop.
+        # an API request), while disconnect runs in another. Hence one holder task per session.
         ready: asyncio.Future = asyncio.get_running_loop().create_future()
         stop = asyncio.Event()
-        task = asyncio.create_task(self._hold_session(cfg.name, client, ready, stop), name=f"mcp-session:{cfg.name}")
-        self._sessions[cfg.name] = (task, stop)
-        session = await ready
-        raw_tools = await load_mcp_tools(session)
-        source = f"mcp:{cfg.name}"
+        task = asyncio.create_task(self._hold_session(name, client, ready, stop), name=f"mcp-session:{name}")
+        try:
+            session = await ready
+            raw_tools = tools if tools is not None else await load_mcp_tools(session)
+        except BaseException:
+            stop.set()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
+        previous = self._sessions.get(name)
+        self._sessions[name] = (task, stop)
+        source = f"mcp:{name}"
         self._registry.unregister_source(source)
         names = []
         for t in raw_tools:
-            full = f"{cfg.name}__{t.name}"
+            full = tool_name(name, t.name)
             self._registry.register(_wrap(t, full, int(self._settings.tool_output_cap)), source=source)
             names.append(full)
+        st = self._status[name]
         st.tools, st.status, st.error = sorted(names), "connected", None
-        log.info("MCP server %s connected with %d tools", cfg.name, len(names))
+        if previous is not None:
+            await self._retire(name, *previous)
+        log.info("MCP server %s connected with %d tools", name, len(names))
 
-    async def _hold_session(self, name: str, client: MultiServerMCPClient, ready: asyncio.Future, stop: asyncio.Event) -> None:
+    async def _hold_session(self, name: str, client, ready: asyncio.Future, stop: asyncio.Event) -> None:
         try:
             async with client.session(name) as session:
                 ready.set_result(session)
                 await stop.wait()
-        except BaseException as e:
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:  # noqa: BLE001 - classified below: startup failure vs. a session dying later
             if not ready.done():
                 ready.set_exception(e if isinstance(e, Exception) else RuntimeError(f"session task ended: {type(e).__name__}"))
-            elif not isinstance(e, asyncio.CancelledError):
-                log.debug("MCP session %s ended with %s", name, e, exc_info=True)
-            if isinstance(e, asyncio.CancelledError):
-                raise
+                return
+            if not stop.is_set():
+                self._session_lost(name, e)
+
+    def _session_lost(self, name: str, exc: BaseException) -> None:
+        """A live session ended on its own (child process died, connection dropped). Say so, and stop
+        advertising tools that would fail every call."""
+        held = self._sessions.get(name)
+        if held is None or held[0] is not asyncio.current_task():
+            return
+        self._sessions.pop(name, None)
+        self._registry.unregister_source(f"mcp:{name}")
+        st = self._status[name]
+        st.tools, st.status, st.error = [], "error", f"session ended: {type(exc).__name__}: {exc}"[:500]
+        log.warning("MCP server %s: %s", name, st.error)
+
+    async def _retire(self, name: str, task: asyncio.Task, stop: asyncio.Event) -> None:
+        stop.set()
+        try:
+            await asyncio.wait_for(task, 10)
+        except (TimeoutError, asyncio.CancelledError):
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        except Exception:                        # a dead child process is exactly why we are closing
+            log.debug("closing MCP server %s raised", name, exc_info=True)
 
     async def _close(self, name: str) -> None:
         held = self._sessions.pop(name, None)
         self._registry.unregister_source(f"mcp:{name}")
         self._status[name].tools = []
         if held is not None:
-            task, stop = held
-            stop.set()
-            try:
-                await asyncio.wait_for(task, 10)
-            except (TimeoutError, asyncio.CancelledError):
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-            except Exception:                        # a dead child process is exactly why we are closing
-                log.debug("closing MCP server %s raised", name, exc_info=True)
+            await self._retire(name, *held)
 
     async def disconnect(self, name: str) -> ServerStatus:
         if (t := self._tasks.pop(name, None)) and not t.done():

@@ -22,10 +22,10 @@ def build_mcp_manager(services) -> McpManager:
         servers = []
     key_holder: dict[str, str] = {}
 
-    def storage(name: str) -> DbTokenStorage:
+    def storage(name: str, url: str | None = None) -> DbTokenStorage:
         if "key" not in key_holder:
             key_holder["key"] = load_or_create_key(settings.mcp_token_key, Path(settings.mcp_token_key_file))
-        return DbTokenStorage(services.session_factory, name, key_holder["key"])
+        return DbTokenStorage(services.session_factory, name, key_holder["key"], url=url)
 
     return McpManager(servers, services.registry, settings, storage)
 
