@@ -34,10 +34,20 @@ router = APIRouter(prefix="/bots", tags=["bots"])
 ACTOR_FIELDS = ("handle", "name", "description", "enabled")
 
 
+def _known_tool(services: Services, name: str) -> bool:
+    """Registered, or an MCP tool of a configured server that is not connected right now (needs
+    authorization, disconnected, errored): a bot that lists it must stay editable, and the tool comes
+    back when the server does. The runner drops names that are not registered at run time."""
+    if services.registry is not None and services.registry.has(name):
+        return True
+    if services.mcp is not None and "__" in name:
+        return services.mcp.has(name.split("__", 1)[0])
+    return False
+
+
 def _validate_tools(services: Services, tool_names: list[str], approval_tools: list[str]) -> None:
     if tool_names:
-        unknown = ([t for t in tool_names if not services.registry.has(t)] if services.registry is not None
-                   else list(tool_names))
+        unknown = [t for t in tool_names if not _known_tool(services, t)]
         if unknown:
             raise HTTPException(422, f"unknown tools: {unknown}")
     extra = [t for t in approval_tools if t not in tool_names]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import os
 from collections.abc import Callable
@@ -224,7 +225,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
             ok = bool(code) and mgr.flows.complete(state, code)
         if not ok:
             raise HTTPException(400, "unknown or expired authorization state")
-        outcome = f"Authorization failed: {error_description or error}" if error else "Authorization complete. Connecting..."
+        # Everything here came from a third party's redirect: escape it, or the authorization server
+        # (which legitimately holds the pending state) could run script on this origin.
+        outcome = html.escape(f"Authorization failed: {error_description or error}" if error else "Authorization complete. Connecting...")
         return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8"><title>OpenBot</title>
 <meta http-equiv="refresh" content="2;url=/settings"></head>
 <body style="font-family:system-ui;padding:2rem"><p>{outcome}</p><p><a href="/settings">Back to Settings</a></p></body></html>""")

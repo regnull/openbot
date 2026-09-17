@@ -182,7 +182,10 @@ class Runner:
         workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
         prompt = build_system_prompt(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
                                      workspace_root=str(workspace_root), older_count=older,
-                                     tool_names=list(bot.bot.tool_names), default_bot_handle=default_bot_handle, scoped=scoped)
+                                     # Only tools that will actually be bound: an MCP server that is down
+                                     # must not be advertised, or the model calls a tool it does not have.
+                                     tool_names=[n for n in bot.bot.tool_names if self.s.registry.has(n)],
+                                     default_bot_handle=default_bot_handle, scoped=scoped)
         hop = max([m.hop for m in triggers], default=0) + 1
         return prompt, {"messages": history}, hop
 

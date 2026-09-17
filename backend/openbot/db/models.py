@@ -202,6 +202,9 @@ class McpCredential(Base):
     """OAuth client registration and tokens for one remote MCP server, Fernet-encrypted (see mcp/oauth.py)."""
     __tablename__ = "mcp_credentials"
     server: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # The server URL the credentials were granted for: a config name re-pointed at another host must not
+    # send the old bearer token there (see DbTokenStorage._current_row).
+    resource_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     client_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)

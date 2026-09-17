@@ -107,6 +107,27 @@ and, where the server reports it, the connected account.
 - API: listing, connect returning an authorization URL from a fake pending flow, credentials delete.
 - Frontend: status label helper.
 
+## Hardening after review (same day)
+
+- The browser flow may start only during an operator-initiated connect. At boot, on reconnect, and
+  during a bot's tool call the SDK's redirect handler raises instead, so stored-but-revoked tokens
+  land the server in `needs_auth` in seconds rather than holding the boot for five minutes, and a
+  mid-run 401 comes back to the model as an `error:` result rather than parking the run.
+- Sessions are swapped, not replaced: a reconnect opens the new session and registers its tools
+  before retiring the old one, so runs never see a window without the server's tools. A session that
+  dies on its own (child process exit, dropped connection) is noticed by its holder task: status
+  `error`, tools unregistered.
+- The tool wrapper invokes the adapter with a tool call so the server's `isError` surfaces as an
+  `error:` result; binary content blocks become a placeholder; any exception becomes an `error:`
+  result instead of failing the run.
+- Credentials are bound to the server URL they were granted for (`resource_url`, migration 0010):
+  re-pointing a config name at another host drops the old tokens instead of sending them there. An
+  undecryptable row (rotated key) reads as "no credentials". A bad key errors that server, not the boot.
+- Composed tool names are sanitised to `^[a-zA-Z0-9_-]{1,64}$`.
+- Bots that list a tool of a configured-but-disconnected MCP server stay editable, and the runner
+  advertises only tools that are actually registered.
+- The public callback escapes everything the authorization server sends.
+
 ## Out of scope for v1
 
 Editing servers from the browser, MCP resources and prompts, deferred tool loading (a
