@@ -367,6 +367,62 @@ async def test_model_call_limit_is_reached_before_the_graph_recursion_limit(sett
     assert "limit" in (await messages(services, t.id))[-1].content.lower()
 
 
+# --- clearing works in turns: what the model fetched in its last two turns stays -----------------------
+
+def _turn(n: int, prefix: str, size: int) -> list:
+    from langchain_core.messages import ToolMessage
+    calls = [call("read_file", cid=f"{prefix}{i}", path=f"{prefix}{i}.py") for i in range(n)]
+    return [ai(tool_calls=calls)] + [ToolMessage(content="x" * size, tool_call_id=f"{prefix}{i}", name="read_file") for i in range(n)]
+
+
+def _clearing_edit(settings):
+    from langchain.agents.middleware import ContextEditingMiddleware
+
+    from tests.factories import bot_actor
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    mw = Runner(services).build_middleware(bot_actor("eng"), ScriptedChatModel(messages=iter([])))
+    return next(m for m in mw if isinstance(m, ContextEditingMiddleware)).edits[0]
+
+
+def test_clearing_never_touches_the_last_two_turns_of_tool_results(settings):
+    """`keep=3` counts results, not turns: one turn of ten small reads lost seven of them a call later, the
+    model read them again, and the run cycled for 17 minutes without writing a file (STO-2331 attempt).
+    Clearing must protect everything the last two model turns asked for, however many results that is."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    settings.context_trigger_tokens, settings.context_clear_at_least = 1000, 6000
+    edit = _clearing_edit(settings)
+    history = [HumanMessage("task")] + _turn(7, "old", 1200) + _turn(7, "mid", 1200) + _turn(7, "new", 1200)
+    edit.apply(history, count_tokens=count_tokens_approximately)
+    content = {p: [m.content for m in history if isinstance(m, ToolMessage) and m.tool_call_id.startswith(p)] for p in ("old", "mid", "new")}
+    assert all(c == "x" * 1200 for c in content["new"]), "the latest turn's results were cleared"
+    assert all(c == "x" * 1200 for c in content["mid"]), "the previous turn's results were cleared"
+    assert all(c == CLEARED_TOOL_RESULT for c in content["old"]), "older turns are what clearing is for"
+
+
+def test_clearing_reclaims_from_older_turns_and_stops_at_clear_at_least(settings):
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    settings.context_trigger_tokens, settings.context_clear_at_least = 1000, 2500
+    edit = _clearing_edit(settings)
+    history = [HumanMessage("task")] + sum((_turn(1, f"t{i}", 4000) for i in range(6)), [])
+    before = count_tokens_approximately(history)
+    edit.apply(history, count_tokens=count_tokens_approximately)
+    cleared = {m.tool_call_id for m in history if isinstance(m, ToolMessage) and m.content == CLEARED_TOOL_RESULT}
+    assert before - count_tokens_approximately(history) >= 2500
+    assert cleared == {"t00", "t10", "t20"}, "oldest first, and only until enough is reclaimed"
+
+
+def test_clearing_below_the_trigger_does_nothing(settings):
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    settings.context_trigger_tokens = 12000
+    edit = _clearing_edit(settings)
+    history = [HumanMessage("task")] + _turn(3, "a", 1000) + _turn(3, "b", 1000) + _turn(3, "c", 1000)
+    edit.apply(history, count_tokens=count_tokens_approximately)
+    assert all(m.content == "x" * 1000 for m in history if isinstance(m, ToolMessage))
+
+
 # --- summarization must measure the run's messages, not the model's reported prompt size ----------------
 
 def test_summarization_ignores_the_reported_total_that_includes_the_prompt_prefix(settings):

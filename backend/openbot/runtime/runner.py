@@ -5,6 +5,7 @@ import json
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from langchain.agents import create_agent
@@ -92,6 +93,53 @@ def _text(m) -> str:
     if isinstance(t, str):
         return str(t)
     return t() if callable(t) else ""
+
+
+@dataclass(slots=True)
+class ClearOlderTurnsEdit(ClearToolUsesEdit):
+    """`ClearToolUsesEdit` that works in model turns, not in single results.
+
+    The parent keeps the `keep` most recent tool results. A coding bot reads ten files in one turn, so
+    with `keep=3` seven of the results it asked for one call ago came back as placeholders, it asked
+    for them again, and the run cycled without ever writing a file. Here everything the last
+    `keep_turns` model turns asked for is protected, however many results that is; older turns are
+    cleared oldest first until `clear_at_least` tokens are reclaimed."""
+
+    keep_turns: int = 2
+
+    def apply(self, messages, *, count_tokens) -> None:
+        tokens = count_tokens(messages)
+        if tokens <= self.trigger:
+            return
+        protected: set[str] = set()
+        turns = 0
+        for m in reversed(messages):
+            if isinstance(m, AIMessage) and m.tool_calls:
+                protected.update(tc["id"] for tc in m.tool_calls)
+                turns += 1
+                if turns >= self.keep_turns:
+                    break
+        candidates = [(i, m) for i, m in enumerate(messages) if isinstance(m, ToolMessage) and m.tool_call_id not in protected]
+        if self.keep:
+            candidates = candidates[:-self.keep] if self.keep < len(candidates) else []
+        excluded = set(self.exclude_tools)
+        for idx, tool_message in candidates:
+            if tool_message.response_metadata.get("context_editing", {}).get("cleared"):
+                continue
+            ai_message = next((m for m in reversed(messages[:idx]) if isinstance(m, AIMessage)), None)
+            if ai_message is None:
+                continue
+            tool_call = next((c for c in ai_message.tool_calls if c.get("id") == tool_message.tool_call_id), None)
+            if tool_call is None or (tool_message.name or tool_call["name"]) in excluded:
+                continue
+            messages[idx] = tool_message.model_copy(update={
+                "artifact": None, "content": self.placeholder,
+                "response_metadata": {**tool_message.response_metadata,
+                                      "context_editing": {"cleared": True, "strategy": "clear_tool_uses"}}})
+            if self.clear_tool_inputs:
+                messages[messages.index(ai_message)] = self._build_cleared_tool_input_message(ai_message, tool_message.tool_call_id)
+            if self.clear_at_least > 0 and tokens - count_tokens(messages) >= self.clear_at_least:
+                break
 
 
 class RunMessagesSummarization(SummarizationMiddleware):
@@ -222,9 +270,9 @@ class Runner:
         Two tiers keep a long run's context from growing without bound. Summarization folds older
         history into one structured message once the context passes `summary_trigger_tokens`, keeping
         the last `summary_keep_messages` verbatim; it preserves decisions and file lists that plain
-        clearing would lose. Context editing then clears old tool results and their call arguments
-        (e.g. the full content passed to write_file) once the context passes `context_trigger_tokens`,
-        reclaiming at least `context_clear_at_least` per clearing. Each edit to earlier context costs a
+        clearing would lose. Context editing then clears tool results from turns before the last two,
+        and their call arguments (e.g. the full content passed to write_file), once the context passes
+        `context_trigger_tokens`, reclaiming at least `context_clear_at_least` per clearing. Each edit to earlier context costs a
         prompt-cache miss from that point, so both fire rarely and in large steps rather than a little
         on every turn. Editing runs after summarization so it respects what was already summarized.
         """
@@ -236,11 +284,11 @@ class Runner:
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
             RunMessagesSummarization(model, trigger=("tokens", st.summary_trigger_tokens),
                                       keep=("messages", st.summary_keep_messages)),
-            ContextEditingMiddleware(edits=[ClearToolUsesEdit(trigger=st.context_trigger_tokens, keep=3,
-                                                              clear_at_least=st.context_clear_at_least,
-                                                              clear_tool_inputs=True,
-                                                              exclude_tools=("ask_human", "manage_memory"),
-                                                              placeholder=CLEARED_TOOL_RESULT)]),
+            ContextEditingMiddleware(edits=[ClearOlderTurnsEdit(trigger=st.context_trigger_tokens, keep=0, keep_turns=2,
+                                                                clear_at_least=st.context_clear_at_least,
+                                                                clear_tool_inputs=True,
+                                                                exclude_tools=("ask_human", "manage_memory"),
+                                                                placeholder=CLEARED_TOOL_RESULT)]),
         ]
         if p.approval_tools:
             middleware.append(HumanInTheLoopMiddleware(
