@@ -103,7 +103,11 @@ function SettingsGroupCard({ group }: { group: SettingGroup }) {
   // Local edits keyed by setting; a key is present only while it differs from what the server has.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const refresh = (rows: AppSetting[]) => { qc.setQueryData(["settings"], rows); setDrafts({}); setErrors({}); };
+  const refresh = (rows: AppSetting[]) => {
+    qc.setQueryData(["settings"], rows); setDrafts({}); setErrors({});
+    // Provider keys and embeddings change what the Providers card and the setup gate report.
+    qc.invalidateQueries({ queryKey: ["providers"] }); qc.invalidateQueries({ queryKey: ["setup-status"] });
+  };
   const save = useMutation({ mutationFn: (updates: Record<string, unknown>) => Api.patchSettings(updates), onSuccess: refresh });
   const reset = useMutation({ mutationFn: (key: string) => Api.resetSetting(key), onSuccess: refresh });
   const dirty = Object.keys(drafts).length > 0;
@@ -149,6 +153,12 @@ function SettingsGroupCard({ group }: { group: SettingGroup }) {
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={draft === "true"} onChange={(e) => setDraft(String(e.target.checked))} /> {draft === "true" ? "on" : "off"}
                   </label>
+                ) : item.type === "secret" ? (
+                  <div className="w-full space-y-1">
+                    <Input type="password" autoComplete="off" value={item.key in drafts ? draft : ""} placeholder={item.is_set ? "set (enter a new value to replace)" : "not set"}
+                      className={item.key in drafts ? "border-amber-400" : ""} onChange={(e) => setDraft(e.target.value)} />
+                    <div className="text-xs text-zinc-500">{item.is_set ? "Stored encrypted." : "Not set."}</div>
+                  </div>
                 ) : (
                   <Input value={draft} inputMode={item.type === "int" || item.type === "float" ? "decimal" : undefined}
                     className={item.key in drafts ? "border-amber-400" : ""} onChange={(e) => setDraft(e.target.value)}

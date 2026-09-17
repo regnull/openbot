@@ -3,7 +3,7 @@ import type { AppSetting } from "../api/types";
 import { formatSettingValue, groupSettings, parseSettingInput } from "./appSettings";
 
 const s = (key: string, group: string, type: AppSetting["type"], value: unknown, def: unknown = value): AppSetting =>
-  ({ key, group, label: key, description: "", type, value, default: def, overridden: value !== def });
+  ({ key, group, label: key, description: "", type, value, default: def, overridden: value !== def, secret: false, is_set: true });
 
 describe("groupSettings", () => {
   it("keeps the server's group order and puts each setting under its group", () => {
@@ -34,5 +34,14 @@ describe("formatSettingValue", () => {
     expect(formatSettingValue("list", ["z-ai", "fireworks"])).toBe("z-ai, fireworks");
     expect(formatSettingValue("str", null)).toBe("");
     expect(formatSettingValue("int", 60)).toBe("60");
+  });
+});
+
+describe("secret settings", () => {
+  it("parses a secret as text and formats a masked value as the mask", () => {
+    expect(parseSettingInput("secret", " sk-1 ")).toEqual({ value: "sk-1" });
+    expect(parseSettingInput("secret", "")).toEqual({ value: "" });
+    expect(formatSettingValue("secret", "••••••••")).toBe("••••••••");
+    expect(formatSettingValue("secret", null)).toBe("");
   });
 });

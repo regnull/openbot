@@ -19,6 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from openbot.api import actors, bots, events, inbox, messages, providers, runs, threads, tools
 from openbot.api import mcp as mcp_api
 from openbot.api import settings as settings_api
+from openbot.api import setup as setup_api
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
@@ -31,6 +32,7 @@ from openbot.runtime.memory import MemoryReflector
 from openbot.runtime.persistence import open_langgraph_backends
 from openbot.runtime.providers import chat_model, embeddings
 from openbot.runtime.runner import Runner
+from openbot.runtime.secrets import SecretBox, resolve_secret_key
 from openbot.seed import ensure_human_actor, seed_demo_bots
 from openbot.services import Services
 from openbot.tools.registry import build_registry
@@ -53,6 +55,8 @@ async def build_services(settings: Settings) -> Services:
     if emb is None:
         log.warning("no embedding provider configured; memory search will not be semantic")
     services.checkpointer, services.store = await stack.enter_async_context(open_langgraph_backends(settings, emb))
+    services.langgraph_stack = stack
+    services.secrets = SecretBox(lambda: resolve_secret_key(settings))
     services.model_factory = lambda actor: chat_model(actor.bot, settings)
     services.reflector = MemoryReflector(services, settings.memory_reflection_delay)
     services.runner = Runner(services)
@@ -181,7 +185,7 @@ class SpaStaticFiles(StaticFiles):
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     settings = settings or get_settings()
     configure_logging(settings)
 
@@ -234,7 +238,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
     for r in (actors.router, bots.router, threads.router, messages.router, inbox.router, runs.router, tools.router,
-              providers.router, events.router, settings_api.router, mcp_api.router):
+              providers.router, events.router, settings_api.router, mcp_api.router, setup_api.router):
         api.include_router(r)
     app.include_router(public)
     app.include_router(api)

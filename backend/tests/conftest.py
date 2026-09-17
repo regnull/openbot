@@ -32,9 +32,10 @@ _STATIC_SETTING_VARS = (
 
 
 def _env_example_vars() -> tuple[str, ...]:
-    """Every name in .env.example, so a new setting is covered without editing this list too.
-    The static tuple above is the fallback when the file is not next to the checkout."""
-    names = set(_STATIC_SETTING_VARS)
+    """Every Settings field (uppercased, which is how pydantic-settings reads them from the
+    environment) plus every name in .env.example, so a new setting is covered without editing the
+    static list. `.env.example` now holds only boot-time settings, so the model is the real source."""
+    names = set(_STATIC_SETTING_VARS) | {k.upper() for k in Settings.model_fields}
     for parent in Path(__file__).resolve().parents:
         example = parent / ".env.example"
         if example.is_file():
@@ -71,6 +72,7 @@ def settings(tmp_path) -> Settings:
                     tools_dir=tmp_path / "tools", log_file=tmp_path / "logs" / "openbot.log",
                     seed_demo_bots=False, memory_reflection_delay=0.01,
                     mcp_config=tmp_path / "mcp.json", mcp_token_key_file=tmp_path / "mcp_token.key",
+                    secret_key_file=tmp_path / "secret.key",
                     webhook_retry_delays=[0.01, 0.01, 0.01], _env_file=None)
 
 
@@ -102,6 +104,8 @@ async def build_test_services(settings: Settings, scripts: dict | None = None) -
     services.bus = EventBus()
     services.store = InMemoryStore()
     services.checkpointer = InMemorySaver()
+    from openbot.runtime.secrets import SecretBox, resolve_secret_key
+    services.secrets = SecretBox(lambda: resolve_secret_key(settings))
     iters: dict[str, object] = {}
 
     def factory(actor):

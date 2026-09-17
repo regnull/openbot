@@ -23,5 +23,7 @@ class Services:
     model_factory: Callable[[Any], Any] | None = None  # (Actor) -> BaseChatModel
     http_client: Any = None    # httpx.AsyncClient for webhook delivery
     mcp: Any = None            # McpManager
+    secrets: Any = None        # runtime.secrets.SecretBox for secrets stored in the database
+    langgraph_stack: Any = None  # AsyncExitStack holding the checkpointer/store; replaced when embeddings change
     env_defaults: dict = field(default_factory=dict)  # tunables' values before stored overrides (see runtime/app_settings.py)
     _owned_resources: list = field(default_factory=list)

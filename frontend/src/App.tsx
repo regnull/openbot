@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import ApiKeyGate from "./components/ApiKeyGate";
 import BackendFallback from "./components/BackendFallback";
+import SetupGate from "./components/SetupGate";
 import InboxPage from "./pages/InboxPage";
 import ThreadsPage from "./pages/ThreadsPage";
 import ThreadPage from "./pages/ThreadPage";
@@ -14,6 +15,7 @@ export default function App() {
   return (
     <ApiKeyGate>
       <BackendFallback>
+        <SetupGate>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Navigate to="/inbox" replace />} />
@@ -26,6 +28,7 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>
+        </SetupGate>
       </BackendFallback>
     </ApiKeyGate>
   );

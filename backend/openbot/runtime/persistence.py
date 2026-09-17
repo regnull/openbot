@@ -73,3 +73,24 @@ async def open_langgraph_backends(
             yield saver, store
         return
     raise ValueError(f"unsupported DATABASE_URL: {url}")
+
+
+async def reopen_memory_store(services) -> None:
+    """Reopen the LangGraph backends with the current embedding settings, so a change made in Settings
+    (or the setup wizard) takes effect without a restart. The store's index is what changes; the
+    checkpointer is reopened alongside because both live in the same context. Vectors written with a
+    different dimensionality are not migrated."""
+    from contextlib import AsyncExitStack
+
+    from openbot.runtime.providers import embeddings
+
+    emb = embeddings(services.settings)
+    if services.langgraph_stack is None:               # tests / in-memory installs
+        services.store = InMemoryStore(index=_index(services.settings, emb))
+        return
+    new_stack = AsyncExitStack()
+    saver, store = await new_stack.enter_async_context(open_langgraph_backends(services.settings, emb))
+    old = services.langgraph_stack
+    services.checkpointer, services.store, services.langgraph_stack = saver, store, new_stack
+    services._owned_resources = [new_stack if r is old else r for r in services._owned_resources]
+    await old.aclose()

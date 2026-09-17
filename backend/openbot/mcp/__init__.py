@@ -5,8 +5,9 @@ import logging
 from pathlib import Path
 
 from openbot.mcp.manager import McpManager
-from openbot.mcp.oauth import DbTokenStorage, load_or_create_key
+from openbot.mcp.oauth import DbTokenStorage
 from openbot.mcp.store import McpServerStore, import_mcp_file
+from openbot.runtime.secrets import resolve_secret_key
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ async def build_mcp_manager(services) -> McpManager:
     settings = services.settings
 
     def key() -> str:
-        return load_or_create_key(settings.mcp_token_key, Path(settings.mcp_token_key_file))
+        return resolve_secret_key(settings)
 
     store = McpServerStore(services.session_factory, key)
     try:

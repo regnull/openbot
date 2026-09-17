@@ -414,3 +414,5 @@ class SettingOut(BaseModel):
     value: Any
     default: Any
     overridden: bool
+    secret: bool = False
+    is_set: bool = True          # for secrets: whether a value exists (the value itself is masked)
