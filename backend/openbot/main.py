@@ -51,12 +51,15 @@ async def build_services(settings: Settings) -> Services:
     stack = AsyncExitStack()
     services.registry = build_registry(settings)
     services.bus = EventBus()
+    services.secrets = SecretBox(lambda: resolve_secret_key(settings))
+    # Stored settings first: the embedding model and the provider keys it needs may live only in the
+    # database (that is what the setup wizard writes), and the store's index is fixed when it is opened.
+    await app_settings.apply_stored_overrides(services)
     emb = embeddings(settings)
     if emb is None:
         log.warning("no embedding provider configured; memory search will not be semantic")
     services.checkpointer, services.store = await stack.enter_async_context(open_langgraph_backends(settings, emb))
     services.langgraph_stack = stack
-    services.secrets = SecretBox(lambda: resolve_secret_key(settings))
     services.model_factory = lambda actor: chat_model(actor.bot, settings)
     services.reflector = MemoryReflector(services, settings.memory_reflection_delay)
     services.runner = Runner(services)
@@ -90,7 +93,8 @@ async def close_services(services: Services) -> None:
 
 
 async def start_background(services: Services) -> None:
-    await app_settings.apply_stored_overrides(services)
+    if not services.env_defaults:                      # services built by hand (tests) skip build_services
+        await app_settings.apply_stored_overrides(services)
     await ensure_human_actor(services)
     if services.settings.seed_demo_bots:
         await seed_demo_bots(services)
