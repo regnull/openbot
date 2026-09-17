@@ -128,7 +128,19 @@ and, where the server reports it, the connected account.
   advertises only tools that are actually registered.
 - The public callback escapes everything the authorization server sends.
 
+## Servers added from Settings (2026-09-17, follow-up)
+
+Remote servers can be added in the UI, modelled on Claude's "Add custom connector" dialog: a
+name and the HTTPS URL where the server accepts MCP requests (http only for localhost). They are
+stored in `mcp_servers` (migration 0011) and merged with the file at startup; a database row whose
+name collides with a file server is skipped, the file wins. `POST /api/v1/mcp/servers` stores the
+server and connects it in the background; the listing carries `authorization_url` while the server
+waits for the operator, and the Settings card opens it once. `DELETE /api/v1/mcp/servers/{name}`
+removes a database server and forgets its credentials; file servers answer 409 and are edited in
+`mcp.json`. The card labels file servers "mcp.json" and offers Remove only for database ones. Stdio
+servers and servers that need a secret header stay file-only, so secrets never pass through the UI.
+
 ## Out of scope for v1
 
-Editing servers from the browser, MCP resources and prompts, deferred tool loading (a
+Editing servers' details from the browser, MCP resources and prompts, deferred tool loading (a
 `search_tools` tool for very large servers), pre-registered OAuth clients, per-user identities.

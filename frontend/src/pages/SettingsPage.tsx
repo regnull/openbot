@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Api, getApiKey, setApiKey } from "../api/client";
 import type { AppSetting, McpServer } from "../api/types";
 import { Badge, Button, Card, ErrorText, Field, Input } from "../components/ui";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
-import { mcpActions, mcpInFlight, mcpStatusBadge } from "../lib/mcpServers";
+import { mcpActions, mcpInFlight, mcpStatusBadge, validateNewMcpServer } from "../lib/mcpServers";
 
 const emptyExt = { handle: "", name: "", webhook_url: "", webhook_secret: "" };
 
@@ -182,13 +182,30 @@ function McpServersCard() {
   });
   const disconnect = useMutation({ mutationFn: (name: string) => Api.disconnectMcpServer(name), onSuccess: refresh });
   const forget = useMutation({ mutationFn: (name: string) => Api.forgetMcpCredentials(name), onSuccess: refresh });
-  const busy = connect.isPending || disconnect.isPending || forget.isPending;
+  const remove = useMutation({ mutationFn: (name: string) => Api.removeMcpServer(name), onSuccess: refresh });
+  const busy = connect.isPending || disconnect.isPending || forget.isPending || remove.isPending;
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [adding, setAdding] = useState(false);
+  // A server that starts authorizing on its own (just added, or Connect from another tab) publishes its
+  // authorization URL on the listing; open each one once.
+  const opened = useRef(new Set<string>());
+  useEffect(() => {
+    for (const s of servers.data ?? []) {
+      if (s.authorization_url && !opened.current.has(s.authorization_url)) {
+        opened.current.add(s.authorization_url);
+        window.open(s.authorization_url, "_blank", "noopener");
+      }
+    }
+  }, [servers.data]);
   return (
     <Card className="space-y-2">
-      <h2 className="font-medium">MCP servers</h2>
-      <p className="text-sm text-zinc-500">Tools from Model Context Protocol servers, configured in <code>mcp.json</code> (see <code>mcp.example.json</code>). They appear in the tool list as <code>server__tool</code> and are picked per bot like any other tool.</p>
-      <ErrorText error={servers.error ?? connect.error ?? disconnect.error ?? forget.error} />
+      <div className="flex items-center justify-between">
+        <h2 className="font-medium">MCP servers</h2>
+        <Button variant="secondary" onClick={() => setAdding(true)}>Add server</Button>
+      </div>
+      <p className="text-sm text-zinc-500">Tools from Model Context Protocol servers. Add a remote server here, or configure any server (including local stdio ones) in <code>mcp.json</code>, see <code>mcp.example.json</code>. Tools appear in the tool list as <code>server__tool</code> and are picked per bot like any other tool.</p>
+      {adding && <AddMcpServerDialog onClose={() => setAdding(false)} onAdded={() => { setAdding(false); refresh(); }} />}
+      <ErrorText error={servers.error ?? connect.error ?? disconnect.error ?? forget.error ?? remove.error} />
       {servers.data?.length === 0 && <p className="text-sm text-zinc-500">No servers configured.</p>}
       <ul className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
         {servers.data?.map((s: McpServer) => {
@@ -199,7 +216,8 @@ function McpServersCard() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono">{s.name}</span>
                 <Badge tone={badge.tone}>{badge.label}</Badge>
-                <span className="text-xs text-zinc-500">{s.transport}{s.oauth ? " · OAuth" : ""}{s.url ? ` · ${s.url}` : ""}</span>
+                <span className="text-xs text-zinc-500">{s.transport}{s.oauth ? " · OAuth" : ""}{s.url ? ` · ${s.url}` : ""}{s.source === "file" ? " · mcp.json" : ""}</span>
+                {s.authorization_url && <a className="text-xs underline" href={s.authorization_url} target="_blank" rel="noopener noreferrer">Authorize</a>}
                 {s.tools.length > 0 && (
                   <button type="button" className="text-xs text-zinc-500 underline" onClick={() => setOpen((o) => ({ ...o, [s.name]: !o[s.name] }))}>
                     {s.tools.length} tool{s.tools.length === 1 ? "" : "s"}
@@ -210,6 +228,7 @@ function McpServersCard() {
                   {actions.includes("reconnect") && <Button variant="secondary" disabled={busy} onClick={() => connect.mutate(s.name)}>Reconnect</Button>}
                   {actions.includes("disconnect") && <Button variant="secondary" disabled={busy} onClick={() => disconnect.mutate(s.name)}>Disconnect</Button>}
                   {actions.includes("forget") && <Button variant="secondary" disabled={busy} onClick={() => confirm(`Forget the stored credentials for ${s.name}?`) && forget.mutate(s.name)}>Forget credentials</Button>}
+                  {actions.includes("remove") && <Button variant="danger" disabled={busy} onClick={() => confirm(`Remove ${s.name} and forget its credentials?`) && remove.mutate(s.name)}>Remove</Button>}
                 </span>
               </div>
               {s.status === "authorizing" && <p className="text-xs text-amber-600">A browser tab was opened to authorize. If it did not appear, click Connect again and allow pop-ups.</p>}
@@ -220,5 +239,42 @@ function McpServersCard() {
         })}
       </ul>
     </Card>
+  );
+}
+
+function AddMcpServerDialog({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [touched, setTouched] = useState(false);
+  const errors = validateNewMcpServer(name, url);
+  const add = useMutation({ mutationFn: () => Api.addMcpServer({ name: name.trim(), url: url.trim() }), onSuccess: onAdded });
+  const submit = () => { setTouched(true); if (Object.keys(errors).length === 0) add.mutate(); };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="add-mcp-title">
+      <form className="w-full max-w-lg space-y-4 rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
+        onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <div className="flex items-start justify-between">
+          <h2 id="add-mcp-title" className="text-lg font-semibold">Add MCP server</h2>
+          <button type="button" aria-label="Close" className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200" onClick={onClose}>✕</button>
+        </div>
+        <p className="text-sm text-zinc-500">Connect your bots to a remote MCP server's tools. Local (stdio) servers and servers that need a secret header are configured in <code>mcp.json</code> instead.</p>
+        <div className="space-y-1">
+          <Input value={name} placeholder="Name" autoFocus onChange={(e) => setName(e.target.value)} />
+          <p className="text-xs text-zinc-500">Shown in the servers list; tools appear as <code>{name.trim() || "name"}__tool</code>.</p>
+          {touched && errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
+        </div>
+        <div className="space-y-1">
+          <Input value={url} placeholder="MCP server URL" onChange={(e) => setUrl(e.target.value)} />
+          <p className="text-xs text-zinc-500">The HTTPS address where the server accepts MCP requests, for example https://mcp.example.com/mcp.</p>
+          {touched && errors.url && <p className="text-xs text-red-600">{errors.url}</p>}
+        </div>
+        <p className="text-xs text-zinc-500">Only add servers from developers you trust. OpenBot does not control which tools a server exposes or what they do, and every bot you give those tools acts with whatever access you authorize. Mark tools that write as needing approval in the bot editor.</p>
+        <ErrorText error={add.error} />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={add.isPending || (touched && Object.keys(errors).length > 0)}>{add.isPending ? "Adding…" : "Continue"}</Button>
+        </div>
+      </form>
+    </div>
   );
 }

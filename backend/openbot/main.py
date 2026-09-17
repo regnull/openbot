@@ -91,7 +91,7 @@ async def start_background(services: Services) -> None:
     if services.settings.seed_demo_bots:
         await seed_demo_bots(services)
     if services.mcp is None and services.registry is not None:
-        services.mcp = build_mcp_manager(services)
+        services.mcp = await build_mcp_manager(services)
     if services.mcp is not None:
         # Before the actors: a run that starts during boot should find the MCP tools already registered.
         await services.mcp.start()

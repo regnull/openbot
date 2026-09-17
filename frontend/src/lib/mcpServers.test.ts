@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { McpServer } from "../api/types";
-import { mcpActions, mcpStatusBadge } from "./mcpServers";
+import { mcpActions, mcpStatusBadge, validateNewMcpServer } from "./mcpServers";
 
 const server = (status: McpServer["status"], oauth = false): McpServer =>
-  ({ name: "linear", transport: "http", status, enabled: status !== "disabled", oauth, url: "https://x/mcp", error: null, tools: [] });
+  ({ name: "linear", transport: "http", status, enabled: status !== "disabled", oauth, url: "https://x/mcp", error: null, tools: [], source: "file", authorization_url: null });
 
 describe("mcpStatusBadge", () => {
   it("maps each server status to a label and tone", () => {
@@ -26,5 +26,25 @@ describe("mcpActions", () => {
     expect(mcpActions(server("error"))).toEqual(["connect"]);
     expect(mcpActions(server("authorizing", true))).toEqual(["disconnect"]);
     expect(mcpActions(server("disabled"))).toEqual([]);
+  });
+});
+
+describe("validateNewMcpServer", () => {
+  it("accepts a name and an https URL, http only for localhost", () => {
+    expect(validateNewMcpServer("linear", "https://mcp.linear.app/mcp")).toEqual({});
+    expect(validateNewMcpServer("local", "http://localhost:8002/mcp")).toEqual({});
+    expect(validateNewMcpServer("", "https://x/mcp")).toEqual({ name: "Name is required" });
+    expect(validateNewMcpServer("bad name!", "https://x/mcp")).toEqual({ name: "Letters, digits, _ and - only (up to 40)" });
+    expect(validateNewMcpServer("ok", "mcp.example.com")).toEqual({ url: "Enter an absolute URL, for example https://mcp.example.com/mcp" });
+    expect(validateNewMcpServer("ok", "http://mcp.example.com/mcp")).toEqual({ url: "Use https (http is allowed for localhost only)" });
+  });
+});
+
+describe("mcpActions for servers added from Settings", () => {
+  it("adds remove for database servers only", () => {
+    const db = { ...server("connected"), source: "db" as const };
+    expect(mcpActions(db)).toEqual(["reconnect", "disconnect", "remove"]);
+    expect(mcpActions({ ...server("needs_auth", true), source: "db" })).toEqual(["connect", "remove"]);
+    expect(mcpActions({ ...server("connected"), source: "file" })).toEqual(["reconnect", "disconnect"]);
   });
 });
