@@ -75,6 +75,15 @@ export default function ThreadPage() {
     return map;
   }, [bots.data]);
 
+  // Build actor_id → bot name lookup (bots that may not be thread participants yet)
+  const nameByActor = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const bot of bots.data ?? []) {
+      map[bot.id] = bot.name;
+    }
+    return map;
+  }, [bots.data]);
+
   if (detail.isLoading) return <Spinner />;
   if (!detail.data) {
     if (isBackendUnavailable(detail.error)) return <OfflineNotice />;
@@ -112,7 +121,7 @@ export default function ThreadPage() {
             <ErrorText error={loadOlder.error} />
           </div>
         )}
-        <MessageList state={state} participants={t.participants} onRunLoaded={(run) => setState((s) => mergeRun(s, run))} iconByActor={iconByActor} />
+        <MessageList state={state} participants={t.participants} onRunLoaded={(run) => setState((s) => mergeRun(s, run))} iconByActor={iconByActor} nameByActor={nameByActor} />
       </div>
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         {notice && <p className="mb-1 text-xs text-amber-600">{notice}</p>}
