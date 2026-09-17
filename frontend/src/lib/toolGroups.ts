@@ -16,6 +16,17 @@ export function groupTools(tools: ToolInfo[]): GroupedTools {
   return { flat, servers: [...byServer.entries()].map(([server, ts]) => ({ server, tools: ts })) };
 }
 
+/** Granted tool names the registry does not currently have (their MCP server is disabled, disconnected or
+ *  errored). The editor lists them so they can still be ungranted. */
+export const unavailableGrants = (selected: string[], tools: ToolInfo[]): string[] => {
+  const known = new Set(tools.map((t) => t.name));
+  return selected.filter((n) => !known.has(n));
+};
+
+/** A tool's name without its server prefix (server names may themselves contain "__"). */
+export const toolLabel = (server: string, name: string): string =>
+  name.startsWith(`${server}__`) ? name.slice(server.length + 2) : name;
+
 export type GroupState = "none" | "some" | "all";
 
 export function groupState(names: string[], selected: string[]): GroupState {

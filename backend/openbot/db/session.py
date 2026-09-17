@@ -54,3 +54,8 @@ def _alembic_config(database_url: str) -> Config:
 
 async def run_migrations(database_url: str) -> None:
     await asyncio.to_thread(command.upgrade, _alembic_config(database_url), "head")
+
+
+async def downgrade_migrations(database_url: str, revision: str) -> None:
+    """Used by tests to prove downgrades work; nothing in the app calls this."""
+    await asyncio.to_thread(command.downgrade, _alembic_config(database_url), revision)

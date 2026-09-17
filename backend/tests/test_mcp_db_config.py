@@ -1,4 +1,5 @@
 """MCP server configuration lives in the database; mcp.json is imported once and then ignored."""
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -74,7 +75,6 @@ async def test_api_manages_stdio_and_http_servers_with_masked_secrets(settings, 
             row = next(x for x in (await c.get("/api/v1/mcp/servers")).json() if x["name"] == "stub")
             if row["status"] == "connected":
                 break
-            import asyncio
             await asyncio.sleep(0.05)
         assert row["status"] == "connected" and row["transport"] == "stdio" and row["tools"] == ["stub__add", "stub__echo"]
         assert row["command"] == sys.executable and row["args"] == [STUB] and row["env"] == {"GREETING": "••••••••"}
@@ -85,7 +85,12 @@ async def test_api_manages_stdio_and_http_servers_with_masked_secrets(settings, 
         assert r.status_code == 200 and r.json()["status"] == "disabled"
         assert "stub__add" not in {t["name"] for t in (await c.get("/api/v1/tools")).json()["tools"]}
         r = await c.patch("/api/v1/mcp/servers/stub", json={"enabled": True})
-        assert r.json()["status"] == "connected" and "stub__add" in {t["name"] for t in (await c.get("/api/v1/tools")).json()["tools"]}
+        assert r.json()["status"] in ("connecting", "connected")           # reconnects in the background
+        for _ in range(100):
+            if (await c.get("/api/v1/mcp/servers")).json()[0]["status"] == "connected":
+                break
+            await asyncio.sleep(0.05)
+        assert "stub__add" in {t["name"] for t in (await c.get("/api/v1/tools")).json()["tools"]}
         # Editing keeps masked secrets when the UI sends them back blank.
         r = await c.patch("/api/v1/mcp/servers/linear", json={"headers": {"Authorization": "", "X-Team": "eng"}})
         assert r.json()["headers"] == {"Authorization": "••••••••", "X-Team": "••••••••"}

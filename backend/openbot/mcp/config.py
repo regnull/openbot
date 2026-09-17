@@ -49,6 +49,22 @@ class _Unset(KeyError):
     pass
 
 
+def check_url(value: str) -> str:
+    """A remote server URL must be absolute and https, or http to localhost. Values still holding a
+    `${VAR}` reference are accepted here and checked again after expansion, in `build_server`."""
+    from urllib.parse import urlparse
+    value = value.strip()
+    if "${" in value:
+        return value
+    u = urlparse(value)
+    if not u.netloc:
+        raise ValueError("url must be absolute, for example https://mcp.example.com/mcp")
+    local = u.hostname in ("localhost", "127.0.0.1", "::1")
+    if u.scheme != "https" and not (u.scheme == "http" and local):
+        raise ValueError("url must use https (http is allowed for localhost only)")
+    return value
+
+
 def _expand(value: str, env: Mapping[str, str]) -> str:
     def sub(m: re.Match) -> str:
         name = m.group(1)
@@ -106,10 +122,14 @@ def build_server(name: str, spec: dict, env: Mapping[str, str] | None = None, so
             server.env = _expand_map(spec.get("env") or {}, env)
             server.cwd = _expand(str(spec["cwd"]), env) if spec.get("cwd") else None
         else:
-            server.url = _expand(str(spec["url"]), env)
+            server.url = check_url(_expand(str(spec["url"]), env))
             server.headers = _expand_map(spec.get("headers") or {}, env)
     except _Unset as e:
         server.error = f"environment variable {e.args[0]} is not set"
+    except ValueError as e:                  # the expanded URL failed the https-or-localhost rule
+        server.error = str(e)
+    if spec.get("secrets_unreadable"):
+        server.error = "stored headers/env cannot be read with the current MCP_TOKEN_KEY; re-enter them or restore the key"
     return server
 
 

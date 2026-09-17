@@ -46,8 +46,26 @@ export function parseKeyValues(text: string): { values: Record<string, string>; 
 
 export const formatKeyValues = (values: Record<string, string>): string => Object.entries(values).map(([k, v]) => `${k}=${v}`).join("\n");
 
-/** Whitespace-separated arguments, one or many per line. */
-export const parseArgs = (text: string): string[] => text.split(/\s+/).map((s) => s.trim()).filter(Boolean);
+/** Shell-style argument splitting: whitespace separates, "double" or 'single' quotes group. */
+export function parseArgs(text: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quote: string | null = null;
+  let has = false;
+  for (const ch of text) {
+    if (quote) {
+      if (ch === quote) quote = null; else cur += ch;
+    } else if (ch === '"' || ch === "'") { quote = ch; has = true; }
+    else if (/\s/.test(ch)) { if (has || cur) out.push(cur); cur = ""; has = false; }
+    else cur += ch;
+  }
+  if (has || cur) out.push(cur);
+  return out;
+}
+
+/** The inverse of parseArgs: arguments that contain whitespace or quotes are double-quoted. */
+export const formatArgs = (args: string[]): string =>
+  args.map((a) => (/[\s"']/.test(a) || a === "" ? `"${a.replace(/"/g, '\\"')}"` : a)).join(" ");
 
 export function mcpStatusBadge(s: McpServer): { label: string; tone: McpTone } {
   switch (s.status) {

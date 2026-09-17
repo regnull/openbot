@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from openbot.api.deps import get_services
 from openbot.api.schemas import McpConnectOut, McpServerCreate, McpServerOut, McpServerUpdate
 from openbot.mcp.config import McpConfigError
+from openbot.mcp.store import McpKeyError
 from openbot.services import Services
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -16,27 +17,30 @@ AUTH_URL_WAIT = 15.0     # how long connect waits for the OAuth flow to produce 
 
 
 def _mgr(services: Services):
-    if services.mcp is None or services.mcp.store is None:
+    if services.mcp is None:
         raise HTTPException(503, "MCP is not initialised")
+    if services.mcp.store is None:
+        raise HTTPException(503, services.mcp.init_error or "MCP configuration unavailable (credential key)")
     return services.mcp
 
 
-async def _out(mgr, st) -> McpServerOut:
-    spec = await mgr.store.get(st.name) or {}
-    return McpServerOut(**asdict(st), authorization_url=mgr.flows.authorization_url(st.name),
+def _out(mgr, st, spec: dict) -> McpServerOut:
+    fields = asdict(st)
+    fields["url"] = spec.get("url")          # the stored form (may hold ${VAR}), which is what an edit must round-trip
+    return McpServerOut(**fields, authorization_url=mgr.flows.authorization_url(st.name),
                         command=spec.get("command"), args=list(spec.get("args") or []), cwd=spec.get("cwd"),
                         env=dict(spec.get("env") or {}), headers=dict(spec.get("headers") or {}))
 
 
-async def _config_for(mgr, name: str):
-    cfgs = {c.name: c for c in await mgr.store.configs()}
-    return cfgs[name]
+async def _one(mgr, name: str) -> McpServerOut:
+    return _out(mgr, mgr.status(name), await mgr.store.get(name) or {})
 
 
 @router.get("/servers", response_model=list[McpServerOut])
 async def list_servers(services: Services = Depends(get_services)):
     mgr = _mgr(services)
-    return [await _out(mgr, s) for s in mgr.statuses()]
+    specs = await mgr.store.all_masked()
+    return [_out(mgr, s, specs.get(s.name, {})) for s in mgr.statuses()]
 
 
 @router.post("/servers", response_model=McpServerOut, status_code=201)
@@ -48,30 +52,33 @@ async def add_server(body: McpServerCreate, services: Services = Depends(get_ser
         raise HTTPException(409, f"an MCP server named {body.name!r} already exists")
     try:
         await mgr.store.upsert(body.model_dump())
+    except McpKeyError as e:
+        raise HTTPException(503, str(e)) from e
     except McpConfigError as e:
         raise HTTPException(422, str(e)) from e
-    st = await mgr.add_server(await _config_for(mgr, body.name), connect=False)
+    st = await mgr.add_server(await mgr.store.config(body.name), connect=False)
     if st.status not in ("disabled", "error"):
         mgr.begin_connect(body.name)
         await asyncio.sleep(0)                  # let the connect task publish "connecting"
-    return await _out(mgr, mgr.status(body.name))
+    return await _one(mgr, body.name)
 
 
 @router.patch("/servers/{name}", response_model=McpServerOut)
 async def update_server(name: str, body: McpServerUpdate, services: Services = Depends(get_services)):
-    """Edit a server. The connection is restarted with the new spec (or stopped when disabled)."""
+    """Edit a server. The connection is restarted with the new spec in the background (or stopped when disabled)."""
     mgr = _mgr(services)
     if not mgr.has(name):
         raise HTTPException(404, "unknown MCP server")
-    changes = body.model_dump(exclude_unset=True)
     try:
-        await mgr.store.update(name, changes)
+        await mgr.store.update(name, body.model_dump(exclude_unset=True))
     except KeyError as e:
         raise HTTPException(404, "unknown MCP server") from e
+    except McpKeyError as e:
+        raise HTTPException(503, str(e)) from e
     except McpConfigError as e:
         raise HTTPException(422, str(e)) from e
-    st = await mgr.update_server(await _config_for(mgr, name))
-    return await _out(mgr, st)
+    await mgr.update_server(await mgr.store.config(name))
+    return await _one(mgr, name)
 
 
 @router.delete("/servers/{name}", status_code=204)
@@ -112,7 +119,8 @@ async def disconnect_server(name: str, services: Services = Depends(get_services
     mgr = _mgr(services)
     if not mgr.has(name):
         raise HTTPException(404, "unknown MCP server")
-    return await _out(mgr, await mgr.disconnect(name))
+    await mgr.disconnect(name)
+    return await _one(mgr, name)
 
 
 @router.delete("/servers/{name}/credentials", response_model=McpServerOut)
@@ -121,4 +129,5 @@ async def forget_credentials(name: str, services: Services = Depends(get_service
     mgr = _mgr(services)
     if not mgr.has(name):
         raise HTTPException(404, "unknown MCP server")
-    return await _out(mgr, await mgr.forget_credentials(name))
+    await mgr.forget_credentials(name)
+    return await _one(mgr, name)

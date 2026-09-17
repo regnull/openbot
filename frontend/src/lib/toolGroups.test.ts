@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolInfo } from "../api/types";
-import { groupState, groupTools, toggleGroup } from "./toolGroups";
+import { groupState, groupTools, toggleGroup, toolLabel, unavailableGrants } from "./toolGroups";
 
 const tool = (name: string, source: string): ToolInfo => ({ name, description: name, source, args_schema: {} });
 const tools = [
@@ -35,5 +35,14 @@ describe("toggleGroup", () => {
       .toEqual({ tool_names: ["run_shell", "Linear__create_issue", "Linear__list_issues"], approval_tools: ["Linear__create_issue"] });
     expect(toggleGroup({ tool_names: ["run_shell", ...names], approval_tools: ["Linear__create_issue", "run_shell"] }, names))
       .toEqual({ tool_names: ["run_shell"], approval_tools: ["run_shell"] });
+  });
+});
+
+describe("unavailableGrants and toolLabel", () => {
+  it("lists granted names the registry no longer has, and labels tools relative to their server", () => {
+    expect(unavailableGrants(["run_shell", "gh__search", "Linear__list_issues"], tools)).toEqual([]);
+    expect(unavailableGrants(["run_shell", "old__thing", "gh__gone"], tools)).toEqual(["old__thing", "gh__gone"]);
+    expect(toolLabel("my__server", "my__server__do_it")).toBe("do_it");
+    expect(toolLabel("gh", "gh__search")).toBe("search");
   });
 });
