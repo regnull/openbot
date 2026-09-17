@@ -16,17 +16,44 @@ ACTORS = {a.handle: a for a in [mk("eng"), mk("rev"), mk("qa"), mk("off", enable
 
 
 def test_parse_mentions():
-    assert parse_mentions("hi @eng and @rev, @eng again") == ["eng", "rev"]
+    # Middle-of-line mentions no longer trigger
+    assert parse_mentions("hi @eng and @rev, @eng again") == []
+    # Email addresses still excluded
     assert parse_mentions("email me@example.com") == []
-    assert parse_mentions("(@qa) @nope-bot!") == ["qa", "nope-bot"]
+    # Middle-of-line parenthetical mentions no longer trigger
+    assert parse_mentions("(@qa) @nope-bot!") == []
+    # Too-short handle still excluded
     assert parse_mentions("@a") == []
 
 
-def test_parse_mentions_trailing_punctuation():
-    assert parse_mentions("See @eng.") == ["eng"]
-    assert parse_mentions("cc @eng-team, then @qa!") == ["eng-team", "qa"]
-    assert parse_mentions("read @eng.txt") == []
+def test_parse_mentions_line_start():
+    # At very start of message
+    assert parse_mentions("@reviewer, review this") == ["reviewer"]
+    # After newline
+    assert parse_mentions("Line 1\n@reviewer do it") == ["reviewer"]
+    # After newline — multple mentions on same line after line-start only match the first
+    assert parse_mentions("first line\n@eng @rev") == ["eng"]
+    # Sole content at line start
+    assert parse_mentions("@eng") == ["eng"]
+
+
+def test_parse_mentions_middle_of_line_no_match():
+    # Middle of line should not match
+    assert parse_mentions("when you are done, call @reviewer") == []
+    assert parse_mentions("See @eng.") == []
+    assert parse_mentions("cc @eng-team, then @qa!") == []
+
+
+def test_parse_mentions_non_mention_at_line_start():
+    # Even at line start, email/filename exclusions remain
     assert parse_mentions("me@example.com") == []
+    assert parse_mentions("read @eng.txt") == []
+    # Email at line start of its own line — not a mention
+    assert parse_mentions("some text\nme@example.com") == []
+    # @-prefixed handle after non-mention text on same line = no match
+    assert parse_mentions("me@example.com\nand then @eng") == []
+    # Line-start mention after an email-only line
+    assert parse_mentions("me@example.com\n@eng review this") == ["eng"]
 
 
 def test_explicit_targets_in_order():
