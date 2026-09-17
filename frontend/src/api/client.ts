@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import type { Actor, AppSetting, Bot, McpConnectResult, McpServer, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface AttachmentIn { url: string; name?: string; }
@@ -64,6 +64,10 @@ export const Api = {
   resumeRun: (id: string, body: { answer?: string; decisions?: ("approve" | "reject")[] }) => api<Run>(`/runs/${id}/resume`, { method: "POST", json: body }),
   cancelRun: (id: string) => api<Run>(`/runs/${id}/cancel`, { method: "POST" }),
   listTools: () => api<{ tools: ToolInfo[]; errors: { file: string; error: string }[] }>("/tools"),
+  listMcpServers: () => api<McpServer[]>("/mcp/servers"),
+  connectMcpServer: (name: string) => api<McpConnectResult>(`/mcp/servers/${name}/connect`, { method: "POST" }),
+  disconnectMcpServer: (name: string) => api<McpServer>(`/mcp/servers/${name}/disconnect`, { method: "POST" }),
+  forgetMcpCredentials: (name: string) => api<McpServer>(`/mcp/servers/${name}/credentials`, { method: "DELETE" }),
   getSettings: () => api<AppSetting[]>("/settings"),
   patchSettings: (updates: Record<string, unknown>) => api<AppSetting[]>("/settings", { method: "PATCH", json: updates }),
   resetSetting: (key: string) => api<AppSetting[]>(`/settings/${key}`, { method: "DELETE" }),

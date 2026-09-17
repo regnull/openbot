@@ -29,6 +29,13 @@ class ToolRegistry:
             log.warning("tool %s from %s overrides %s", tool.name, source, self._tools[tool.name].source)
         self._tools[tool.name] = ToolSpec(tool.name, tool.description or "", source, tool)
 
+    def unregister_source(self, source: str) -> list[str]:
+        """Drop every tool registered from `source` (an MCP server disconnecting); returns their names."""
+        names = [n for n, spec in self._tools.items() if spec.source == source]
+        for n in names:
+            del self._tools[n]
+        return names
+
     def has(self, name: str) -> bool:
         return name in self._tools
 

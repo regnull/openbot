@@ -10,5 +10,7 @@ logs/
 node_modules/
 frontend/dist/
 .env
+mcp.json
+mcp_token.key
 .DS_Store
 .superpowers/

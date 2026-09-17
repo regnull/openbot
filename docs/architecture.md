@@ -27,6 +27,7 @@ Each section has three parts where they differ:
 | **Run event** | A step inside a run: tool call, tool result, text, interrupt, resumed, error, message. |
 | **Hop** | The count of bot-to-bot hand-offs since the last human message. Bounds runaway delegation. |
 | **Memory** | Durable, bot-scoped knowledge in the LangGraph store. Not thread state. |
+| **Tool source** | Where a selectable tool comes from: the built-ins, plugin modules in `TOOLS_DIR`, or an MCP server (`mcp:<name>`, tools named `<name>__<tool>`; see `docs/superpowers/specs/2026-09-17-mcp-design.md`). All land in one registry, so per-bot selection and approvals work the same. |
 
 ## 2. The model in one paragraph
 

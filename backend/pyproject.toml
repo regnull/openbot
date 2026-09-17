@@ -24,6 +24,8 @@ dependencies = [
   "langsmith>=0.12",
   "beautifulsoup4>=4.12",
   "langchain-ollama>=1.0",
+  "langchain-mcp-adapters>=0.3.2",
+  "cryptography>=50.0.1",
 ]
 
 [dependency-groups]

@@ -9,17 +9,20 @@ from pathlib import Path
 
 import httpx
 from dotenv import find_dotenv, load_dotenv
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from openbot.api import actors, bots, events, inbox, messages, providers, runs, threads, tools
+from openbot.api import mcp as mcp_api
 from openbot.api import settings as settings_api
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
 from openbot.logsetup import configure_logging
+from openbot.mcp import build_mcp_manager
 from openbot.runtime import app_settings
 from openbot.runtime.actors import ActorSystem
 from openbot.runtime.bus import EventBus
@@ -86,6 +89,11 @@ async def start_background(services: Services) -> None:
     await ensure_human_actor(services)
     if services.settings.seed_demo_bots:
         await seed_demo_bots(services)
+    if services.mcp is None and services.registry is not None:
+        services.mcp = build_mcp_manager(services)
+    if services.mcp is not None:
+        # Before the actors: a run that starts during boot should find the MCP tools already registered.
+        await services.mcp.start()
     if services.actors is not None:
         await services.actors.start()
 
@@ -93,6 +101,8 @@ async def start_background(services: Services) -> None:
 async def stop_background(services: Services) -> None:
     if services.actors is not None:
         await services.actors.stop()
+    if services.mcp is not None:
+        await services.mcp.stop()
     if services.reflector is not None:
         # Reflection is debounced by MEMORY_REFLECTION_DELAY (30s by default), so on a normal
         # restart the last run's memories are still sitting in the pending map. Run them now rather
@@ -200,9 +210,28 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     async def health():
         return {"status": "ok"}
 
+    @public.get("/mcp/oauth/callback", response_class=HTMLResponse, include_in_schema=False)
+    async def mcp_oauth_callback(state: str = "", code: str | None = None, error: str | None = None,
+                                 error_description: str | None = None):
+        """Where the authorization server sends the browser back. Public: the browser carries no API key.
+        Resolves the pending flow the SDK is waiting on (see mcp/oauth.py) and returns the user to Settings."""
+        mgr = app.state.services.mcp if app.state.services is not None else None
+        if mgr is None:
+            raise HTTPException(400, "MCP is not initialised")
+        if error:
+            ok = mgr.flows.fail(state, error_description or error)
+        else:
+            ok = bool(code) and mgr.flows.complete(state, code)
+        if not ok:
+            raise HTTPException(400, "unknown or expired authorization state")
+        outcome = f"Authorization failed: {error_description or error}" if error else "Authorization complete. Connecting..."
+        return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8"><title>OpenBot</title>
+<meta http-equiv="refresh" content="2;url=/settings"></head>
+<body style="font-family:system-ui;padding:2rem"><p>{outcome}</p><p><a href="/settings">Back to Settings</a></p></body></html>""")
+
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
     for r in (actors.router, bots.router, threads.router, messages.router, inbox.router, runs.router, tools.router,
-              providers.router, events.router, settings_api.router):
+              providers.router, events.router, settings_api.router, mcp_api.router):
         api.include_router(r)
     app.include_router(public)
     app.include_router(api)
