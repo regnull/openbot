@@ -32,7 +32,11 @@ def cap(text: str, limit: int = OUTPUT_CAP, hint: str = "narrow the command or r
 
 
 def validate_workspace_directory(root: Path, directory: str | None) -> str | None:
-    """Validate a relative workspace path or a home-relative path such as ``~/work/core-web``."""
+    """Validate an accessible relative, absolute, or ``~/`` directory.
+
+    Relative paths retain workspace traversal protection; absolute paths are allowed
+    anywhere on the filesystem so a thread is not tied to the server startup tree.
+    """
     if directory is None:
         return None
     raw = directory.strip()
@@ -43,35 +47,36 @@ def validate_workspace_directory(root: Path, directory: str | None) -> str | Non
     if any(ord(ch) < 32 for ch in raw):
         raise ValueError("working_directory contains control characters")
     home_relative = _is_home_relative(raw)
-    if Path(raw).is_absolute() and not home_relative:
-        raise ValueError("working_directory must be relative to the workspace root")
-    # Home-relative paths must not traverse above the user's home directory.
     if home_relative and any(part == ".." for part in Path(raw[1:]).parts):
         raise ValueError("working_directory cannot contain '..'")
-    if home_relative:
-        target = Path(os.path.expanduser(raw)).resolve()
-        if not target.exists():
-            raise ValueError(f"working_directory does not exist: {directory}")
-        if not target.is_dir():
-            raise ValueError(f"working_directory is not a directory: {directory}")
-        return raw.replace("\\", "/")
-    target = resolve_in_workspace(root, raw)
+    is_absolute = Path(raw).is_absolute() and not home_relative
+    target = (Path(os.path.expanduser(raw)).resolve() if home_relative or is_absolute
+              else resolve_in_workspace(root, raw))
     if not target.exists():
         raise ValueError(f"working_directory does not exist: {directory}")
     if not target.is_dir():
         raise ValueError(f"working_directory is not a directory: {directory}")
+    if not os.access(target, os.R_OK | os.X_OK):
+        raise ValueError(f"working_directory is not accessible: {directory}")
+    try:
+        next(target.iterdir(), None)
+    except OSError as exc:
+        raise ValueError(f"working_directory is not accessible: {directory}") from exc
+    if home_relative:
+        return raw.replace("\\", "/")
+    if is_absolute:
+        return target.as_posix()
     rel = target.relative_to(root.resolve())
     return rel.as_posix() if rel.parts else None
 
 
 def thread_workspace_root(root: Path, directory: str | None) -> Path:
-    if directory and _is_home_relative(directory):
+    if directory and (_is_home_relative(directory) or Path(directory).is_absolute()):
         return Path(os.path.expanduser(directory)).resolve()
     return resolve_in_workspace(root, directory)
 
 
 def _parent_of(normalized: str | None) -> str | None:
-    """Parent of a normalized working directory, or None at a browse root ("." or "~")."""
     if normalized is None or normalized == "~":
         return None
     head, _, _ = normalized.rpartition("/")
@@ -81,16 +86,10 @@ def _parent_of(normalized: str | None) -> str | None:
 
 
 def browse_workspace_directory(root: Path, directory: str | None) -> tuple[str, str | None, list[tuple[str, str]]]:
-    """List the visible subdirectories of a workspace-relative or home-relative directory.
-
-    Returns ``(path, parent, [(name, path), ...])`` where every path is spelled the way a user
-    would type it into the working-directory field. Hidden directories are skipped; unreadable
-    ones are skipped rather than failing the whole listing.
-    """
     normalized = validate_workspace_directory(root, directory)
     target = thread_workspace_root(root, normalized)
     here = normalized or "."
-    prefix = "" if here == "." else here + "/"
+    prefix = "" if here == "." else here.rstrip("/") + "/"
     entries: list[tuple[str, str]] = []
     try:
         children = sorted(target.iterdir(), key=lambda c: c.name.lower())

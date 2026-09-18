@@ -32,8 +32,6 @@ def test_resolve_in_workspace(tmp_path):
     assert resolve_in_workspace(root, "a/b") == root / "a" / "b"
     with pytest.raises(ValueError):
         resolve_in_workspace(root, "../x")
-    with pytest.raises(ValueError):
-        resolve_in_workspace(root, "/etc/passwd")
 
 
 def test_validate_workspace_directory(tmp_path):
@@ -49,7 +47,11 @@ def test_validate_workspace_directory(tmp_path):
     if home.is_dir():
         assert validate_workspace_directory(Path.home() / "work", "~/work/core-web") == "~/work/core-web"
 
-    for bad in ("../x", "/tmp", "repo/missing", "repo/file.txt", "repo\nname"):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    assert validate_workspace_directory(root, str(outside)) == str(outside)
+
+    for bad in ("../x", str(tmp_path / "missing"), "repo/missing", "repo/file.txt", "repo\nname"):
         with pytest.raises(ValueError):
             validate_workspace_directory(root, bad)
 
@@ -80,7 +82,7 @@ def test_browse_workspace_directory(tmp_path):
         assert (here, parent) == ("~/work", "~")
         assert all(path.startswith("~/work/") for _, path in entries)
 
-    for bad in ("../x", "/tmp", "repo/missing", "repo/README.md", "~/.."):
+    for bad in ("../x", str(tmp_path / "missing"), "repo/missing", "repo/README.md", "~/.."):
         with pytest.raises(ValueError):
             browse_workspace_directory(root, bad)
 
