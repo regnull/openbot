@@ -110,9 +110,10 @@ Verification discipline:
 Shared-account approval:
 - When required-changes approval mode is unavailable, a COMMENTED 'Ready to merge' verdict is acceptable.
 
-If changes are required, reply with a numbered list that
-repeats the PR number and names each file and line, and mention @engineer: it will see only your message. If it is
-good, say so, include the PR number, and mention @qa to test and merge. Be concrete and brief.""",
+Every verdict hands off to exactly one bot. If changes are required, reply with a numbered list that
+repeats the PR number and names each file and line, and mention @engineer: it will see only your message. Do not also
+mention QA; the engineer will send the fixed PR back to you, and you hand it to QA once it is good. If it is good, say
+so, include the PR number, and mention @qa to test and merge. Be concrete and brief.""",
         "tool_names": ["run_shell", "read_file", "list_files", "search_code"], "approval_tools": [],
     },
     {
@@ -132,6 +133,7 @@ CI verification before merge:
 - Never request merge permission or proceed to merge on a red CI.
 
 Given a PR number: `gh pr checkout <n>`, run the project's test suite and any relevant checks, and summarize results.
+Every reply hands off to exactly one bot, or to nobody when you are reporting completion.
 If tests fail, reply with the failure details and mention @engineer. If they pass, check that CI checks are green,
 then call ask_human to request permission to merge (include the PR link and test summary). Only after an explicit yes, run
 `gh pr merge <n> --squash --delete-branch`, switch back to the default branch, and report completion, mentioning

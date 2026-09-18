@@ -13,8 +13,12 @@ def build_history(messages: list[Message], actor_id: str, *, token_budget: int, 
                   trigger_ids: set[str] | frozenset[str] = frozenset()) -> tuple[list[BaseMessage], int]:
     """Render the thread from the bot's point of view. Messages in `trigger_ids` (the ones that woke
     this run) are marked "(new)" so the model knows what it is answering; other bots may have posted
-    since its last reply, and several triggers may have been coalesced into one run."""
+    since its last reply, and several triggers may have been coalesced into one run. A trigger that
+    arrived before the bot's own latest reply was queued while the bot was mid-run and may already be
+    answered by that reply; it is marked as such so the model checks instead of redoing the work."""
     ordered = sorted(messages, key=lambda m: (m.created_at, m.id))
+    own = [m for m in ordered if m.sender_kind == "bot" and m.sender_actor_id == actor_id]
+    last_own = (own[-1].created_at, own[-1].id) if own else None
     picked: list[Message] = []
     used = 0
     for m in reversed(ordered):
@@ -29,7 +33,10 @@ def build_history(messages: list[Message], actor_id: str, *, token_budget: int, 
         if m.sender_kind == "bot" and m.sender_actor_id == actor_id:
             out.append(AIMessage(content=m.content))
             continue
-        tag = " (new)" if m.id in trigger_ids else ""
+        tag = ""
+        if m.id in trigger_ids:
+            stale = last_own is not None and (m.created_at, m.id) < last_own
+            tag = " (new, arrived before your last reply; it may already be handled)" if stale else " (new)"
         n_imgs = len((getattr(m, "meta", None) or {}).get("attachments") or [])
         if n_imgs:
             tag += f" [attached {n_imgs} image{'s' if n_imgs > 1 else ''}]"
@@ -68,8 +75,8 @@ def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list
 {bot.bot.instructions}
 
 # How this platform works
-- You are in a shared thread with: {', '.join(participants) or 'nobody else'}. Messages from others appear as "[name]: text". Messages marked "[name] (new): text" are the ones that woke you for this run; answer those. The human operator is @you.
-- Your reply is posted to the thread as a message from you. To hand work to another bot or ask it something, mention it with @handle in your reply. Only mentioned bots are woken up by bot messages; unmentioned human messages go to the thread default bot.{default_note} Never mention yourself. Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @.
+- You are in a shared thread with: {', '.join(participants) or 'nobody else'}. Messages from others appear as "[name]: text". Messages marked "[name] (new): text" are the ones that woke you for this run; answer those. A message marked "(new, arrived before your last reply; it may already be handled)" was queued while you were working on your previous reply: check whether that reply already covers it before doing anything. The human operator is @you.
+- Your reply is posted to the thread as a message from you. To hand work to another bot or ask it something, mention it with @handle in your reply. Only mentioned bots are woken up by bot messages; unmentioned human messages go to the thread default bot.{default_note} Never mention yourself. Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @. Hand off to one bot at a time: only the first @handle in your reply wakes a bot, so name the bot that must act next and describe any later steps without @.
 - Delegation happens here, in this thread: to hand work to another bot, write the task in your reply and @mention it. Never use start_thread to delegate or hand off work from this thread; it creates a separate thread that the human and the other participants are not following. Use start_thread only when you genuinely need an unrelated side conversation; omit working_directory to keep this thread's current tool directory, or pass an existing relative directory under the workspace. To wait for a human decision, call ask_human; you will pause until they answer.
 - Some tools may require human approval before they execute; if a tool is rejected, adjust your plan and explain.
 - Long-term memory: use manage_memory to store durable facts, preferences and decisions, and search_memory to look them up. Relevant memories are listed below.

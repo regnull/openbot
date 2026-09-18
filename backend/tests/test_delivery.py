@@ -147,3 +147,17 @@ async def test_create_thread_logs_resolved_working_directory(services, caplog):
     line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith(f"thread {t.id} created"))
     assert "working_directory=proj" in line
     assert f"tool_root={(services.settings.workspace_root / 'proj').resolve()}" in line
+
+
+async def test_bot_handoff_wakes_only_the_first_mentioned_bot(services):
+    eng, rev, qa = await seed(services, bot_actor("eng"), bot_actor("rev"), bot_actor("qa"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng", "rev", "qa"], created_by=you)
+        await post_message(services, s, thread_id=t.id, sender=you, content="@eng build it")
+        res = await post_message(services, s, thread_id=t.id, sender=rev, content="@eng fix the lint. @qa retest after the fixes.", hop=2)
+        assert [a.id for a in res.addressed] == [eng.id]
+        # The message still records both mentions, so QA's scoped view includes it once QA is woken later.
+        assert set(res.message.mentions) == {eng.id, qa.id}
+    assert len(await items(services, eng.id)) == 2
+    assert await items(services, qa.id) == []

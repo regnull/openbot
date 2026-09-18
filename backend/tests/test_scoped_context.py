@@ -90,3 +90,11 @@ def test_seeded_instructions_explain_the_scoped_view():
     for h in ("engineer", "reviewer", "qa"):
         text = bots[h]["instructions"]
         assert "only the messages addressed to you" in text and "read_history" in text, h
+
+
+def test_seeded_reviewer_and_qa_hand_off_to_exactly_one_bot():
+    """The reviewer used to end with "@engineer fix... @qa retest after", and both woke at once."""
+    bots = {b["handle"]: b for b in DEMO_BOTS}
+    assert "exactly one bot" in bots["reviewer"]["instructions"]
+    assert "exactly one bot" in bots["qa"]["instructions"]
+    assert "the engineer will send the fixed PR back to you" in bots["reviewer"]["instructions"]
