@@ -19,6 +19,7 @@ from openbot.db.models import (
     utcnow,
 )
 from openbot.runtime import memory
+from openbot.runtime.renaming import maybe_auto_rename
 from openbot.runtime.router import parse_mentions, resolve_targets
 from openbot.runtime.waiters import publish_waiters
 from openbot.tools.builtin.workspace import thread_workspace_root, validate_workspace_directory
@@ -203,6 +204,7 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
     # show its waiting state, so publish it in the same breath as the inbox items themselves.
     await publish_waiters(services, session, thread_id)
     await notify(services, [it.actor_id for it in items])
+    await maybe_auto_rename(services, thread_id)
     return PostResult(message=msg, addressed=targets, unaddressed=unaddressed, items=items)
 
 

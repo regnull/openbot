@@ -122,6 +122,7 @@ class Thread(TimestampMixin, Base):
     working_directory: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     external_ref: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
     hop_limit_notified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_renamed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_message_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
