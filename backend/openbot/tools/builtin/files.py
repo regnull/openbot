@@ -1,3 +1,4 @@
+import itertools
 import os
 import tempfile
 
@@ -80,23 +81,28 @@ async def patch_file(path: str, edits: list[dict[str, str]], runtime: ToolRuntim
             raise ValueError("edits must contain at least one replacement")
         raw = p.read_bytes()
         text = raw.decode("utf-8")
-        anchors: list[tuple[str, str]] = []
+        anchors: list[tuple[str, str, int, int]] = []
         for index, edit in enumerate(edits, 1):
             if not isinstance(edit, dict) or not isinstance(edit.get("old"), str) or not isinstance(edit.get("new"), str):
                 raise TypeError(f"edit {index} must contain string 'old' and 'new' fields")
             old, new = edit["old"], edit["new"]
             if not old:
                 raise ValueError(f"edit {index} has an empty anchor")
+            start = text.find(old)
             count = text.count(old)
             if count == 0:
                 raise ValueError(f"edit {index} anchor was not found")
             if count != 1:
                 raise ValueError(f"edit {index} anchor is ambiguous ({count} matches)")
-            anchors.append((old, new))
-        if len({old for old, _ in anchors}) != len(anchors):
+            anchors.append((old, new, start, start + len(old)))
+        if len({old for old, _, _, _ in anchors}) != len(anchors):
             raise ValueError("edits must not contain duplicate anchors")
+        ordered = sorted(anchors, key=lambda anchor: anchor[2])
+        for previous, current in itertools.pairwise(ordered):
+            if current[2] < previous[3]:
+                raise ValueError("edits contain overlapping anchors")
         patched = text
-        for old, new in anchors:
+        for old, new, _, _ in reversed(ordered):
             patched = patched.replace(old, new, 1)
         encoded = patched.encode("utf-8")
         mode = p.stat().st_mode
