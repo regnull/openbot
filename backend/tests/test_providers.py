@@ -165,3 +165,17 @@ def test_openrouter_embeddings_use_its_openai_compatible_endpoint():
     assert isinstance(e, OpenAIEmbeddings) and e.model == "openai/text-embedding-3-small"
     assert e.openai_api_base == "https://openrouter.ai/api/v1" and e.check_embedding_ctx_length is False
     assert embeddings(s(embedding_model="openrouter:openai/text-embedding-3-small")) is None      # no key: off
+
+
+def test_web_search_is_bound_only_for_supported_providers():
+    openai = chat_model(BotProfile(provider="openai", model="gpt-5.5", model_settings={"web_search": True}), s(openai_api_key="k"))
+    assert openai.kwargs["tools"] == [{"type": "web_search_preview"}] and openai.use_responses_api is True
+    anthropic = chat_model(BotProfile(provider="anthropic", model="claude-sonnet-5", model_settings={"web_search": True}), s(anthropic_api_key="k"))
+    assert anthropic.kwargs["tools"] == [{"type": "web_search_20250305", "name": "web_search"}]
+    router = chat_model(BotProfile(provider="openrouter", model="openai/gpt-5.5", model_settings={"web_search": True}), s(openrouter_api_key="k", direct_anthropic=False))
+    assert router.extra_body["plugins"] == [{"id": "web"}]
+
+
+def test_web_search_is_disabled_by_default():
+    model = chat_model(BotProfile(provider="openai", model="gpt-5.5", model_settings={}), s(openai_api_key="k"))
+    assert not model.model_kwargs

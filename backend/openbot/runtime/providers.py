@@ -135,12 +135,17 @@ def provider_chat_model(
         from langchain_anthropic import ChatAnthropic
 
         kwargs.setdefault("max_tokens", 8192)
-        return ChatAnthropic(model=model, api_key=key, **kwargs)
+        chat = ChatAnthropic(model=model, api_key=key, **kwargs)
+        if ms.get("web_search"):
+            chat = chat.bind_tools([{"type": "web_search_20250305", "name": "web_search"}])
+        return chat
 
     from langchain_openai import ChatOpenAI
 
     if provider in _BASE_URL:
         kwargs["base_url"] = _BASE_URL[provider]
+    if provider == "openai" and ms.get("web_search"):
+        kwargs["use_responses_api"] = True
     if "reasoning_effort" in ms:
         # Reasoning models spend thousands of output tokens on trivial steps; OpenAI, xAI and OpenRouter all
         # accept the OpenAI-style knob (OpenRouter maps it to each upstream's own setting).
@@ -153,7 +158,12 @@ def provider_chat_model(
             # extraction's tool_choice=required which Z.AI rejects, must get a cold-cache answer elsewhere
             # rather than "No endpoints found".
             kwargs["extra_body"] = {"provider": {"order": list(settings.openrouter_provider_order), "allow_fallbacks": True}}
-    return ChatOpenAI(model=model, api_key=key, **kwargs)
+        if ms.get("web_search"):
+            kwargs.setdefault("extra_body", {})["plugins"] = [{"id": "web"}]
+    chat = ChatOpenAI(model=model, api_key=key, **kwargs)
+    if ms.get("web_search") and provider == "openai":
+        chat = chat.bind_tools([{"type": "web_search_preview"}])
+    return chat
 
 
 def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
