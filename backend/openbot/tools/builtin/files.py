@@ -1,4 +1,6 @@
+import itertools
 import os
+import tempfile
 
 from langchain.tools import ToolRuntime, tool
 
@@ -32,7 +34,7 @@ async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int
 
     Pass `start_line` and/or `end_line` (1-based, inclusive) to read only part of a large file; the
     reply says how many lines the file has. Long results are truncated, so prefer a range over
-    re-reading whole files you have already seen."""
+    re-reading a file you have already seen."""
     try:
         p = resolve_in_workspace(runtime.context.workspace_root, path)
         text = p.read_text(encoding="utf-8", errors="replace")
@@ -62,6 +64,71 @@ async def write_file(path: str, content: str, runtime: ToolRuntime[RunContext]) 
         p.write_text(content, encoding="utf-8")
         return f"wrote {len(content)} chars to {path}"
     except (ValueError, OSError) as e:
+        return f"error: {e}"
+
+
+@tool
+async def patch_file(path: str, edits: list[dict[str, str]], runtime: ToolRuntime[RunContext]) -> str:
+    """Apply exact, unambiguous text replacements to an existing UTF-8 file atomically.
+
+    Each edit must contain ``old`` and ``new`` strings. Every old string must occur exactly once
+    in the original file; all validation happens before the file is replaced."""
+    try:
+        p = resolve_in_workspace(runtime.context.workspace_root, path)
+        if not p.is_file():
+            raise OSError(f"file does not exist or is not a regular file: {path}")
+        if not edits:
+            raise ValueError("edits must contain at least one replacement")
+        raw = p.read_bytes()
+        text = raw.decode("utf-8")
+        anchors: list[tuple[str, str, int, int]] = []
+        for index, edit in enumerate(edits, 1):
+            if not isinstance(edit, dict) or not isinstance(edit.get("old"), str) or not isinstance(edit.get("new"), str):
+                raise TypeError(f"edit {index} must contain string 'old' and 'new' fields")
+            old, new = edit["old"], edit["new"]
+            if not old:
+                raise ValueError(f"edit {index} has an empty anchor")
+            positions: list[int] = []
+            offset = 0
+            while True:
+                match = text.find(old, offset)
+                if match == -1:
+                    break
+                positions.append(match)
+                offset = match + 1
+            if not positions:
+                raise ValueError(f"edit {index} anchor was not found")
+            if len(positions) != 1:
+                raise ValueError(f"edit {index} anchor is ambiguous ({len(positions)} matches)")
+            start = positions[0]
+            anchors.append((old, new, start, start + len(old)))
+        if len({old for old, _, _, _ in anchors}) != len(anchors):
+            raise ValueError("edits must not contain duplicate anchors")
+        ordered = sorted(anchors, key=lambda anchor: anchor[2])
+        for previous, current in itertools.pairwise(ordered):
+            if current[2] < previous[3]:
+                raise ValueError("edits contain overlapping anchors")
+        patched = text
+        for old, new, _, _ in reversed(ordered):
+            patched = patched.replace(old, new, 1)
+        encoded = patched.encode("utf-8")
+        mode = p.stat().st_mode
+        fd, temp_name = tempfile.mkstemp(prefix=f".{p.name}.", dir=p.parent)
+        try:
+            with os.fdopen(fd, "wb") as temp:
+                temp.write(encoded)
+                temp.flush()
+                os.fsync(temp.fileno())
+            os.chmod(temp_name, mode)
+            os.replace(temp_name, p)
+        except BaseException:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+            raise
+        return f"patched {path} ({len(anchors)} edit{'s' if len(anchors) != 1 else ''})"
+    except (UnicodeDecodeError, ValueError, OSError, TypeError) as e:
         return f"error: {e}"
 
 
