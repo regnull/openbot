@@ -16,7 +16,11 @@ export default function ThreadPage() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
   const nav = useNavigate();
-  const detail = useQuery({ queryKey: ["thread", id], queryFn: () => Api.getThread(id) });
+  // refetchOnMount "always": a re-entry (another thread window and back) must not be served
+  // from a cache hit younger than staleTime. The per-thread SSE subscription is closed while
+  // the page is unmounted and events are never replayed, so messages that arrived in between
+  // are otherwise invisible until an unrelated refetch — only post-return events would show.
+  const detail = useQuery({ queryKey: ["thread", id], queryFn: () => Api.getThread(id), refetchOnMount: "always" });
   const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
   const usage = useQuery({ queryKey: ["thread-usage", id], queryFn: () => Api.getThreadUsage(id) });
   const [state, setState] = useState<ThreadState>(emptyThreadState(id));
@@ -29,6 +33,17 @@ export default function ThreadPage() {
     if (el) shouldStickToBottom.current = isNearBottom(el);
   }, []);
   useEffect(() => { setState(emptyThreadState(id)); setHasMore(false); shouldStickToBottom.current = true; }, [id]);
+  // Navigating from one thread window straight to another reuses this component instance, so the
+  // query observer just swaps keys — that is not a mount and refetchOnMount does not fire. The
+  // previous thread's cached snapshot would be re-rendered as-is, hiding everything that arrived
+  // since it was fetched (the closed per-thread SSE socket never replays missed events). Mark the
+  // new thread's query stale on every actual id change so the open always refetches.
+  const prevId = useRef(id);
+  useEffect(() => {
+    if (prevId.current === id) return;
+    prevId.current = id;
+    qc.invalidateQueries({ queryKey: ["thread", id] });
+  }, [id, qc]);
   useEffect(() => { if (detail.data) { setState((s) => hydrate(s, detail.data)); setHasMore(detail.data.has_more); } }, [id, detail.data]);
   // Ack on open and whenever new messages land, so the inbox badge stays honest.
   useEffect(() => { Api.ackThread(id).then(() => qc.invalidateQueries({ queryKey: ["inbox"] })).catch(() => {}); }, [id, qc, state.messages.length]);
