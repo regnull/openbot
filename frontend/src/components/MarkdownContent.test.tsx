@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import MarkdownContent from "./MarkdownContent";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -40,5 +42,15 @@ describe("MarkdownContent", () => {
     cleanup = rendered.cleanup;
     expect(rendered.container.querySelector("script")).toBeNull();
     expect(rendered.container.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
+  it("gives inline code a dark-theme background and text color so it is not light-on-light", () => {
+    const css = readFileSync(resolve(__dirname, "../index.css"), "utf8");
+    const rule = css.match(/\.dark \.markdown-content code\s*\{([^}]*)\}/);
+    expect(rule, "expected a .dark .markdown-content code rule in index.css").not.toBeNull();
+    expect(rule![1]).toMatch(/background:/);
+    expect(rule![1]).toMatch(/color:/);
+    // Code blocks must keep their own background even in dark mode.
+    expect(css).toMatch(/\.dark \.markdown-content pre code\s*\{[^}]*background:\s*transparent/);
   });
 });
