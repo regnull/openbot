@@ -45,13 +45,20 @@ describe("MarkdownContent", () => {
     expect(rendered.container.querySelector('a[href^="javascript:"]')).toBeNull();
   });
 
-  it("gives inline code a dark-theme background and text color so it is not light-on-light", () => {
+  it("styles dark-theme inline code via prefers-color-scheme, not a .dark class", () => {
     const css = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
-    const rule = css.match(/\.dark \.markdown-content code\s*\{([^}]*)\}/);
-    expect(rule, "expected a .dark .markdown-content code rule in index.css").not.toBeNull();
-    expect(rule![1]).toMatch(/background:/);
-    expect(rule![1]).toMatch(/color:/);
+    // The app has no theme toggle: dark mode comes from the OS preference, and
+    // Tailwind's `dark:` variant compiles to the same media query. A `.dark`
+    // class selector would never match anything.
+    expect(css).not.toMatch(/\.dark\s/);
+    const darkBlocks = [...css.matchAll(/@media \(prefers-color-scheme: dark\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]);
+    const darkCss = darkBlocks.join("\n");
+    const codeRule = darkCss.match(/\.markdown-content code\s*\{([^}]*)\}/);
+    expect(codeRule, "expected a dark-theme .markdown-content code rule").not.toBeNull();
+    expect(codeRule![1]).toMatch(/background:/);
+    expect(codeRule![1]).toMatch(/color:/);
     // Code blocks must keep their own background even in dark mode.
-    expect(css).toMatch(/\.dark \.markdown-content pre code\s*\{[^}]*background:\s*transparent/);
+    expect(darkCss).toMatch(/\.markdown-content pre code\s*\{[^}]*background:\s*transparent/);
+    expect(darkCss).toMatch(/\.markdown-content blockquote\s*\{/);
   });
 });
