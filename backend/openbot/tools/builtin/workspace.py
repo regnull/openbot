@@ -68,3 +68,41 @@ def thread_workspace_root(root: Path, directory: str | None) -> Path:
     if directory and _is_home_relative(directory):
         return Path(os.path.expanduser(directory)).resolve()
     return resolve_in_workspace(root, directory)
+
+
+def _parent_of(normalized: str | None) -> str | None:
+    """Parent of a normalized working directory, or None at a browse root ("." or "~")."""
+    if normalized is None or normalized == "~":
+        return None
+    head, _, _ = normalized.rpartition("/")
+    if _is_home_relative(normalized):
+        return head or "~"
+    return head or "."
+
+
+def browse_workspace_directory(root: Path, directory: str | None) -> tuple[str, str | None, list[tuple[str, str]]]:
+    """List the visible subdirectories of a workspace-relative or home-relative directory.
+
+    Returns ``(path, parent, [(name, path), ...])`` where every path is spelled the way a user
+    would type it into the working-directory field. Hidden directories are skipped; unreadable
+    ones are skipped rather than failing the whole listing.
+    """
+    normalized = validate_workspace_directory(root, directory)
+    target = thread_workspace_root(root, normalized)
+    here = normalized or "."
+    prefix = "" if here == "." else here + "/"
+    entries: list[tuple[str, str]] = []
+    try:
+        children = sorted(target.iterdir(), key=lambda c: c.name.lower())
+    except OSError as exc:
+        raise ValueError(f"working_directory is not readable: {directory}") from exc
+    for child in children:
+        if child.name.startswith("."):
+            continue
+        try:
+            if not child.is_dir():
+                continue
+        except OSError:
+            continue
+        entries.append((child.name, prefix + child.name))
+    return here, _parent_of(normalized), entries

@@ -432,3 +432,15 @@ class SettingOut(BaseModel):
     overridden: bool
     secret: bool = False
     is_set: bool = True          # for secrets: whether a value exists (the value itself is masked)
+
+
+class DirectoryEntryOut(BaseModel):
+    name: str
+    path: str
+
+
+class DirectoryListingOut(BaseModel):
+    """One level of the working-directory browser. ``path`` is "." at the workspace root."""
+    path: str
+    parent: str | None
+    entries: list[DirectoryEntryOut]

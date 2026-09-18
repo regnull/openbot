@@ -20,6 +20,7 @@ from openbot.api import actors, bots, events, inbox, messages, providers, runs, 
 from openbot.api import mcp as mcp_api
 from openbot.api import settings as settings_api
 from openbot.api import setup as setup_api
+from openbot.api import workspace as workspace_api
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
@@ -242,7 +243,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
     for r in (actors.router, bots.router, threads.router, messages.router, inbox.router, runs.router, tools.router,
-              providers.router, events.router, settings_api.router, mcp_api.router, setup_api.router):
+              providers.router, events.router, settings_api.router, mcp_api.router, setup_api.router,
+              workspace_api.router):
         api.include_router(r)
     app.include_router(public)
     app.include_router(api)

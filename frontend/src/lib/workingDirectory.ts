@@ -21,3 +21,9 @@ export function normalizeWorkingDirectory(input: string): WorkingDirectoryValida
   }
   return { ok: true, value: homeRelative ? `~/${parts.join("/")}`.replace(/^~\/$/, "~") : parts.join("/"), error: null };
 }
+
+/** Where a directory picker should open: the typed path when it is a valid working directory, else the workspace root. */
+export function initialPickerPath(typed: string): string {
+  const v = normalizeWorkingDirectory(typed);
+  return v.ok && v.value ? v.value : ".";
+}

@@ -9,6 +9,7 @@ from openbot.tools.builtin import SELECTABLE_TOOLS
 from openbot.tools.builtin.files import list_files, read_file, write_file
 from openbot.tools.builtin.shell import run_shell
 from openbot.tools.builtin.workspace import (
+    browse_workspace_directory,
     resolve_in_workspace,
     thread_workspace_root,
     validate_workspace_directory,
@@ -51,6 +52,37 @@ def test_validate_workspace_directory(tmp_path):
     for bad in ("../x", "/tmp", "repo/missing", "repo/file.txt", "repo\nname"):
         with pytest.raises(ValueError):
             validate_workspace_directory(root, bad)
+
+
+def test_browse_workspace_directory(tmp_path):
+    root = tmp_path.resolve()
+    (root / "repo" / "src").mkdir(parents=True)
+    (root / "repo" / "docs").mkdir()
+    (root / "repo" / ".git").mkdir()
+    (root / "repo" / "README.md").write_text("hi")
+    (root / "Zed").mkdir()
+
+    here, parent, entries = browse_workspace_directory(root, None)
+    assert (here, parent) == (".", None)
+    assert entries == [("repo", "repo"), ("Zed", "Zed")]  # case-insensitive order, files skipped
+
+    here, parent, entries = browse_workspace_directory(root, "repo")
+    assert (here, parent) == ("repo", ".")
+    assert entries == [("docs", "repo/docs"), ("src", "repo/src")]  # hidden .git skipped
+
+    here, parent, entries = browse_workspace_directory(root, "repo/src")
+    assert (here, parent, entries) == ("repo/src", "repo", [])
+
+    here, parent, _ = browse_workspace_directory(root, "~")
+    assert (here, parent) == ("~", None)
+    if (Path.home() / "work").is_dir():
+        here, parent, entries = browse_workspace_directory(root, "~/work")
+        assert (here, parent) == ("~/work", "~")
+        assert all(path.startswith("~/work/") for _, path in entries)
+
+    for bad in ("../x", "/tmp", "repo/missing", "repo/README.md", "~/.."):
+        with pytest.raises(ValueError):
+            browse_workspace_directory(root, bad)
 
 
 async def test_files_roundtrip(tmp_path):
