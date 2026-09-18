@@ -24,9 +24,8 @@ async def list_bots(runtime: ToolRuntime[RunContext]) -> str:
 async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[RunContext],
                        title: str | None = None, working_directory: str | None = None) -> str:
     """Start a separate, unrelated conversation with the given actor handles (bots, or "you" for the human) and post
-    the first message. Title is optional: when omitted the thread is titled with the current timestamp.
-    Do not use this to delegate or hand off work from the current thread: reply in the current
-    thread and @mention the bot instead, so the human and other participants can follow.
+    the first message. Title is optional; when omitted the thread is titled with the current timestamp.
+    Do not use this to delegate or hand off work from the current thread: reply in the current thread and @mention the bot instead.
     `working_directory`, when provided, must be an existing directory relative to this thread's current tool root.
     Mention bots with @handle in the message to wake them up."""
     from openbot.runtime.delivery import create_thread, post_message
@@ -37,7 +36,9 @@ async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[Ru
             next_working_directory = ctx.working_directory
             if working_directory is not None:
                 next_working_directory = validate_workspace_directory(ctx.workspace_root, working_directory)
-                thread_workspace_root(ctx.workspace_root, next_working_directory)
+                selected_root = thread_workspace_root(ctx.workspace_root, next_working_directory)
+                if next_working_directory and not next_working_directory.startswith("~"):
+                    next_working_directory = selected_root.relative_to(ctx.services.settings.workspace_root.resolve()).as_posix()
             t = await create_thread(ctx.services, s, title=title, handles=handles, created_by=me, include_human=False,
                                     working_directory=next_working_directory)
             await post_message(ctx.services, s, thread_id=t.id, sender=me, content=message, hop=ctx.hop)
