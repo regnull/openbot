@@ -2,8 +2,8 @@ import pytest
 
 from openbot.db.models import Thread
 from openbot.runtime.delivery import create_thread, human_actor, post_message
-from tests.fakes import ai
 from tests.factories import bot_actor
+from tests.fakes import ai
 
 
 @pytest.fixture(autouse=True)
