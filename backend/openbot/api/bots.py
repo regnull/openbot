@@ -16,6 +16,7 @@ from openbot.api.schemas import (
     MessageOut,
     bot_out,
 )
+from openbot.api.tool_validation import known_tool
 from openbot.db.models import (
     ACTIVE_RUN_STATUSES,
     OPEN_RUN_STATUSES,
@@ -35,14 +36,7 @@ ACTOR_FIELDS = ("handle", "name", "description", "enabled")
 
 
 def _known_tool(services: Services, name: str) -> bool:
-    """Registered, or an MCP tool of a configured server that is not connected right now (needs
-    authorization, disconnected, errored): a bot that lists it must stay editable, and the tool comes
-    back when the server does. The runner drops names that are not registered at run time."""
-    if services.registry is not None and services.registry.has(name):
-        return True
-    if services.mcp is not None and "__" in name:
-        return services.mcp.has(name.split("__", 1)[0])
-    return False
+    return known_tool(services, name)
 
 
 def _validate_tools(services: Services, tool_names: list[str], approval_tools: list[str]) -> None:

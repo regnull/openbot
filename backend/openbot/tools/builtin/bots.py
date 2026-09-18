@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from openbot.api.schemas import BotCreate, bot_out
+from openbot.api.tool_validation import known_tool
 from openbot.db.models import Actor, BotProfile
 from openbot.tools.context import RunContext
 
@@ -43,7 +44,7 @@ async def create_bot(
         return f"error: invalid bot definition: {exc.errors()[0]['msg']}"
 
     services = runtime.context.services
-    unknown = [n for n in body.tool_names if not services.registry.has(n)]
+    unknown = [n for n in body.tool_names if not known_tool(services, n)]
     if unknown:
         return f"error: unknown tools: {unknown}"
     extra = [n for n in body.approval_tools if n not in body.tool_names]
