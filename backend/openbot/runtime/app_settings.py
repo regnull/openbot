@@ -91,6 +91,14 @@ TUNABLES: dict[str, Tunable] = {
     "prompt_caching": Tunable("Model routing", "Prompt caching", "Add cache breakpoints to every Anthropic model call."),
     "direct_anthropic": Tunable("Model routing", "Direct Anthropic routing",
         "Send OpenRouter anthropic/... models straight to Anthropic when a key is configured, so caching covers tool results too."),
+    # --- Model retries ---------------------------------------------------------------------------------------
+    "model_retry_max_attempts": Tunable("Model retries", "Max model-call attempts",
+        "Times a model call may be attempted when it fails with a transient upstream provider error "
+        "(rate limit, 5xx, 'model stopped before completing'). 0 or 1 turns retries off.", 0),
+    "model_retry_base_delay": Tunable("Model retries", "Retry base delay (seconds)",
+        "Delay before the first retry of a failed model call; doubles each further retry.", 0.0),
+    "model_retry_backoff_cap": Tunable("Model retries", "Retry delay cap (seconds)",
+        "Maximum delay before any single model-call retry.", 0.0),
 }
 
 EMBEDDING_KEYS = ("embedding_model", "embedding_dims")

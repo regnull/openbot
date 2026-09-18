@@ -37,6 +37,7 @@ from openbot.runtime.caching import caching_middleware
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt
 from openbot.runtime.providers import effective_bot_profile
+from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.workspace import thread_workspace_root
 from openbot.tools.context import RunContext
@@ -279,6 +280,11 @@ class Runner:
         st = self.s.settings
         p = bot.bot
         middleware = [
+            # Retries transient upstream provider failures (rate limit, 5xx, "model stopped before
+            # completing") so one bad provider turn does not abort the whole run. Before the cache
+            # middleware: only the failing attempt pays, and the retried request is cache-warm.
+            ModelRetryMiddleware(st.model_retry_max_attempts, st.model_retry_base_delay,
+                                 st.model_retry_backoff_cap),
             *caching_middleware(model, st),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),

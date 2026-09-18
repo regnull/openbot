@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     history_max_messages: int = 80
     memory_reflection_delay: float = 30.0
     seed_demo_bots: bool = True
+    # Model-call retries for transient upstream provider failures (see runtime/retry.py).
+    model_retry_max_attempts: int = 3    # 0 or 1 turns retries off
+    model_retry_base_delay: float = 2.0  # seconds before the first retry
+    model_retry_backoff_cap: float = 60.0  # ceiling on any single retry delay
 
     # NoDecode: these are plain CSV strings in .env (e.g. `CORS_ORIGINS=http://a,http://b`), not
     # JSON, so pydantic-settings must not try to json.loads() the raw env value before our
