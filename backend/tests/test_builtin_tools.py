@@ -40,6 +40,9 @@ def test_validate_workspace_directory(tmp_path):
     assert validate_workspace_directory(root, "") is None
     assert validate_workspace_directory(root, ".") is None
     assert validate_workspace_directory(root, "repo/../repo/src") == "repo/src"
+    home = Path.home() / "work" / "core-web"
+    if home.is_dir():
+        assert validate_workspace_directory(Path.home() / "work", "~/work/core-web") == home.as_posix()
 
     for bad in ("../x", "/tmp", "repo/missing", "repo/file.txt", "repo\nname"):
         with pytest.raises(ValueError):
