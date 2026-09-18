@@ -9,6 +9,10 @@ def expand_path(path: str | None) -> str | None:
     return os.path.expanduser(path) if path is not None else None
 
 
+def _is_home_relative(path: str) -> bool:
+    return path == "~" or path.startswith(("~/", "~\\"))
+
+
 def resolve_in_workspace(root: Path, path: str | None) -> Path:
     root = root.resolve()
     expanded = expand_path(path)
@@ -38,16 +42,19 @@ def validate_workspace_directory(root: Path, directory: str | None) -> str | Non
         raise ValueError("working_directory contains an invalid null byte")
     if any(ord(ch) < 32 for ch in raw):
         raise ValueError("working_directory contains control characters")
-    home_relative = raw == "~" or raw.startswith(("~/", "~\\"))
+    home_relative = _is_home_relative(raw)
     if Path(raw).is_absolute() and not home_relative:
         raise ValueError("working_directory must be relative to the workspace root")
+    # Home-relative paths must not traverse above the user's home directory.
+    if home_relative and any(part == ".." for part in Path(raw[1:]).parts):
+        raise ValueError("working_directory cannot contain '..'")
     if home_relative:
         target = Path(os.path.expanduser(raw)).resolve()
         if not target.exists():
             raise ValueError(f"working_directory does not exist: {directory}")
         if not target.is_dir():
             raise ValueError(f"working_directory is not a directory: {directory}")
-        return target.as_posix()
+        return raw.replace("\\", "/")
     target = resolve_in_workspace(root, raw)
     if not target.exists():
         raise ValueError(f"working_directory does not exist: {directory}")
@@ -58,4 +65,6 @@ def validate_workspace_directory(root: Path, directory: str | None) -> str | Non
 
 
 def thread_workspace_root(root: Path, directory: str | None) -> Path:
+    if directory and _is_home_relative(directory):
+        return Path(os.path.expanduser(directory)).resolve()
     return resolve_in_workspace(root, directory)

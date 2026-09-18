@@ -36,13 +36,8 @@ async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[Ru
         try:
             next_working_directory = ctx.working_directory
             if working_directory is not None:
-                current_relative = validate_workspace_directory(ctx.workspace_root, working_directory)
-                selected_root = thread_workspace_root(ctx.workspace_root, current_relative)
-                try:
-                    relative_to_workspace = selected_root.relative_to(ctx.services.settings.workspace_root.resolve())
-                except ValueError as e:
-                    raise ValueError(f"working_directory escapes workspace root: {working_directory}") from e
-                next_working_directory = relative_to_workspace.as_posix() if relative_to_workspace.parts else None
+                next_working_directory = validate_workspace_directory(ctx.workspace_root, working_directory)
+                thread_workspace_root(ctx.workspace_root, next_working_directory)
             t = await create_thread(ctx.services, s, title=title, handles=handles, created_by=me, include_human=False,
                                     working_directory=next_working_directory)
             await post_message(ctx.services, s, thread_id=t.id, sender=me, content=message, hop=ctx.hop)
@@ -53,7 +48,7 @@ async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[Ru
 
 @tool
 def ask_human(question: str) -> str:
-    """Ask the human a question or request a decision. Your run pauses until they answer."""
+    """Ask the human a question or request the human's input."""
     answer = interrupt({"kind": "question", "question": question})
     return f"Human answered: {answer}"
 
@@ -64,7 +59,7 @@ def _fmt(m: Message) -> str:
 
 @tool
 async def read_history(runtime: ToolRuntime[RunContext], before_message_id: str | None = None, limit: int = 20) -> str:
-    """Read older messages of the current thread chronologically. Pass before_message_id to page further back."""
+    """Read older messages of the current thread chronologically."""
     ctx = runtime.context
     async with ctx.services.session_factory() as s:
         q = select(Message).where(Message.thread_id == ctx.thread_id)
