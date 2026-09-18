@@ -152,7 +152,7 @@ async def test_migration_adds_usage_columns(tmp_path):
 
 def test_seeded_division_of_labour():
     bots = {b["handle"]: b for b in DEMO_BOTS}
-    assert bots["chief_of_staff"]["tool_names"] == ["create_bot"]
+    assert bots["chief_of_staff"]["tool_names"] == ["create_bot", "read_bot_description", "update_bot_description"]
     assert bots["chief_of_staff"]["model_settings"] == {"max_model_calls": 6}
     assert "first reply" in bots["chief_of_staff"]["instructions"]
     assert "Do not run the test suite" in bots["reviewer"]["instructions"]
@@ -170,7 +170,7 @@ async def test_seed_persists_model_settings(services):
     async with services.session_factory() as s:
         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
     assert chief.bot.model_settings == {"max_model_calls": 6}
-    assert chief.bot.tool_names == ["create_bot"]
+    assert chief.bot.tool_names == ["create_bot", "read_bot_description", "update_bot_description"]
     assert services.runner.model_call_limit(chief) == 6
 
 
