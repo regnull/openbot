@@ -11,11 +11,11 @@ router = APIRouter(prefix="/workspace", tags=["workspace"])
 
 
 @router.get("/directories", response_model=DirectoryListingOut)
-async def list_directories(path: str = Query(".", description="Workspace-relative or ~-relative directory"),
+async def list_directories(path: str = Query(".", description="Directory path (relative, absolute, or ~-relative)"),
                            services: Services = Depends(get_services)):
     """Backs the working-directory picker: browsers cannot reveal a chosen folder's full path,
-    so the UI walks the filesystem through the server under the same rules that validate
-    a thread's working_directory (inside the workspace root or the user's home, no '..')."""
+    so the UI walks accessible directories through the server. The selected path is later
+    validated as an existing, accessible directory when a thread is created."""
     try:
         here, parent, entries = browse_workspace_directory(services.settings.workspace_root, path)
     except ValueError as exc:
