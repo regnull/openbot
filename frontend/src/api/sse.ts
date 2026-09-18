@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { BASE, getApiKey } from "./client";
 import type { BusEvent } from "./types";
 
-const EVENTS = ["message.created", "run.updated", "run.event", "inbox.updated", "bots.updated", "waiters.updated"];
+const EVENTS = ["message.created", "run.updated", "run.event", "inbox.updated", "bots.updated", "waiters.updated", "thread.updated"];
 
 /**
  * Open one bus subscription. Returns the unsubscribe function.
@@ -47,8 +47,6 @@ export function useBusEvents(
     if (threadId) params.set("thread_id", threadId);
     const key = getApiKey();
     if (key) params.set("api_key", key);
-    // Read through the refs so a re-rendered parent's new closures are used without reopening
-    // the stream (which would itself look like a reconnect).
     return subscribeBusEvents(`${BASE}/events?${params}`, (e) => cb.current(e), () => reconnected.current?.());
   }, [threadId]);
 }

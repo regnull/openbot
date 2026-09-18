@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from langchain_core.messages import HumanMessage
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from openbot.db.models import Actor, Message, Thread
 
@@ -25,8 +25,14 @@ async def maybe_auto_rename(services, thread_id: str) -> None:
         actor = await session.get(Actor, thread.default_bot_actor_id) if thread.default_bot_actor_id else None
         if actor is None or actor.bot is None:
             return
-        # Claim before calling the provider. This makes the guard safe for concurrent deliveries.
-        thread.auto_renamed = True
+        # Claim atomically so concurrent deliveries cannot both invoke the provider.
+        result = await session.execute(
+            update(Thread)
+            .where(Thread.id == thread_id, Thread.auto_renamed.is_(False))
+            .values(auto_renamed=True)
+        )
+        if result.rowcount != 1:
+            return
         await session.commit()
         transcript = "\n".join(f"{m.sender_name}: {m.content}" for m in messages[:8])
     prompt = HumanMessage(content=(

@@ -1,6 +1,6 @@
 import type { BusEvent, Message, Run, RunDetail, RunEvent, ThreadDetail, Waiter } from "../api/types";
 
-export interface ThreadState { threadId?: string; messages: Message[]; runs: Record<string, Run>; runEvents: Record<string, RunEvent[]>; streaming: Record<string, string>; waiters: Waiter[]; }
+export interface ThreadState { threadId?: string; title?: string; messages: Message[]; runs: Record<string, Run>; runEvents: Record<string, RunEvent[]>; streaming: Record<string, string>; waiters: Waiter[]; }
 
 export const emptyThreadState = (threadId?: string): ThreadState => ({ threadId, messages: [], runs: {}, runEvents: {}, streaming: {}, waiters: [] });
 
@@ -12,15 +12,15 @@ export function hydrate(state: ThreadState, detail: ThreadDetail): ThreadState {
   const runs = { ...state.runs };
   detail.runs.forEach((r) => (runs[r.id] = r));
   // detail.waiters is optional so a page rendered against an older backend degrades to "no waiters".
-  return { ...state, messages: sortMsgs([...byId.values()]), runs, waiters: detail.waiters ?? [] };
+  return { ...state, title: detail.title, messages: sortMsgs([...byId.values()]), runs, waiters: detail.waiters ?? [] };
 }
 
 /**
  * Fold a run fetched on demand (GET /runs/{id}) into the thread. `GET /threads/{id}`
  * only returns *open* runs, so a completed run reached this way is the only copy we
  * have and must be kept in `runs` — otherwise its card would vanish as soon as the
- * query that produced it is dropped. Idempotent: an existing run came from SSE and is
- * at least as fresh, and events are merged by id.
+ * query that produced it is dropped. Idempotent: an existing run came from SSE and
+ * is at least as fresh, and events are merged by id.
  */
 export function mergeRun(state: ThreadState, detail: RunDetail): ThreadState {
   const { events, ...run } = detail;
@@ -39,6 +39,10 @@ export function reduceThreadEvent(state: ThreadState, e: BusEvent): ThreadState 
       if (state.messages.some((m) => m.id === e.data.id)) return state;
       return { ...state, messages: sortMsgs([...state.messages, e.data]) };
     }
+    case "thread.updated":
+      return e.thread_id === state.threadId && typeof e.data?.title === "string"
+        ? { ...state, title: e.data.title }
+        : state;
     case "run.updated": {
       const run: Run = e.data;
       const streaming = { ...state.streaming };

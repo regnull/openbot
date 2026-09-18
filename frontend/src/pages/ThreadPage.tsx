@@ -106,6 +106,7 @@ export default function ThreadPage() {
     return <ErrorText error={detail.error} />;
   }
   const t = detail.data;
+  const displayedTitle = state.title ?? t.title;
   const usageLine = usage.data ? threadUsageLabel(usage.data) : null;
   const handles = [...new Set([
     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
@@ -116,7 +117,7 @@ export default function ThreadPage() {
       <div className="flex items-center gap-3 border-b border-zinc-200 pb-3 dark:border-zinc-800">
         <Link to="/threads" className="text-sm text-zinc-500">← Threads</Link>
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold">{t.title || "Untitled thread"}</h1>
+          <h1 className="truncate text-lg font-semibold">{displayedTitle || "Untitled thread"}</h1>
           <div className="truncate text-xs text-zinc-500">cwd {t.working_directory ?? "."}</div>
           {usageLine && <div className="truncate text-xs text-zinc-500" title="LLM calls and prompt/completion tokens across every run in this thread">{usageLine}</div>}
         </div>
