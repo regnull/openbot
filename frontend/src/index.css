@@ -46,6 +46,7 @@
   color: #e6eee8;
 }
 .markdown-content a { color: #0b6b62; text-decoration: underline; }
+.dark .markdown-content blockquote a { color: #6fd3c8; }
 .markdown-content code { border-radius: 0.25rem; background: #e8e9e3; padding: 0.1rem 0.25rem; font-size: 0.875em; }
 .markdown-content pre { overflow-x: auto; border-radius: 0.5rem; background: #20241f; padding: 0.75rem; color: #f7f6f2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 .markdown-content pre code { background: transparent; padding: 0; }
