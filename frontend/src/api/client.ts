@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import type { Actor, AppSetting, Bot, DirectoryListing, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface AttachmentIn { url: string; name?: string; }
@@ -61,6 +61,7 @@ export const Api = {
   listRuns: (threadId: string) => api<Run[]>(`/runs?thread_id=${threadId}`),
   getRun: (id: string) => api<RunDetail>(`/runs/${id}`),
   getThreadUsage: (id: string) => api<ThreadUsage>(`/threads/${id}/usage`),
+  listDirectories: (path: string) => api<DirectoryListing>(`/workspace/directories?path=${encodeURIComponent(path || ".")}`),
   resumeRun: (id: string, body: { answer?: string; decisions?: ("approve" | "reject")[] }) => api<Run>(`/runs/${id}/resume`, { method: "POST", json: body }),
   cancelRun: (id: string) => api<Run>(`/runs/${id}/cancel`, { method: "POST" }),
   listTools: () => api<{ tools: ToolInfo[]; errors: { file: string; error: string }[] }>("/tools"),
