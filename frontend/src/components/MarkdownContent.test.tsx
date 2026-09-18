@@ -27,6 +27,14 @@ describe("MarkdownContent", () => {
     expect(rendered.container.textContent).toContain("const x = 1;");
     expect(rendered.container.textContent).not.toContain("**bold**");
   });
+  it("renders quoted content as a blockquote for readable themed styling", async () => {
+    const rendered = await renderContent("> quoted reply");
+    cleanup = rendered.cleanup;
+    const quote = rendered.container.querySelector("blockquote");
+
+    expect(quote).not.toBeNull();
+    expect(quote?.textContent).toContain("quoted reply");
+  });
   it("removes unsafe HTML and javascript links", async () => {
     const rendered = await renderContent('<script>alert(1)</script> [bad](javascript:alert(1))');
     cleanup = rendered.cleanup;
