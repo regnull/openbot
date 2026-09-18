@@ -74,3 +74,23 @@ def test_system_prompt_explains_the_new_marker():
     p = build_system_prompt(bot=bot, all_bots=[bot], participants=["You"], memories=[], workspace_root="/w",
                             older_count=0, tool_names=[])
     assert "(new)" in p
+
+
+def test_history_flags_triggers_that_arrived_before_the_bots_last_reply():
+    """A nag that arrived while the bot was mid-run is picked up after that run's reply is posted.
+    Marked as a plain "(new)", the model redid the work it had just reported. Say it may be handled."""
+    ms = [msg(1, "human", "You", "@eng go"), msg(2, "bot", "QA", "@eng please push the fixes", "qa"),
+          msg(3, "bot", "Eng", "Pushed the fixes.", "eng"), msg(4, "bot", "Rev", "@eng also bump version", "rev")]
+    hist, _ = build_history(ms, "eng", token_budget=10_000, max_messages=80, trigger_ids={"m2", "m4"})
+    assert hist[0].content == ("[You]: @eng go\n\n[QA] (new, arrived before your last reply; it may already be handled): "
+                               "@eng please push the fixes")
+    assert hist[-1].content == "[Rev] (new): @eng also bump version"
+
+
+def test_system_prompt_explains_single_handoff_and_stale_triggers():
+    bot = bot_actor("eng", name="Engineer", description="Builds", instructions="Be terse.")
+    bot.id = "e"
+    p = build_system_prompt(bot=bot, all_bots=[bot], participants=["You"], memories=[], workspace_root="/w",
+                            older_count=0, tool_names=[])
+    assert "only the first @handle in your reply wakes a bot" in p
+    assert "arrived before your last reply" in p

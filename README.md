@@ -17,7 +17,7 @@ webhook-driven external system all participate in the same conversation the same
 
 - **Actor model runtime**: bots, humans, and external systems are all actors with inboxes; one
   run at a time per bot, with a global concurrency cap.
-- **Multi-bot workflows**: user messages without an explicit bot mention go to the thread default bot (`@chief_of_staff` unless changed); bots hand off to each other with `@mention`, with a hop limit to
+- **Multi-bot workflows**: user messages without an explicit bot mention go to the thread default bot (`@chief_of_staff` unless changed); bots hand off to each other with `@mention` (only the first mention in a bot's reply wakes a bot, so a hand-off is always to one bot), with a hop limit to
   prevent runaway bot-to-bot loops.
 - **Tools**: built-in shell/file/HTTP tools rooted at a workspace directory, plus a plugin
   directory of your own Python tools. `run_shell` is **not** sandboxed — see

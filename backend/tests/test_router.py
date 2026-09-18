@@ -67,3 +67,23 @@ def test_non_bots_sender_disabled_unknown_removed():
 def test_system_never_routes():
     assert resolve_targets(sender=None, mentioned_handles=["eng"], to_handles=["rev"], actors_by_handle=ACTORS,
                            thread_bot_ids=["id-qa"]) == []
+
+
+def test_bot_message_wakes_only_the_first_mentioned_bot():
+    # "@eng fix these. @qa retest after the fixes." woke both at once and QA had nothing to test. In a
+    # bot's reply only the first mention is the hand-off; later @handles are references.
+    t = resolve_targets(sender=ACTORS["rev"], mentioned_handles=["eng", "qa"], to_handles=[], actors_by_handle=ACTORS,
+                        thread_bot_ids=["id-eng", "id-rev", "id-qa"])
+    assert [b.handle for b in t] == ["eng"]
+
+
+def test_bot_message_first_mention_skips_self_and_disabled():
+    t = resolve_targets(sender=ACTORS["rev"], mentioned_handles=["rev", "off", "qa", "eng"], to_handles=[],
+                        actors_by_handle=ACTORS, thread_bot_ids=["id-eng", "id-rev", "id-qa"])
+    assert [b.handle for b in t] == ["qa"]
+
+
+def test_human_message_still_wakes_every_mentioned_bot():
+    t = resolve_targets(sender=YOU, mentioned_handles=["eng", "qa"], to_handles=[], actors_by_handle=ACTORS,
+                        thread_bot_ids=["id-eng", "id-qa"])
+    assert [b.handle for b in t] == ["eng", "qa"]

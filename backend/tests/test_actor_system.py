@@ -85,7 +85,9 @@ async def test_batching_and_parking(settings):
     # The batched human turn, not seen[-1][-1]: history is chronological, and the resumed run's own
     # "after" reply is posted after "two"/"three" (which waited while the thread was parked).
     last_prompt = next(m.content for m in ScriptedChatModel.seen[-1] if m.type == "human")
-    assert "[You] (new): two" in last_prompt and "[You] (new): three" in last_prompt   # both coalesced triggers are marked
+    # Both coalesced triggers are marked; they predate the "after" reply, so they carry the stale marker.
+    stale = "(new, arrived before your last reply; it may already be handled)"
+    assert f"[You] {stale}: two" in last_prompt and f"[You] {stale}: three" in last_prompt
     await services.actors.stop()
 
 

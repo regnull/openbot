@@ -113,6 +113,10 @@ The whole system is one loop: post, route, enqueue, pick, run, reply, post.
 
 - Targets are the bots named by `@handle` in the content (or passed explicitly via `to_handles`),
   in order, deduplicated, enabled, and never the sender.
+- A **bot** message hands off to **one** bot: the first mention that can act (enabled, not the
+  sender). Later `@handles` are recorded in `Message.mentions` (so the scoped view of that bot still
+  includes the message once it is woken) but wake nobody. "@engineer fix these. @qa retest after the
+  fixes" used to wake both at once, and QA had nothing to test. Human messages keep the full fan-out.
 - A **human** message with no mention goes to the thread's default bot, falling back to
   `@chief_of_staff`. A message with no mention in a thread that has exactly one bot goes to that bot.
 - A **bot** message with no mention wakes nobody. This is how a bot ends a conversation.

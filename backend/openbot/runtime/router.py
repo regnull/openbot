@@ -25,6 +25,13 @@ def resolve_targets(*, sender: Actor | None, mentioned_handles: list[str], to_ha
         a = actors_by_handle.get(h)
         if a and a.kind == "bot" and a not in ordered:
             ordered.append(a)
+    if sender.kind == "bot" and not to_handles:
+        # A bot's reply hands off to one bot: the first mention that can act. "@engineer fix these.
+        # @qa retest after the fixes." woke both at once and QA had nothing to test; the later
+        # @handles are references to the pipeline, not requests to act now. Humans keep the full
+        # fan-out so they can still address several bots in one message.
+        actionable = [a for a in ordered if a.enabled and a.id != sender.id]
+        ordered = actionable[:1]
     if not ordered and not (to_handles or mentioned_handles):
         if sender.kind == "human" and default_bot_id is not None:
             ordered = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
