@@ -19,7 +19,9 @@ export default function Layout() {
   const threads = useQuery({ queryKey: ["threads"], queryFn: Api.listThreads });
   useBusEvents(null, (e) => {
     if (e.event === "inbox.updated") qc.invalidateQueries({ queryKey: ["inbox"] });
-    if (e.event === "message.created") qc.invalidateQueries({ queryKey: ["threads"] });
+    if (e.event === "message.created" || e.event === "thread.updated") {
+      qc.invalidateQueries({ queryKey: ["threads"] });
+    }
     if (shouldRefreshBots(e)) qc.invalidateQueries({ queryKey: ["bots"] });
   }, () => {
     // Missed events during the disconnect would leave a stale unread badge and thread list.

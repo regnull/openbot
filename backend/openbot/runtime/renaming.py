@@ -44,7 +44,7 @@ async def maybe_auto_rename(services, thread_id: str) -> None:
         title = getattr(response, "content", "")
         if isinstance(title, list):
             title = "".join(str(x.get("text", "")) if isinstance(x, dict) else str(x) for x in title)
-        title = str(title).strip().strip('"')[:200]
+        title = str(title).strip().strip('"')[:80]
         if not title:
             return
         async with services.session_factory() as update_session:
