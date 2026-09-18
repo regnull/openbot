@@ -7,6 +7,7 @@ import BotIcon from "../components/BotIcon";
 import { Button, Card, ErrorText, Field, Input, Select, Spinner, Textarea } from "../components/ui";
 import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
 import { groupState, groupTools, toggleGroup, toolLabel, unavailableGrants } from "../lib/toolGroups";
+import { supportsWebSearch } from "../lib/webSearch";
 
 function ToolRow({ name, label, description, on, approval, onToggle, onToggleApproval }:
   { name: string; label: string; description: string; on: boolean; approval: boolean; onToggle: () => void; onToggleApproval: () => void }) {
@@ -99,7 +100,7 @@ export default function BotEditorPage() {
           </Field>
         )}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.memory_enabled} onChange={(e) => set("memory_enabled", e.target.checked)} /> Background memory extraction</label>
-        {(form.provider === "openai" || form.provider === "anthropic" || form.provider === "openrouter") && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.model_settings.web_search === true} onChange={(e) => set("model_settings", { ...form.model_settings, web_search: e.target.checked })} /> Web search <span className="text-xs text-zinc-500">(provider-hosted; may incur usage charges)</span></label>}
+        {supportsWebSearch(form.provider, auto?.default_model) && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.model_settings.web_search === true} onChange={(e) => set("model_settings", { ...form.model_settings, web_search: e.target.checked })} /> Web search <span className="text-xs text-zinc-500">(provider-hosted; may incur usage charges)</span></label>}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} /> Enabled</label>
       </Card>
       <Card className="space-y-2">

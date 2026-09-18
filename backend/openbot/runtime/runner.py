@@ -36,7 +36,7 @@ from openbot.runtime import memory
 from openbot.runtime.caching import caching_middleware
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt
-from openbot.runtime.providers import effective_bot_profile
+from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.workspace import thread_workspace_root
@@ -304,7 +304,8 @@ class Runner:
 
     def _build_agent(self, bot: Actor, system_prompt: str):
         p = bot.bot
-        tools = [*self.s.registry.resolve(list(p.tool_names)), *CORE_TOOLS, *memory.memory_tools(bot.id, self.s.store)]
+        tools = [*self.s.registry.resolve(list(p.tool_names)), *CORE_TOOLS, *memory.memory_tools(bot.id, self.s.store),
+                 *builtin_tools(p, self.s.settings)]
         model = self.s.model_factory(bot)
         return create_agent(model, tools=tools, system_prompt=system_prompt, middleware=self.build_middleware(bot, model),
                             checkpointer=self.s.checkpointer, store=self.s.store, context_schema=RunContext)
@@ -379,7 +380,8 @@ class Runner:
             eff_provider, eff_model = effective_bot_profile(bot.bot, self.s.settings)
             log.info("run %s started: bot=@%s thread=%s hop=%d resume=%s working_directory=%s tool_root=%s model=%s/%s tools=%s",
                      run.id, bot.handle, thread.id, hop, resume is not None, thread.working_directory or ".",
-                     workspace_root, eff_provider, eff_model, ",".join(bot.bot.tool_names) or "-")
+                     workspace_root, eff_provider, eff_model,
+                     ",".join([*bot.bot.tool_names, *(t.get("name") or t["type"] for t in builtin_tools(bot.bot, self.s.settings))]) or "-")
             log.debug("run %s system prompt:\n%s", run.id, system_prompt)
             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
                              thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap,
