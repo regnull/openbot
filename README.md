@@ -19,8 +19,9 @@ webhook-driven external system all participate in the same conversation the same
   run at a time per bot, with a global concurrency cap.
 - **Multi-bot workflows**: user messages without an explicit bot mention go to the thread default bot (`@chief_of_staff` unless changed); bots hand off to each other with `@mention` (only the first mention in a bot's reply wakes a bot, so a hand-off is always to one bot), with a hop limit to
   prevent runaway bot-to-bot loops.
-- **Tools**: built-in shell/file/HTTP tools rooted at a workspace directory, plus a plugin
-  directory of your own Python tools. `run_shell` is **not** sandboxed — see
+- **Tools**: built-in shell/file/HTTP tools rooted at a workspace directory, a plugin
+  directory of your own Python tools, and tools from any [MCP server](#mcp-servers) (remote
+  or stdio, with OAuth), all selectable per bot. `run_shell` is **not** sandboxed — see
   [Trust model / security](#trust-model--security).
 - **Memory**: per-bot long-term memory (LangMem) that bots can search and update, with automatic
   background reflection after each run.
@@ -383,9 +384,9 @@ tests in `backend/tests/smoke/` are marked `smoke` and deselected by default (`a
 ## Roadmap / out of scope for v1
 
 Accounts and login, multiple human actors, cron triggers, inbound event webhooks (as opposed to
-outbound delivery to external actors), MCP servers, Docker sandboxing for tools, chat platform
-adapters (Slack/Discord/etc.), and multi-node deployment. The actor system, the LangGraph store,
-and the tool registry are designed as the seams for adding these later.
+outbound delivery to external actors), Docker sandboxing for tools, chat platform adapters
+(Slack/Discord/etc.), and multi-node deployment. The actor system, the LangGraph store, and the
+tool registry are designed as the seams for adding these later.
 
 ## License
 
