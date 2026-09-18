@@ -23,6 +23,15 @@ async def test_patch_file_small_and_multiple_edits_preserves_newlines(tmp_path):
     assert target.read_bytes() == b"1\r\n2\r\n"
 
 
+async def test_patch_file_rejects_overlapping_occurrences_atomically(tmp_path):
+    target = tmp_path / "note.txt"
+    target.write_text("aaa")
+    before = target.read_bytes()
+    result = await patch_file.ainvoke({"path": "note.txt", "edits": [{"old": "aa", "new": "AA"}], "runtime": rt(tmp_path)})
+    assert "ambiguous (2 matches)" in result
+    assert target.read_bytes() == before
+
+
 async def test_patch_file_rejects_overlapping_anchors_atomically(tmp_path):
     target = tmp_path / "note.txt"
     target.write_text("abc")

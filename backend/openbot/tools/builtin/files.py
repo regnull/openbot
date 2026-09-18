@@ -88,12 +88,19 @@ async def patch_file(path: str, edits: list[dict[str, str]], runtime: ToolRuntim
             old, new = edit["old"], edit["new"]
             if not old:
                 raise ValueError(f"edit {index} has an empty anchor")
-            start = text.find(old)
-            count = text.count(old)
-            if count == 0:
+            positions: list[int] = []
+            offset = 0
+            while True:
+                match = text.find(old, offset)
+                if match == -1:
+                    break
+                positions.append(match)
+                offset = match + 1
+            if not positions:
                 raise ValueError(f"edit {index} anchor was not found")
-            if count != 1:
-                raise ValueError(f"edit {index} anchor is ambiguous ({count} matches)")
+            if len(positions) != 1:
+                raise ValueError(f"edit {index} anchor is ambiguous ({len(positions)} matches)")
+            start = positions[0]
             anchors.append((old, new, start, start + len(old)))
         if len({old for old, _, _, _ in anchors}) != len(anchors):
             raise ValueError("edits must not contain duplicate anchors")
