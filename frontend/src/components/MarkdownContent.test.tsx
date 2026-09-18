@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/// <reference types="node" />
 import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -45,7 +46,7 @@ describe("MarkdownContent", () => {
   });
 
   it("gives inline code a dark-theme background and text color so it is not light-on-light", () => {
-    const css = readFileSync(resolve(__dirname, "../index.css"), "utf8");
+    const css = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
     const rule = css.match(/\.dark \.markdown-content code\s*\{([^}]*)\}/);
     expect(rule, "expected a .dark .markdown-content code rule in index.css").not.toBeNull();
     expect(rule![1]).toMatch(/background:/);
