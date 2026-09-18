@@ -76,10 +76,17 @@ async def open_langgraph_backends(
 
 
 async def reopen_memory_store(services) -> None:
-    """Reopen the LangGraph backends with the current embedding settings, so a change made in Settings
-    (or the setup wizard) takes effect without a restart. The store's index is what changes; the
-    checkpointer is reopened alongside because both live in the same context. Vectors written with a
-    different dimensionality are not migrated."""
+    """Reopen the LangGraph store with the current embedding settings, so a change made in Settings (or
+    the setup wizard) takes effect without a restart. The checkpointer is left untouched: it has no
+    embedding-dependent state, and runs in flight were compiled against it (STO-2325: closing it made
+    their next checkpoint write raise ValueError("no active connection")).
+
+    The old store is not closed here either. Agents, memory tools and scheduled reflections capture the
+    store at compile/schedule time, so a run may still be using it when the swap happens; closing the old
+    stack would break it. It is parked on _owned_resources instead and closed with the rest of the
+    process resources at shutdown. Tradeoff: each embedding change leaves one idle backend connection
+    behind until shutdown (harmless for SQLite WAL; one pooled connection for Postgres).
+    Vectors written with a different dimensionality are not migrated."""
     from contextlib import AsyncExitStack
 
     from openbot.runtime.providers import embeddings
@@ -89,8 +96,11 @@ async def reopen_memory_store(services) -> None:
         services.store = InMemoryStore(index=_index(services.settings, emb))
         return
     new_stack = AsyncExitStack()
-    saver, store = await new_stack.enter_async_context(open_langgraph_backends(services.settings, emb))
+    try:
+        _saver, store = await new_stack.enter_async_context(open_langgraph_backends(services.settings, emb))
+    except BaseException:
+        await new_stack.aclose()                       # don't leak the connections opened before the failure
+        raise
     old = services.langgraph_stack
-    services.checkpointer, services.store, services.langgraph_stack = saver, store, new_stack
-    services._owned_resources = [new_stack if r is old else r for r in services._owned_resources]
-    await old.aclose()
+    services.store, services.langgraph_stack = store, new_stack
+    services._owned_resources.append(old)              # closed by close_services, never under in-flight runs

@@ -149,9 +149,13 @@ async def test_changing_embeddings_reopens_the_memory_store(client, services):
     settings = services.settings
     settings.openai_api_key = None
     before = services.store
+    checkpointer_before = services.checkpointer
+    checkpointer_before = services.checkpointer
     r = await client.patch("/api/v1/settings", json={"embedding_model": "", "embedding_dims": 1536})
     assert r.status_code == 200, r.text
     assert services.store is not before                                               # reopened without a restart
+    assert services.checkpointer is checkpointer_before                               # STO-2325: never reopened
+    assert services.checkpointer is checkpointer_before                               # STO-2325: never reopened
     assert getattr(services.store, "index_config", None) in (None, {})                # no index: semantic memory off
     r = await client.patch("/api/v1/settings", json={"embedding_model": "ollama:nomic-embed-text", "embedding_dims": 768, "ollama_base_url": "http://localhost:11434"})
     assert r.status_code == 200, r.text
