@@ -149,7 +149,7 @@ export default function ThreadPage() {
       {/* Above the scroll area on purpose: in a long thread a banner inside it would scroll out
           of view, and the whole point is a waiting state the reader cannot miss. */}
       <WaitingIndicator waiters={state.waiters} />
-      <div ref={scrollContainer} onScroll={updateScrollStickiness} className="flex-1 overflow-y-auto py-4">
+      <div ref={scrollContainer} onScroll={updateScrollStickiness} className="scrollbar-subtle flex-1 overflow-y-auto py-4">
         {hasMore && state.messages.length > 0 && (
           <div className="mb-3 space-y-1 text-center">
             <Button variant="secondary" onClick={() => loadOlder.mutate()} disabled={loadOlder.isPending}>Load older</Button>
