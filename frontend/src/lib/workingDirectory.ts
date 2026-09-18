@@ -10,12 +10,14 @@ export function normalizeWorkingDirectory(input: string): WorkingDirectoryValida
   if ([...trimmed].some((char) => char.charCodeAt(0) < 32)) {
     return { ok: false, value: null, error: "Working directory cannot contain control characters." };
   }
-  if (trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("\\\\")) {
+  const homeRelative = trimmed === "~" || trimmed.startsWith("~/") || trimmed.startsWith("~\\");
+  if (!homeRelative && (trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("\\\\"))) {
     return { ok: false, value: null, error: "Working directory must be relative to the workspace root." };
   }
-  const parts = trimmed.split(/[\\/]+/).filter((part) => part.length > 0 && part !== ".");
+  const path = homeRelative ? trimmed.slice(1) : trimmed;
+  const parts = path.split(/[\\/]+/).filter((part) => part.length > 0 && part !== ".");
   if (parts.some((part) => part === "..")) {
     return { ok: false, value: null, error: "Working directory cannot contain '..'." };
   }
-  return { ok: true, value: parts.join("/"), error: null };
+  return { ok: true, value: homeRelative ? `~/${parts.join("/")}`.replace(/^~\/$/, "~") : parts.join("/"), error: null };
 }

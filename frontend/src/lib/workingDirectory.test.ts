@@ -11,8 +11,12 @@ describe("normalizeWorkingDirectory", () => {
     expect(normalizeWorkingDirectory(" project\\src/ ")).toEqual({ ok: true, value: "project/src", error: null });
   });
 
+  it("preserves a home-relative directory for server-side expansion", () => {
+    expect(normalizeWorkingDirectory(" ~/work/core-web ")).toEqual({ ok: true, value: "~/work/core-web", error: null });
+  });
+
   it("rejects unsafe paths before submitting", () => {
-    for (const path of ["../x", "project/../x", "/tmp", "C:\\tmp", "bad\npath"]) {
+    for (const path of ["../x", "project/../x", "/tmp", "C:\\tmp", "bad\npath", "~/../x"]) {
       const result = normalizeWorkingDirectory(path);
       expect(result.ok, path).toBe(false);
       expect(result.error, path).toBeTruthy();

@@ -78,6 +78,22 @@ async def test_start_thread(services):
                                                   "working_directory": "../bad", "runtime": rt(services, eng, t.id)})
 
 
+async def test_start_thread_child_from_home_relative_root(services, monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    target = home / "work" / "core-web"
+    (target / "child").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    eng, _rev, t = await setup(services)
+    out = await start_thread.ainvoke({"title": "home child", "handles": ["rev"], "message": "m",
+                                      "working_directory": "child",
+                                      "runtime": rt(services, eng, t.id, root=target,
+                                                    working_directory="~/work/core-web")})
+    assert out.startswith("started thread ")
+    async with services.session_factory() as s:
+        nested = (await s.execute(select(Thread).where(Thread.title == "home child"))).scalar_one()
+        assert nested.working_directory == "~/work/core-web/child"
+
+
 async def test_start_thread_without_title(services):
     eng, _rev, t = await setup(services)
     out = await start_thread.ainvoke({"handles": ["rev"], "message": "@rev no title", "runtime": rt(services, eng, t.id)})

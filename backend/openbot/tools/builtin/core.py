@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import posixpath
+from pathlib import Path
+
 from langchain.tools import ToolRuntime, tool
 from langgraph.types import interrupt
 from sqlalchemy import select
@@ -24,9 +27,8 @@ async def list_bots(runtime: ToolRuntime[RunContext]) -> str:
 async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[RunContext],
                        title: str | None = None, working_directory: str | None = None) -> str:
     """Start a separate, unrelated conversation with the given actor handles (bots, or "you" for the human) and post
-    the first message. Title is optional: when omitted the thread is titled with the current timestamp.
-    Do not use this to delegate or hand off work from the current thread: reply in the current
-    thread and @mention the bot instead, so the human and other participants can follow.
+    the first message. Title is optional; when omitted the thread is titled with the current timestamp.
+    Do not use this to delegate or hand off work from the current thread: reply in the current thread and @mention the bot instead.
     `working_directory`, when provided, must be an existing directory relative to this thread's current tool root.
     Mention bots with @handle in the message to wake them up."""
     from openbot.runtime.delivery import create_thread, post_message
@@ -36,13 +38,17 @@ async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[Ru
         try:
             next_working_directory = ctx.working_directory
             if working_directory is not None:
-                current_relative = validate_workspace_directory(ctx.workspace_root, working_directory)
-                selected_root = thread_workspace_root(ctx.workspace_root, current_relative)
-                try:
-                    relative_to_workspace = selected_root.relative_to(ctx.services.settings.workspace_root.resolve())
-                except ValueError as e:
-                    raise ValueError(f"working_directory escapes workspace root: {working_directory}") from e
-                next_working_directory = relative_to_workspace.as_posix() if relative_to_workspace.parts else None
+                if ctx.working_directory and ctx.working_directory.startswith("~") \
+                        and not Path(working_directory).is_absolute():
+                    candidate = posixpath.join(ctx.working_directory, working_directory)
+                    next_working_directory = validate_workspace_directory(
+                        ctx.services.settings.workspace_root, candidate)
+                else:
+                    next_working_directory = validate_workspace_directory(ctx.workspace_root, working_directory)
+                    selected_root = thread_workspace_root(ctx.workspace_root, next_working_directory)
+                    if next_working_directory and not next_working_directory.startswith("~"):
+                        next_working_directory = selected_root.relative_to(
+                            ctx.services.settings.workspace_root.resolve()).as_posix()
             t = await create_thread(ctx.services, s, title=title, handles=handles, created_by=me, include_human=False,
                                     working_directory=next_working_directory)
             await post_message(ctx.services, s, thread_id=t.id, sender=me, content=message, hop=ctx.hop)
@@ -53,7 +59,7 @@ async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[Ru
 
 @tool
 def ask_human(question: str) -> str:
-    """Ask the human a question or request a decision. Your run pauses until they answer."""
+    """Ask the human a question or request the human's input."""
     answer = interrupt({"kind": "question", "question": question})
     return f"Human answered: {answer}"
 
@@ -64,7 +70,7 @@ def _fmt(m: Message) -> str:
 
 @tool
 async def read_history(runtime: ToolRuntime[RunContext], before_message_id: str | None = None, limit: int = 20) -> str:
-    """Read older messages of the current thread chronologically. Pass before_message_id to page further back."""
+    """Read older messages of the current thread chronologically."""
     ctx = runtime.context
     async with ctx.services.session_factory() as s:
         q = select(Message).where(Message.thread_id == ctx.thread_id)

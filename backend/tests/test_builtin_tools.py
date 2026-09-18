@@ -8,7 +8,11 @@ from langchain.tools import ToolRuntime
 from openbot.tools.builtin import SELECTABLE_TOOLS
 from openbot.tools.builtin.files import list_files, read_file, write_file
 from openbot.tools.builtin.shell import run_shell
-from openbot.tools.builtin.workspace import resolve_in_workspace, validate_workspace_directory
+from openbot.tools.builtin.workspace import (
+    resolve_in_workspace,
+    thread_workspace_root,
+    validate_workspace_directory,
+)
 from openbot.tools.context import RunContext
 
 
@@ -40,6 +44,9 @@ def test_validate_workspace_directory(tmp_path):
     assert validate_workspace_directory(root, "") is None
     assert validate_workspace_directory(root, ".") is None
     assert validate_workspace_directory(root, "repo/../repo/src") == "repo/src"
+    home = Path.home() / "work" / "core-web"
+    if home.is_dir():
+        assert validate_workspace_directory(Path.home() / "work", "~/work/core-web") == "~/work/core-web"
 
     for bad in ("../x", "/tmp", "repo/missing", "repo/file.txt", "repo\nname"):
         with pytest.raises(ValueError):
@@ -159,3 +166,14 @@ async def test_search_code_caps_the_number_of_matches(tmp_path):
 
 def test_search_code_is_selectable():
     assert "search_code" in [t.name for t in SELECTABLE_TOOLS]
+
+
+def test_home_relative_core_web_and_rejects_traversal(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    target = home / "work" / "core-web"
+    target.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    assert validate_workspace_directory(tmp_path / "workspace", "~/work/core-web") == "~/work/core-web"
+    with pytest.raises(ValueError, match="cannot contain"):
+        validate_workspace_directory(tmp_path / "workspace", "~/../outside")
+    assert thread_workspace_root(tmp_path / "workspace", "~/work/core-web") == target
