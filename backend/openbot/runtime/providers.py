@@ -135,16 +135,14 @@ def provider_chat_model(
         from langchain_anthropic import ChatAnthropic
 
         kwargs.setdefault("max_tokens", 8192)
-        chat = ChatAnthropic(model=model, api_key=key, **kwargs)
-        if ms.get("web_search"):
-            chat = chat.bind_tools([{"type": "web_search_20250305", "name": "web_search"}])
-        return chat
+        return ChatAnthropic(model=model, api_key=key, **kwargs)
 
     from langchain_openai import ChatOpenAI
 
     if provider in _BASE_URL:
         kwargs["base_url"] = _BASE_URL[provider]
     if provider == "openai" and ms.get("web_search"):
+        # OpenAI's hosted web search only exists on the Responses API; the tool itself is added by builtin_tools.
         kwargs["use_responses_api"] = True
     if "reasoning_effort" in ms:
         # Reasoning models spend thousands of output tokens on trivial steps; OpenAI, xAI and OpenRouter all
@@ -160,15 +158,37 @@ def provider_chat_model(
             kwargs["extra_body"] = {"provider": {"order": list(settings.openrouter_provider_order), "allow_fallbacks": True}}
         if ms.get("web_search"):
             kwargs.setdefault("extra_body", {})["plugins"] = [{"id": "web"}]
-    chat = ChatOpenAI(model=model, api_key=key, **kwargs)
-    if ms.get("web_search") and provider == "openai":
-        chat = chat.bind_tools([{"type": "web_search_preview"}])
-    return chat
+    return ChatOpenAI(model=model, api_key=key, **kwargs)
 
 
 def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
     provider, model = effective_bot_profile(bot, settings)
     return provider_chat_model(provider, model, settings, bot.model_settings)
+
+
+_WEB_SEARCH_TOOL = {
+    "openai": {"type": "web_search_preview"},
+    "anthropic": {"type": "web_search_20250305", "name": "web_search"},
+}
+
+
+def builtin_tools(bot: BotProfile, settings: Settings) -> list[dict]:
+    """Provider-hosted tools (as the provider's tool dicts) for the agent's tool list.
+
+    These go to create_agent alongside the bot's own tools rather than being bound on the model: the
+    agent binds its tools onto the model itself, which replaces anything pre-bound, and the model
+    factory also serves memory extraction and thread renaming, which must not search the web.
+    OpenRouter's search is a request-level plugin set in provider_chat_model; xAI and Ollama have none.
+    """
+    if not (bot.model_settings or {}).get("web_search"):
+        return []
+    try:
+        provider, _ = effective_bot_profile(bot, settings)
+    except ValueError:
+        # No provider configured: the run itself reports the missing key when it builds the model.
+        return []
+    tool = _WEB_SEARCH_TOOL.get(provider)
+    return [dict(tool)] if tool else []
 
 
 def embeddings(settings: Settings) -> Embeddings | None:

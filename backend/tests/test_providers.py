@@ -6,6 +6,7 @@ from openbot.config import Settings
 from openbot.db.models import BotProfile
 from openbot.runtime.providers import (
     DEFAULT_BOT_MODEL,
+    builtin_tools,
     chat_model,
     configured_bot_model,
     default_provider,
@@ -167,15 +168,76 @@ def test_openrouter_embeddings_use_its_openai_compatible_endpoint():
     assert embeddings(s(embedding_model="openrouter:openai/text-embedding-3-small")) is None      # no key: off
 
 
-def test_web_search_is_bound_only_for_supported_providers():
+def test_web_search_does_not_bind_tools_on_the_model():
+    """Provider-hosted search is passed to create_agent as a built-in tool (see builtin_tools), never bound on
+    the model: the agent rebinds its own tools onto the model and would drop a pre-bound one, and the same
+    model factory serves memory extraction and thread renaming, which must not search the web."""
     openai = chat_model(BotProfile(provider="openai", model="gpt-5.5", model_settings={"web_search": True}), s(openai_api_key="k"))
-    assert openai.kwargs["tools"] == [{"type": "web_search_preview"}] and openai.use_responses_api is True
+    assert isinstance(openai, ChatOpenAI) and openai.use_responses_api is True
     anthropic = chat_model(BotProfile(provider="anthropic", model="claude-sonnet-5", model_settings={"web_search": True}), s(anthropic_api_key="k"))
-    assert anthropic.kwargs["tools"] == [{"type": "web_search_20250305", "name": "web_search"}]
+    assert isinstance(anthropic, ChatAnthropic)
     router = chat_model(BotProfile(provider="openrouter", model="openai/gpt-5.5", model_settings={"web_search": True}), s(openrouter_api_key="k", direct_anthropic=False))
     assert router.extra_body["plugins"] == [{"id": "web"}]
+
+
+def test_builtin_tools_per_provider():
+    on = {"web_search": True}
+    assert builtin_tools(BotProfile(provider="openai", model="gpt-5.5", model_settings=on), s(openai_api_key="k")) == [{"type": "web_search_preview"}]
+    assert builtin_tools(BotProfile(provider="anthropic", model="claude-sonnet-5", model_settings=on), s(anthropic_api_key="k")) == [
+        {"type": "web_search_20250305", "name": "web_search"}]
+    # OpenRouter searches through its request-level plugin, xAI and Ollama have no hosted search.
+    assert builtin_tools(BotProfile(provider="openrouter", model="openai/gpt-5.5", model_settings=on), s(openrouter_api_key="k", direct_anthropic=False)) == []
+    assert builtin_tools(BotProfile(provider="xai", model="grok-4.6", model_settings=on), s(xai_api_key="k")) == []
+    assert builtin_tools(BotProfile(provider="ollama", model="llama3.1", model_settings=on), s(ollama_base_url="http://localhost:11434")) == []
+
+
+def test_builtin_tools_off_by_default_and_follow_effective_provider():
+    assert builtin_tools(BotProfile(provider="anthropic", model="claude-sonnet-5", model_settings={}), s(anthropic_api_key="k")) == []
+    # auto resolves to the configured provider; an OpenRouter anthropic/ model sent direct gets Anthropic's tool.
+    auto = BotProfile(provider="auto", model="", model_settings={"web_search": True})
+    assert builtin_tools(auto, s(openai_api_key="k")) == [{"type": "web_search_preview"}]
+    assert builtin_tools(auto, s(openrouter_api_key="k", anthropic_api_key="k", bot_model="anthropic/claude-sonnet-5")) == [
+        {"type": "web_search_20250305", "name": "web_search"}]
+    # No provider configured at all: nothing to add rather than an error (the run itself reports the missing key).
+    assert builtin_tools(auto, s()) == []
 
 
 def test_web_search_is_disabled_by_default():
     model = chat_model(BotProfile(provider="openai", model="gpt-5.5", model_settings={}), s(openai_api_key="k"))
     assert not model.model_kwargs
+
+
+def test_web_search_opt_in_survives_auto_provider_model_resolution():
+    """The persisted bot setting is passed through after auto selects provider and model."""
+    bot = BotProfile(provider="auto", model="", model_settings={"web_search": True})
+    model = chat_model(bot, s(openrouter_api_key="k", bot_model="openai/gpt-5.5"))
+    assert model.model_name == "openai/gpt-5.5"
+    assert model.extra_body["plugins"] == [{"id": "web"}]
+
+
+@pytest.mark.parametrize("provider, model, settings", [
+    ("xai", "grok-4.6", {"xai_api_key": "k"}),
+    ("ollama", "llama3.1", {"ollama_base_url": "http://localhost:11434"}),
+])
+def test_web_search_opt_in_does_not_change_unsupported_providers(provider, model, settings):
+    """Providers without a native search mechanism retain their normal model setup."""
+    search = chat_model(BotProfile(provider=provider, model=model, model_settings={"web_search": True}), s(**settings))
+    normal = chat_model(BotProfile(provider=provider, model=model, model_settings={}), s(**settings))
+    if provider == "ollama":
+        assert search.model == normal.model == model
+    else:
+        assert search.model_name == normal.model_name == model
+        assert not search.model_kwargs
+
+
+@pytest.mark.parametrize("provider, model, settings", [
+    ("openai", "gpt-5.5", {"openai_api_key": "k"}),
+    ("anthropic", "claude-sonnet-5", {"anthropic_api_key": "k"}),
+    ("openrouter", "openai/gpt-5.5", {"openrouter_api_key": "k"}),
+])
+def test_web_search_is_disabled_by_default_for_every_supported_provider(provider, model, settings):
+    model_instance = chat_model(BotProfile(provider=provider, model=model, model_settings={}), s(**settings))
+    assert not model_instance.model_kwargs
+    if provider == "openrouter":
+        assert not (model_instance.extra_body or {}).get("plugins")
+
