@@ -159,7 +159,7 @@ async def test_run_shell_kills_process_group_on_cancellation(tmp_path):
 
 def test_selectable_names():
     assert [t.name for t in SELECTABLE_TOOLS] == [
-        "run_shell", "read_file", "write_file", "list_files", "search_code", "http_request", "fetch_url", "create_bot", "read_bot_description", "update_bot_description"]
+        "run_shell", "read_file", "write_file", "patch_file", "list_files", "search_code", "http_request", "fetch_url", "create_bot", "read_bot_description", "update_bot_description"]
 
 
 async def test_search_code_returns_matching_lines_with_paths_and_skips_junk_dirs(tmp_path):
