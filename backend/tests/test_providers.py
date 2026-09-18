@@ -179,3 +179,39 @@ def test_web_search_is_bound_only_for_supported_providers():
 def test_web_search_is_disabled_by_default():
     model = chat_model(BotProfile(provider="openai", model="gpt-5.5", model_settings={}), s(openai_api_key="k"))
     assert not model.model_kwargs
+
+
+def test_web_search_opt_in_survives_auto_provider_model_resolution():
+    """The persisted bot setting is passed through after auto selects provider and model."""
+    bot = BotProfile(provider="auto", model="", model_settings={"web_search": True})
+    model = chat_model(bot, s(openrouter_api_key="k", bot_model="openai/gpt-5.5"))
+    assert model.model_name == "openai/gpt-5.5"
+    assert model.extra_body["plugins"] == [{"id": "web"}]
+
+
+@pytest.mark.parametrize("provider, model, settings", [
+    ("xai", "grok-4.6", {"xai_api_key": "k"}),
+    ("ollama", "llama3.1", {"ollama_base_url": "http://localhost:11434"}),
+])
+def test_web_search_opt_in_does_not_change_unsupported_providers(provider, model, settings):
+    """Providers without a native search mechanism retain their normal model setup."""
+    search = chat_model(BotProfile(provider=provider, model=model, model_settings={"web_search": True}), s(**settings))
+    normal = chat_model(BotProfile(provider=provider, model=model, model_settings={}), s(**settings))
+    if provider == "ollama":
+        assert search.model == normal.model == model
+    else:
+        assert search.model_name == normal.model_name == model
+        assert not search.model_kwargs
+
+
+@pytest.mark.parametrize("provider, model, settings", [
+    ("openai", "gpt-5.5", {"openai_api_key": "k"}),
+    ("anthropic", "claude-sonnet-5", {"anthropic_api_key": "k"}),
+    ("openrouter", "openai/gpt-5.5", {"openrouter_api_key": "k"}),
+])
+def test_web_search_is_disabled_by_default_for_every_supported_provider(provider, model, settings):
+    model_instance = chat_model(BotProfile(provider=provider, model=model, model_settings={}), s(**settings))
+    assert not model_instance.model_kwargs
+    if provider == "openrouter":
+        assert not (model_instance.extra_body or {}).get("plugins")
+
