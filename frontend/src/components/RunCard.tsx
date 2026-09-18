@@ -49,8 +49,11 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
       const callId = e.payload.id ?? e.id;
       body.push(
         <details key={callId} className="rounded bg-white p-1 dark:bg-zinc-950">
-          <summary className="cursor-pointer font-mono">{e.payload.name}({JSON.stringify(e.payload.args)})</summary>
-          <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-zinc-600 dark:text-zinc-400">{r ? String(r.payload.content) : "…"}</pre>
+          <summary className="cursor-pointer rounded px-1 py-0.5 font-mono leading-relaxed hover:bg-zinc-100 dark:hover:bg-zinc-900">
+            <span className="text-zinc-700 dark:text-zinc-300">{e.payload.name}</span>
+            <span className="break-words whitespace-pre-wrap text-zinc-600 dark:text-zinc-400">({JSON.stringify(e.payload.args)})</span>
+          </summary>
+          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded border border-zinc-200 bg-zinc-50 p-2 font-mono text-[11px] leading-relaxed text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">{r ? String(r.payload.content) : "…"}</pre>
         </details>
       );
     }
