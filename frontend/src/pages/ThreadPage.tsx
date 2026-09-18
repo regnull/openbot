@@ -26,6 +26,17 @@ export default function ThreadPage() {
   const [state, setState] = useState<ThreadState>(emptyThreadState(id));
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setMenuOpen(false); menuButtonRef.current?.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
   const scrollContainer = useRef<HTMLDivElement>(null);
   const shouldStickToBottom = useRef(true);
   const updateScrollStickiness = useCallback(() => {
@@ -114,23 +125,27 @@ export default function ThreadPage() {
   ])];
   return (
     <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-4xl flex-col">
-      <div className="flex items-center gap-3 border-b border-zinc-200 pb-3 dark:border-zinc-800">
-        <Link to="/threads" className="text-sm text-zinc-500">← Threads</Link>
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold">{displayedTitle || "Untitled thread"}</h1>
-          <div className="truncate text-xs text-zinc-500">cwd {t.working_directory ?? "."}</div>
-          {usageLine && <div className="truncate text-xs text-zinc-500" title="LLM calls and prompt/completion tokens across every run in this thread">{usageLine}</div>}
+      <header className="thread-header sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b border-zinc-200 bg-white/95 px-1 py-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+        <Link to="/threads" className="shrink-0 rounded-md px-2 py-2 text-sm text-zinc-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">← <span className="hidden sm:inline">Threads</span></Link>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-semibold">{displayedTitle || "Untitled thread"}</h1>
+          <p className="truncate text-xs text-zinc-500">{t.participants.map((p) => `@${p.handle}`).join(" ")} · cwd {t.working_directory ?? "."}{usageLine ? ` · ${usageLine}` : ""}</p>
         </div>
-        <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-zinc-500">
-          <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
-          <label className="shrink-0">Default {" "}
-            <select className="rounded border border-zinc-300 bg-white px-1 py-0.5 dark:border-zinc-700 dark:bg-zinc-950" value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>
-              {handles.map((h) => <option key={h} value={h}>@{h}</option>)}
-            </select>
-          </label>
+        <label className="hidden shrink-0 items-center gap-2 text-xs text-zinc-500 sm:flex">Default
+          <select aria-label="Default bot" className="h-10 rounded-md border border-zinc-300 bg-white px-2 dark:border-zinc-700 dark:bg-zinc-950" value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>
+            {handles.map((h) => <option key={h} value={h}>@{h}</option>)}
+          </select>
+        </label>
+        <div className="relative" ref={menuRef}>
+          <button ref={menuButtonRef} type="button" aria-label="Thread actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((open) => !open)} className="h-11 w-11 rounded-md text-lg text-zinc-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">⋯</button>
+          {menuOpen && <div role="menu" className="absolute right-0 top-12 z-20 min-w-48 rounded-md border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <label className="flex items-center justify-between gap-3 px-3 py-2 text-sm sm:hidden">Default
+              <select aria-label="Default bot" className="h-10 max-w-32 rounded-md border border-zinc-300 bg-white px-2 dark:border-zinc-700 dark:bg-zinc-950" value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>{handles.map((h) => <option key={h} value={h}>@{h}</option>)}</select>
+            </label>
+            <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm("Delete thread?")) del.mutate(); }} className="h-11 w-full rounded px-3 text-left text-sm text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">Delete thread</button>
+          </div>}
         </div>
-        <Button variant="secondary" onClick={() => window.confirm("Delete thread?") && del.mutate()}>Delete</Button>
-      </div>
+      </header>
       {/* Above the scroll area on purpose: in a long thread a banner inside it would scroll out
           of view, and the whole point is a waiting state the reader cannot miss. */}
       <WaitingIndicator waiters={state.waiters} />
