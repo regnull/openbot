@@ -12,7 +12,7 @@ async def test_settings_listing_shows_every_tunable_with_its_default(client, ser
     r = by_key["max_model_calls_per_run"]
     assert r["value"] == r["default"] == services.settings.max_model_calls_per_run and r["overridden"] is False
     assert r["group"] == "Run limits" and r["type"] == "int" and r["label"] and r["description"]
-    assert {r["group"] for r in rows} == {"Providers", "Embeddings", "Run limits", "Context", "Memory", "Model routing"}
+    assert {r["group"] for r in rows} == {"Providers", "Embeddings", "Run limits", "Context", "Memory", "Model routing", "Model retries"}
 
 
 async def test_patch_applies_live_persists_and_reset_restores_the_environment_value(client, services):
