@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import posixpath
+from pathlib import Path
+
 from langchain.tools import ToolRuntime, tool
 from langgraph.types import interrupt
 from sqlalchemy import select
@@ -35,10 +38,17 @@ async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[Ru
         try:
             next_working_directory = ctx.working_directory
             if working_directory is not None:
-                next_working_directory = validate_workspace_directory(ctx.workspace_root, working_directory)
-                selected_root = thread_workspace_root(ctx.workspace_root, next_working_directory)
-                if next_working_directory and not next_working_directory.startswith("~"):
-                    next_working_directory = selected_root.relative_to(ctx.services.settings.workspace_root.resolve()).as_posix()
+                if ctx.working_directory and ctx.working_directory.startswith("~") \
+                        and not Path(working_directory).is_absolute():
+                    candidate = posixpath.join(ctx.working_directory, working_directory)
+                    next_working_directory = validate_workspace_directory(
+                        ctx.services.settings.workspace_root, candidate)
+                else:
+                    next_working_directory = validate_workspace_directory(ctx.workspace_root, working_directory)
+                    selected_root = thread_workspace_root(ctx.workspace_root, next_working_directory)
+                    if next_working_directory and not next_working_directory.startswith("~"):
+                        next_working_directory = selected_root.relative_to(
+                            ctx.services.settings.workspace_root.resolve()).as_posix()
             t = await create_thread(ctx.services, s, title=title, handles=handles, created_by=me, include_human=False,
                                     working_directory=next_working_directory)
             await post_message(ctx.services, s, thread_id=t.id, sender=me, content=message, hop=ctx.hop)
