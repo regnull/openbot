@@ -209,7 +209,7 @@ def embeddings(settings: Settings) -> Embeddings | None:
         from langchain_openai import OpenAIEmbeddings
 
         return OpenAIEmbeddings(model=model, api_key=api_key_for(settings, provider), base_url=_BASE_URL["openrouter"],
-                                check_embedding_ctx_length=False)
+                                default_headers={"X-Title": "OpenBot"}, check_embedding_ctx_length=False)
     return init_embeddings(settings.embedding_model, api_key=api_key_for(settings, provider))
 
 

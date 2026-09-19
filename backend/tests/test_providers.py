@@ -165,6 +165,8 @@ def test_openrouter_embeddings_use_its_openai_compatible_endpoint():
     e = embeddings(s(openrouter_api_key="k", embedding_model="openrouter:openai/text-embedding-3-small"))
     assert isinstance(e, OpenAIEmbeddings) and e.model == "openai/text-embedding-3-small"
     assert e.openai_api_base == "https://openrouter.ai/api/v1" and e.check_embedding_ctx_length is False
+    assert e.default_headers == {"X-Title": "OpenBot"}
+    assert embeddings(s(embedding_model="openai:text-embedding-3-small", openai_api_key="k")).default_headers is None
     assert embeddings(s(embedding_model="openrouter:openai/text-embedding-3-small")) is None      # no key: off
 
 
