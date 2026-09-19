@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Api, getApiKey, setApiKey } from "../api/client";
 import type { AppSetting, McpServer, McpServerInput } from "../api/types";
 import { Badge, Button, Card, ErrorText, Field, Input, Textarea } from "../components/ui";
+import { dismissSaveNotification, notifySave, useSaveMutation } from "../lib/saveNotifications";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
 import { formatArgs, formatKeyValues, mcpActions, mcpInFlight, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer, type McpTransport } from "../lib/mcpServers";
 
@@ -14,12 +15,13 @@ export default function SettingsPage() {
   const tools = useQuery({ queryKey: ["tools"], queryFn: Api.listTools });
   const actors = useQuery({ queryKey: ["actors"], queryFn: Api.listActors });
   const [key, setKey] = useState(getApiKey());
+  const [keyError, setKeyError] = useState<Error | null>(null);
   const [ext, setExt] = useState(emptyExt);
-  const createExt = useMutation({
+  const createExt = useSaveMutation({
     mutationFn: () => Api.createActor({ handle: ext.handle, name: ext.name, webhook_url: ext.webhook_url || null, webhook_secret: ext.webhook_secret || null }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["actors"] }); setExt(emptyExt); },
-  });
-  const delExt = useMutation({ mutationFn: (id: string) => Api.deleteActor(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["actors"] }) });
+  }, "External actor added");
+  const delExt = useSaveMutation({ mutationFn: (id: string) => Api.deleteActor(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["actors"] }) }, "External actor removed");
   const externals = actors.data?.filter((a) => a.kind === "external") ?? [];
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -79,8 +81,18 @@ export default function SettingsPage() {
         <p className="text-sm text-zinc-500">Only needed when the server sets OPENBOT_API_KEY. Stored in this browser.</p>
         <div className="flex gap-2">
           <Input value={key} onChange={(e) => setKey(e.target.value)} placeholder="X-API-Key" />
-          <Button className="shrink-0" onClick={() => { setApiKey(key.trim()); location.reload(); }}>Save</Button>
+          <Button className="shrink-0" onClick={() => {
+            dismissSaveNotification();
+            try {
+              setApiKey(key.trim()); setKeyError(null); notifySave("API key saved in this browser");
+              qc.invalidateQueries();
+            } catch {
+              setKeyError(new Error("Could not save the API key. Check your browser storage settings."));
+              notifySave("Could not save the API key.", "error");
+            }
+          }}>Save</Button>
         </div>
+        <ErrorText error={keyError} />
       </Card>
     </div>
   );
@@ -108,8 +120,8 @@ function SettingsGroupCard({ group }: { group: SettingGroup }) {
     // Provider keys and embeddings change what the Providers card and the setup gate report.
     qc.invalidateQueries({ queryKey: ["providers"] }); qc.invalidateQueries({ queryKey: ["setup-status"] });
   };
-  const save = useMutation({ mutationFn: (updates: Record<string, unknown>) => Api.patchSettings(updates), onSuccess: refresh });
-  const reset = useMutation({ mutationFn: (key: string) => Api.resetSetting(key), onSuccess: refresh });
+  const save = useSaveMutation({ mutationFn: (updates: Record<string, unknown>) => Api.patchSettings(updates), onSuccess: refresh }, "Settings saved");
+  const reset = useSaveMutation({ mutationFn: (key: string) => Api.resetSetting(key), onSuccess: refresh }, "Setting reset to default");
   const dirty = Object.keys(drafts).length > 0;
   const submit = () => {
     const updates: Record<string, unknown> = {};
@@ -191,10 +203,10 @@ function McpServersCard() {
     mutationFn: (name: string) => Api.connectMcpServer(name),
     onSuccess: (r) => { if (r.authorization_url) window.open(r.authorization_url, "_blank", "noopener"); refresh(); },
   });
-  const disconnect = useMutation({ mutationFn: (name: string) => Api.disconnectMcpServer(name), onSuccess: refresh });
-  const forget = useMutation({ mutationFn: (name: string) => Api.forgetMcpCredentials(name), onSuccess: refresh });
-  const remove = useMutation({ mutationFn: (name: string) => Api.removeMcpServer(name), onSuccess: refresh });
-  const toggleEnabled = useMutation({ mutationFn: (s: McpServer) => Api.updateMcpServer(s.name, { enabled: !s.enabled }), onSuccess: refresh });
+  const disconnect = useSaveMutation({ mutationFn: (name: string) => Api.disconnectMcpServer(name), onSuccess: refresh }, "MCP server disconnected");
+  const forget = useSaveMutation({ mutationFn: (name: string) => Api.forgetMcpCredentials(name), onSuccess: refresh }, "MCP credentials removed");
+  const remove = useSaveMutation({ mutationFn: (name: string) => Api.removeMcpServer(name), onSuccess: refresh }, "MCP server removed");
+  const toggleEnabled = useSaveMutation({ mutationFn: (s: McpServer) => Api.updateMcpServer(s.name, { enabled: !s.enabled }), onSuccess: refresh }, "MCP server settings saved");
   const busy = connect.isPending || disconnect.isPending || forget.isPending || remove.isPending || toggleEnabled.isPending;
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [dialog, setDialog] = useState<null | { mode: "add" } | { mode: "edit"; server: McpServer }>(null);
@@ -269,7 +281,7 @@ function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onC
   const [touched, setTouched] = useState(false);
   const errors = validateNewMcpServer(name, url, transport, command);
   const kv = parseKeyValues(transport === "http" ? headers : env);
-  const save = useMutation({
+  const save = useSaveMutation({
     mutationFn: () => {
       const body: McpServerInput = transport === "http"
         ? { url: url.trim(), headers: kv.values }
@@ -277,7 +289,7 @@ function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onC
       return editing ? Api.updateMcpServer(server!.name, body) : Api.addMcpServer({ name: name.trim(), ...body });
     },
     onSuccess: onSaved,
-  });
+  }, editing ? "MCP server settings saved" : "MCP server added");
   const submit = () => { setTouched(true); if (Object.keys(errors).length === 0 && !kv.error) save.mutate(); };
   const tab = (t: McpTransport, label: string) => (
     <button type="button" className={`rounded-md px-3 py-1 text-sm ${transport === t ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"}`}

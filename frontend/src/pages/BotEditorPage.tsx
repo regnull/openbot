@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
 import type { BotInput } from "../api/types";
+import { useSaveMutation } from "../lib/saveNotifications";
 import BotIcon from "../components/BotIcon";
 import { Button, Card, ErrorText, Field, Input, Select, Spinner, Textarea } from "../components/ui";
 import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
@@ -37,13 +38,13 @@ export default function BotEditorPage() {
   const [form, setForm] = useState<BotInput>(empty);
   useEffect(() => { if (bot.data) { const { id: _i, created_at: _c, updated_at: _u, ...rest } = bot.data; setForm(rest); } }, [bot.data]);
 
-  const save = useMutation({
+  const save = useSaveMutation({
     mutationFn: () => {
       const payload = { ...form, approval_tools: form.approval_tools.filter((t) => form.tool_names.includes(t)) };
       return isNew ? Api.createBot(payload) : Api.updateBot(id!, payload);
     },
     onSuccess: (b) => { qc.invalidateQueries({ queryKey: ["bots"] }); qc.invalidateQueries({ queryKey: ["bot", b.id] }); nav(`/bots/${b.id}?tab=settings`); },
-  });
+  }, isNew ? "Bot created" : "Bot settings saved");
   const remove = useMutation({ mutationFn: () => Api.deleteBot(id!), onSuccess: () => { qc.invalidateQueries({ queryKey: ["bots"] }); nav("/bots"); } });
 
   const set = <K extends keyof BotInput>(k: K, v: BotInput[K]) => setForm((f) => ({ ...f, [k]: v }));

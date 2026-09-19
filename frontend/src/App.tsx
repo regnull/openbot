@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import SaveNotification from "./components/SaveNotification";
 import Layout from "./components/Layout";
 import ApiKeyGate from "./components/ApiKeyGate";
 import BackendFallback from "./components/BackendFallback";
@@ -13,6 +14,8 @@ import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
   return (
+    <>
+    <SaveNotification />
     <ApiKeyGate>
       <BackendFallback>
         <SetupGate>
@@ -31,5 +34,6 @@ export default function App() {
         </SetupGate>
       </BackendFallback>
     </ApiKeyGate>
+    </>
   );
 }
