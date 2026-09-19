@@ -4,7 +4,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
 import type { BotInput } from "../api/types";
 import { useSaveMutation } from "../lib/saveNotifications";
-import BotIcon from "../components/BotIcon";
 import { Button, Card, ErrorText, Field, Input, Select, Spinner, Textarea } from "../components/ui";
 import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
 import { groupState, groupTools, toggleGroup, toolLabel, unavailableGrants } from "../lib/toolGroups";
@@ -70,12 +69,22 @@ export default function BotEditorPage() {
         <Field label="Name"><Input value={form.name} onChange={(e) => set("name", e.target.value)} required /></Field>
         <Field label="Handle" hint="lowercase, digits, _ or -; used as @handle"><Input value={form.handle} onChange={(e) => set("handle", e.target.value)} pattern="[a-z0-9_\-]{2,32}" required /></Field>
         <div className="sm:col-span-2"><Field label="Description" hint="Shown to other bots so they know when to hand work to this one"><Input value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
-        <Field label="Icon" hint="Choose from the standard bot icons">
-          <div className="flex items-center gap-3">
-            <BotIcon icon={form.icon} />
-            <Select value={form.icon} onChange={(e) => set("icon", e.target.value)}>
-              {BOT_ICONS.map((icon) => <option key={icon.key} value={icon.key}>{icon.glyph} {icon.label}</option>)}
-            </Select>
+        <Field label="Icon" hint="Click to choose">
+          <div className="grid grid-cols-8 gap-1 sm:grid-cols-10 md:grid-cols-12">
+            {BOT_ICONS.map((icon) => (
+              <button
+                key={icon.key}
+                type="button"
+                title={icon.label}
+                onClick={() => set("icon", icon.key)}
+                className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg transition-colors
+                  ${form.icon === icon.key
+                    ? "bg-blue-100 ring-2 ring-blue-500 dark:bg-blue-900/40"
+                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+              >
+                {icon.glyph}
+              </button>
+            ))}
           </div>
         </Field>
         <div className="sm:col-span-2"><Field label="Instructions"><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field></div>
