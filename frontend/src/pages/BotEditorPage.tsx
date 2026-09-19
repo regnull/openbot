@@ -69,12 +69,13 @@ export default function BotEditorPage() {
         <Field label="Name"><Input value={form.name} onChange={(e) => set("name", e.target.value)} required /></Field>
         <Field label="Handle" hint="lowercase, digits, _ or -; used as @handle"><Input value={form.handle} onChange={(e) => set("handle", e.target.value)} pattern="[a-z0-9_\-]{2,32}" required /></Field>
         <div className="sm:col-span-2"><Field label="Description" hint="Shown to other bots so they know when to hand work to this one"><Input value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
-        <Field label="Icon" hint="Click to choose">
+        <div className="sm:col-span-2"><Field label="Icon" hint="Click to choose">
           <div className="grid grid-cols-8 gap-1 sm:grid-cols-10 md:grid-cols-12">
             {BOT_ICONS.map((icon) => (
               <button
                 key={icon.key}
                 type="button"
+                aria-label={icon.label}
                 title={icon.label}
                 onClick={() => set("icon", icon.key)}
                 className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg transition-colors
@@ -86,7 +87,7 @@ export default function BotEditorPage() {
               </button>
             ))}
           </div>
-        </Field>
+        </Field></div>
         <div className="sm:col-span-2"><Field label="Instructions"><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field></div>
         <Field label="Provider" hint="Auto picks whichever provider is configured on the server and keeps working if that changes">
           <Select value={form.provider} onChange={(e) => {
