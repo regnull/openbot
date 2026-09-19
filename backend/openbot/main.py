@@ -16,7 +16,18 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from openbot.api import actors, bots, events, inbox, messages, providers, runs, threads, tools
+from openbot.api import (
+    actors,
+    bots,
+    events,
+    inbox,
+    messages,
+    providers,
+    runs,
+    telegram,
+    threads,
+    tools,
+)
 from openbot.api import mcp as mcp_api
 from openbot.api import settings as settings_api
 from openbot.api import setup as setup_api
@@ -246,6 +257,8 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
               providers.router, events.router, settings_api.router, mcp_api.router, setup_api.router,
               workspace_api.router):
         api.include_router(r)
+    # Telegram webhook is public (called by Telegram servers, not our clients)
+    public.include_router(telegram.router)
     app.include_router(public)
     app.include_router(api)
 
