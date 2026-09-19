@@ -9,7 +9,7 @@ export { ApiError } from "./errors";
 export const BASE = "/api/v1";
 const KEY = "openbot_api_key";
 export const getApiKey = (): string => { try { return localStorage.getItem(KEY) ?? ""; } catch { return ""; } };
-export const setApiKey = (k: string) => { try { if (k) localStorage.setItem(KEY, k); else localStorage.removeItem(KEY); } catch { /* ignore */ } };
+export const setApiKey = (k: string) => { if (k) localStorage.setItem(KEY, k); else localStorage.removeItem(KEY); window.dispatchEvent(new Event("openbot:api-key-changed")); };
 
 async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };

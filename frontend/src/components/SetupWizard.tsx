@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useSaveMutation } from "../lib/saveNotifications";
 import { useState } from "react";
 import { Api } from "../api/client";
 import type { SetupStatus } from "../api/types";
@@ -12,7 +12,7 @@ export default function SetupWizard({ status, onDone }: { status: SetupStatus; o
   const [step, setStep] = useState<1 | 2>(status.chat.ok ? 2 : 1);
   const [touched, setTouched] = useState(false);
   const errors = validateWizard(state);
-  const save = useMutation({ mutationFn: () => Api.patchSettings(wizardPayload(state)), onSuccess: onDone });
+  const save = useSaveMutation({ mutationFn: () => Api.patchSettings(wizardPayload(state)), onSuccess: onDone }, "Settings saved");
   const set = <K extends keyof WizardState>(k: K, v: WizardState[K]) => setState((s) => ({ ...s, [k]: v }));
   const stepOneOk = state.chat === "ollama" ? !errors.ollamaUrl && !errors.ollamaModel : !errors.apiKey;
   const finish = () => { setTouched(true); if (Object.keys(errors).length === 0) save.mutate(); };

@@ -1,3 +1,4 @@
+import { useSaveMutation } from "../lib/saveNotifications";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -77,13 +78,13 @@ export default function ThreadPage() {
     onSuccess: (older) => { setState((s) => hydrate(s, older)); setHasMore(older.has_more); },
   });
   const del = useMutation({ mutationFn: () => Api.deleteThread(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["threads"] }); nav("/threads"); } });
-  const updateDefault = useMutation({
+  const updateDefault = useSaveMutation({
     mutationFn: (default_bot_handle: string) => Api.updateThread(id, { default_bot_handle }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["thread", id] });
       qc.invalidateQueries({ queryKey: ["threads"] });
     },
-  });
+  }, "Default bot saved");
   const latestMessageId = state.messages.at(-1)?.id;
   const streamedChars = Object.values(state.streaming).reduce((a, s) => a + s.length, 0);
   const runEventCount = Object.values(state.runEvents).reduce((a, events) => a + events.length, 0);

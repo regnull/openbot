@@ -43,10 +43,17 @@ export function useBusEvents(
     reconnected.current = onReconnect;
   });
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (threadId) params.set("thread_id", threadId);
-    const key = getApiKey();
-    if (key) params.set("api_key", key);
-    return subscribeBusEvents(`${BASE}/events?${params}`, (e) => cb.current(e), () => reconnected.current?.());
+    const connect = () => {
+      const params = new URLSearchParams();
+      if (threadId) params.set("thread_id", threadId);
+      const key = getApiKey();
+      if (key) params.set("api_key", key);
+      return subscribeBusEvents(`${BASE}/events?${params}`, (e) => cb.current(e), () => reconnected.current?.());
+    };
+    let close = connect();
+    // Settings saves no longer reload the page; live subscriptions need the new credential too.
+    const onKeyChanged = () => { close(); close = connect(); };
+    window.addEventListener("openbot:api-key-changed", onKeyChanged);
+    return () => { window.removeEventListener("openbot:api-key-changed", onKeyChanged); close(); };
   }, [threadId]);
 }
