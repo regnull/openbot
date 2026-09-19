@@ -1,0 +1,1 @@
+# OpenBot channel adapters for external messaging platforms.
