@@ -6,7 +6,7 @@ user to a persistent thread, and delivers bot replies via the Telegram Bot API.
 Usage:
     1. Create a Telegram bot via @BotFather and obtain the bot token.
     2. Set TELEGRAM_BOT_TOKEN in your .env file.
-    3. Set TELEGRAM_WEBHOOK_SECRET for HMAC validation of incoming updates.
+    3. Set TELEGRAM_WEBHOOK_SECRET for plain-token validation of incoming updates.
     4. Point Telegram's webhook to https://your-domain/api/v1/channels/telegram/webhook
     5. The adapter automatically maps Telegram users to threads and delivers replies.
 
@@ -17,7 +17,6 @@ Thread mapping:
 """
 from __future__ import annotations
 
-import hashlib
 import hmac
 import logging
 import re
@@ -88,10 +87,19 @@ def parse_telegram_update(data: dict) -> TelegramUpdate | None:
     )
 
 
-def validate_webhook_signature(secret: str, body: bytes, signature: str) -> bool:
-    """Validate Telegram webhook HMAC signature."""
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(f"sha256={expected}", signature)
+def validate_webhook_secret(secret: str, token: str) -> bool:
+    """Validate the Telegram webhook secret token.
+
+    The Telegram Bot API sends the raw secret token as-is in the
+    ``X-Telegram-Bot-Api-Secret-Token`` header.  We compare it using
+    ``hmac.compare_digest`` for constant-time comparison to prevent
+    timing attacks.
+
+    Returns ``True`` when *token* matches *secret*, or when *secret*
+    is empty/``None`` (i.e. validation is disabled for local dev)."""
+    if not secret:
+        return True
+    return hmac.compare_digest(secret, token)
 
 
 async def get_or_create_telegram_actor(session: AsyncSession, user_id: int, first_name: str,

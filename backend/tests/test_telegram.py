@@ -20,6 +20,7 @@ from openbot.channels.telegram import (
     handle_telegram_command,
     handle_telegram_message,
     parse_telegram_update,
+    validate_webhook_secret,
 )
 from openbot.db.models import Actor, Thread
 
@@ -539,3 +540,40 @@ async def test_telegram_thread_kind_is_chat(services):
         await session.commit()
         
         assert thread.kind == "chat"
+
+
+# ---------------------------------------------------------------------------
+# Webhook secret validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestValidateWebhookSecret:
+    """Tests for the validate_webhook_secret function.
+
+    Telegram Bot API sends the raw secret token as-is in the
+    ``X-Telegram-Bot-Api-Secret-Token`` header.  Validation must use
+    constant-time comparison and skip when no secret is configured.
+    """
+
+    def test_matching_secret(self):
+        assert validate_webhook_secret("my-secret", "my-secret") is True
+
+    def test_mismatching_secret(self):
+        assert validate_webhook_secret("my-secret", "wrong-token") is False
+
+    def test_empty_secret_skips_validation(self):
+        """When no secret is configured the endpoint must accept all requests."""
+        assert validate_webhook_secret("", "anything") is True
+
+    def test_none_secret_skips_validation(self):
+        """None secret (config unset) must also skip validation."""
+        assert validate_webhook_secret(None, "anything") is True  # type: ignore[arg-type]
+
+    def test_empty_token_rejected(self):
+        assert validate_webhook_secret("my-secret", "") is False
+
+    def test_partial_match_rejected(self):
+        assert validate_webhook_secret("my-secret", "my-") is False
+
+    def test_case_sensitive(self):
+        assert validate_webhook_secret("MySecret", "mysecret") is False

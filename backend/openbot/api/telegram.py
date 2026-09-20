@@ -13,6 +13,7 @@ from openbot.channels.telegram import (
     deliver_to_telegram,
     handle_telegram_message,
     parse_telegram_update,
+    validate_webhook_secret,
 )
 from openbot.services import Services
 
@@ -24,22 +25,30 @@ router = APIRouter(prefix="/channels/telegram", tags=["telegram"])
 @router.post("/webhook")
 async def telegram_webhook(request: Request):
     """Handle incoming Telegram webhook updates."""
+    # --- Webhook secret validation -----------------------------------------
+    # Telegram sends the raw secret token in the
+    # ``X-Telegram-Bot-Api-Secret-Token`` header.
+    services: Services = request.app.state.services  # type: ignore[attr-defined]
+    if services is None:
+        raise HTTPException(500, "Services not initialized")
+
+    secret = services.settings.telegram_webhook_secret or ""
+    token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not validate_webhook_secret(secret, token):
+        log.warning("Telegram webhook secret mismatch – rejecting request")
+        raise HTTPException(403, "Forbidden")
+
     # Parse the update
     try:
         data = await request.json()
     except ValueError:
         raise HTTPException(400, "Invalid JSON")
-    
+
     update = parse_telegram_update(data)
     if update is None:
         # Return 200 to acknowledge the update even if we can't process it
         return Response(status_code=200)
-    
-    # Get services from app state
-    services: Services = request.app.state.services
-    if services is None:
-        raise HTTPException(500, "Services not initialized")
-    
+
     # Get session factory
     session_factory = services.session_factory
     
