@@ -69,7 +69,7 @@ export default function Layout() {
           <div className="space-y-1">
             {bots.data?.map((bot) => (
               <NavLink key={bot.id} to={`/bots/${bot.id}`} className={item}>
-                <BotIcon icon={bot.icon} className="h-6 w-6 text-sm" />
+                <BotIcon icon={bot.icon} className="h-8 w-8 text-base" />
                 <span className="min-w-0 flex-1 truncate">@{bot.handle}</span>
                 <BotActivityIndicator active={bot.active} />
               </NavLink>

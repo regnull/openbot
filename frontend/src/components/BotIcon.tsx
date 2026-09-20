@@ -6,7 +6,7 @@ export default function BotIcon({ icon, className = "" }: { icon: string | null 
     <span
       aria-label={option.label}
       title={option.label}
-      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-base ring-1 ring-zinc-200 dark:bg-zinc-800 dark:ring-zinc-700 ${className}`}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-lg ring-1 ring-zinc-200 dark:bg-zinc-800 dark:ring-zinc-700 ${className}`}
     >
       {option.glyph}
     </span>
