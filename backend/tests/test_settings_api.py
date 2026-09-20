@@ -12,7 +12,7 @@ async def test_settings_listing_shows_every_tunable_with_its_default(client, ser
     r = by_key["max_model_calls_per_run"]
     assert r["value"] == r["default"] == services.settings.max_model_calls_per_run and r["overridden"] is False
     assert r["group"] == "Run limits" and r["type"] == "int" and r["label"] and r["description"]
-    assert {r["group"] for r in rows} == {"Providers", "Embeddings", "Run limits", "Context", "Memory", "Model routing", "Model retries"}
+    assert {r["group"] for r in rows} == {"Providers", "Embeddings", "Run limits", "Context", "Memory", "Model routing", "Model retries", "Telegram"}
 
 
 async def test_patch_applies_live_persists_and_reset_restores_the_environment_value(client, services):
@@ -83,3 +83,66 @@ async def test_migration_adds_app_settings_table(tmp_path):
 def test_model_call_default_gives_a_real_task_room():
     from openbot.config import Settings
     assert Settings(_env_file=None).max_model_calls_per_run == 60
+
+
+async def test_telegram_bot_token_is_editable_via_settings(client, services):
+    """Telegram bot token can be set, is masked in the response, and applies live."""
+    token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+    r = await client.patch("/api/v1/settings", json={"telegram_bot_token": token})
+    assert r.status_code == 200, r.text
+    by_key = {x["key"]: x for x in r.json()}
+    t = by_key["telegram_bot_token"]
+    assert t["group"] == "Telegram"
+    assert t["type"] == "secret"
+    assert t["secret"] is True
+    assert t["overridden"] is True
+    assert t["is_set"] is True
+    # The plaintext token must never appear in the API response.
+    assert t["value"] != token
+    assert t["value"] == "••••••••"
+    # Live apply: the settings object now holds the real token.
+    assert services.settings.telegram_bot_token == token
+    # Reset restores the env default (None when not set via env).
+    r2 = await client.delete("/api/v1/settings/telegram_bot_token")
+    assert r2.status_code == 200
+    assert services.settings.telegram_bot_token is None
+
+
+async def test_telegram_bot_token_rejects_invalid_format(client, services):
+    """Obviously invalid tokens are rejected."""
+    for bad in ("no-colon", "123:short", "123:$$invalid$$chars$$"):
+        r = await client.patch("/api/v1/settings", json={"telegram_bot_token": bad})
+        assert r.status_code == 422, (bad, r.text)
+    # The original value is unchanged.
+    assert services.settings.telegram_bot_token is None
+
+
+async def test_telegram_webhook_settings_are_editable(client, services):
+    """Webhook URL and secret can be set and reset."""
+    url = "https://example.com/api/v1/channels/telegram/webhook"
+    secret = "my-shared-secret-123"
+    r = await client.patch("/api/v1/settings", json={
+        "telegram_webhook_url": url,
+        "telegram_webhook_secret": secret,
+    })
+    assert r.status_code == 200, r.text
+    by_key = {x["key"]: x for x in r.json()}
+    assert by_key["telegram_webhook_url"]["value"] == url
+    assert by_key["telegram_webhook_url"]["secret"] is False
+    assert by_key["telegram_webhook_secret"]["value"] == "••••••••"
+    assert by_key["telegram_webhook_secret"]["secret"] is True
+    assert services.settings.telegram_webhook_url == url
+    assert services.settings.telegram_webhook_secret == secret
+
+
+async def test_telegram_token_masked_update_is_noop(client, services):
+    """Sending the masked value back (as the UI would when other fields change) is a no-op."""
+    token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+    await client.patch("/api/v1/settings", json={"telegram_bot_token": token})
+    assert services.settings.telegram_bot_token == token
+    # Simulate the UI sending the masked value when saving other fields in the group.
+    from openbot.runtime.app_settings import MASK
+    r = await client.patch("/api/v1/settings", json={"telegram_bot_token": MASK})
+    assert r.status_code == 200
+    # The real token is preserved.
+    assert services.settings.telegram_bot_token == token

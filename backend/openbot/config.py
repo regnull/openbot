@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -122,6 +123,17 @@ class Settings(BaseSettings):
         # (the repo root, which always exists and would otherwise get mounted as static files).
         if v == "":
             return cls.model_fields["frontend_dist"].default
+        return v
+
+    @field_validator("telegram_bot_token", mode="before")
+    @classmethod
+    def _validate_telegram_bot_token(cls, v):
+        if v == "":
+            return None
+        if v is not None and not re.match(r"^\d+:[A-Za-z0-9_-]{30,}$", str(v)):
+            raise ValueError(
+                "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
+            )
         return v
 
 
