@@ -35,24 +35,25 @@ const render = (s: ReturnType<typeof emptyThreadState>) => {
   return { container, root, cleanup: () => { act(() => root.unmount()); container.remove(); } };
 };
 
-describe("MessageList thinking placeholder", () => {
-  it("shows ThinkingPlaceholder for a running run with no events or streaming", () => {
+describe("MessageList busy indicator", () => {
+  it("shows BotBusyIndicator for a running run with no events or streaming", () => {
     let s = emptyThreadState("t");
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r1", "running") });
     const { container, cleanup } = render(s);
     try {
       expect(container.textContent).toContain("Engineer");
-      expect(container.textContent).toContain("is thinking");
+      expect(container.textContent).toContain("busy, waiting");
       expect(container.querySelector("[role='status']")).toBeTruthy();
+      expect(container.querySelector(".bot-busy-dot")).toBeTruthy();
     } finally { cleanup(); }
   });
 
-  it("shows ThinkingPlaceholder for a queued run", () => {
+  it("shows BotBusyIndicator for a queued run", () => {
     let s = emptyThreadState("t");
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r1", "queued") });
     const { container, cleanup } = render(s);
     try {
-      expect(container.textContent).toContain("is thinking");
+      expect(container.textContent).toContain("busy, waiting");
       expect(container.querySelector("[role='status']")).toBeTruthy();
     } finally { cleanup(); }
   });
@@ -94,7 +95,7 @@ describe("MessageList thinking placeholder", () => {
     } finally { cleanup(); }
   });
 
-  it("shows RunCard for waiting_human status without events (not ThinkingPlaceholder)", () => {
+  it("shows RunCard for waiting_human status without events (not BotBusyIndicator)", () => {
     let s = emptyThreadState("t");
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r1", "waiting_human") });
     const { container, cleanup } = render(s);
@@ -104,14 +105,14 @@ describe("MessageList thinking placeholder", () => {
     } finally { cleanup(); }
   });
 
-  it("handles multiple concurrent active runs with placeholders", () => {
+  it("handles multiple concurrent active runs with indicators", () => {
     let s = emptyThreadState("t");
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r1", "running", "b1") });
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r2", "queued", "b1") });
     const { container, cleanup } = render(s);
     try {
-      const placeholders = container.querySelectorAll("[role='status']");
-      expect(placeholders).toHaveLength(2);
+      const indicators = container.querySelectorAll("[role='status']");
+      expect(indicators).toHaveLength(2);
     } finally { cleanup(); }
   });
 });
