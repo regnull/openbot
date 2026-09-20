@@ -87,3 +87,121 @@ def test_human_message_still_wakes_every_mentioned_bot():
     t = resolve_targets(sender=YOU, mentioned_handles=["eng", "qa"], to_handles=[], actors_by_handle=ACTORS,
                         thread_bot_ids=["id-eng", "id-qa"])
     assert [b.handle for b in t] == ["eng", "qa"]
+
+
+# ---------------------------------------------------------------------------
+# Default-bot fallback when a bot mentions an unresolvable handle
+# ---------------------------------------------------------------------------
+
+def _coordinator():
+    a = bot_actor("chief_of_staff")
+    a.id, a.kind, a.enabled = "id-cos", "bot", True
+    return a
+
+
+COS = _coordinator()
+ACTORS_WITH_COS = {**ACTORS, COS.handle: COS}
+
+
+def test_bot_mentions_unknown_handle_falls_back_to_default_bot():
+    """Bot mentions @nobody (unknown handle) → default bot picks up the handoff."""
+    t = resolve_targets(
+        sender=ACTORS["eng"],
+        mentioned_handles=["nobody"],
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-eng", "id-cos"],
+        default_bot_id="id-cos",
+    )
+    assert [b.handle for b in t] == ["chief_of_staff"]
+
+
+def test_bot_mentions_disabled_bot_falls_back_to_default_bot():
+    """Bot mentions a disabled bot → default bot picks up the handoff."""
+    t = resolve_targets(
+        sender=ACTORS["eng"],
+        mentioned_handles=["off"],  # "off" exists but is disabled
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-eng", "id-cos", "id-off"],
+        default_bot_id="id-cos",
+    )
+    assert [b.handle for b in t] == ["chief_of_staff"]
+
+
+def test_bot_mentions_self_only_falls_back_to_default_bot():
+    """Bot mentions only itself → default bot picks up the handoff."""
+    t = resolve_targets(
+        sender=ACTORS["eng"],
+        mentioned_handles=["eng"],
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-eng", "id-cos"],
+        default_bot_id="id-cos",
+    )
+    assert [b.handle for b in t] == ["chief_of_staff"]
+
+
+def test_bot_mentions_valid_bot_no_fallback_needed():
+    """Bot mentions a valid, enabled bot → that bot is the target (no fallback)."""
+    t = resolve_targets(
+        sender=ACTORS["eng"],
+        mentioned_handles=["qa"],
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-eng", "id-qa", "id-cos"],
+        default_bot_id="id-cos",
+    )
+    assert [b.handle for b in t] == ["qa"]
+
+
+def test_bot_mentions_unknown_no_default_bot_configured():
+    """Bot mentions unknown handle, no default bot → result is empty (can't do better)."""
+    t = resolve_targets(
+        sender=ACTORS["eng"],
+        mentioned_handles=["nobody"],
+        to_handles=[],
+        actors_by_handle=ACTORS,
+        thread_bot_ids=["id-eng"],
+        default_bot_id=None,
+    )
+    assert t == []
+
+
+def test_bot_mentions_unknown_default_is_sender():
+    """Bot mentions unknown handle, default bot is the sender itself → empty (can't self-route)."""
+    t = resolve_targets(
+        sender=ACTORS["eng"],
+        mentioned_handles=["nobody"],
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-eng", "id-cos"],
+        default_bot_id="id-eng",
+    )
+    assert t == []
+
+
+def test_bot_no_mentions_default_bot_still_receives():
+    """Bot sends a message with no mentions at all → default bot receives it."""
+    t = resolve_targets(
+        sender=ACTORS["eng"],
+        mentioned_handles=[],
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-eng", "id-cos"],
+        default_bot_id="id-cos",
+    )
+    assert [b.handle for b in t] == ["chief_of_staff"]
+
+
+def test_existing_bot_to_bot_handoff_unchanged():
+    """When a bot mentions a valid bot, the existing behavior is preserved."""
+    t = resolve_targets(
+        sender=ACTORS["rev"],
+        mentioned_handles=["eng"],
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-eng", "id-rev", "id-qa", "id-cos"],
+        default_bot_id="id-cos",
+    )
+    assert [b.handle for b in t] == ["eng"]
