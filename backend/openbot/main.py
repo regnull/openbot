@@ -106,9 +106,19 @@ async def start_background(services: Services) -> None:
         await services.mcp.start()
     if services.actors is not None:
         await services.actors.start()
+    # Start the Telegram delivery listener if a bot token is configured.
+    if services.settings.telegram_bot_token:
+        from openbot.channels.telegram import TelegramDeliveryListener
+        listener = TelegramDeliveryListener(services)
+        await listener.start()
+        services._telegram_listener = listener
 
 
 async def stop_background(services: Services) -> None:
+    # Stop the Telegram delivery listener before actors (so no new deliveries start).
+    listener = getattr(services, '_telegram_listener', None)
+    if listener is not None:
+        await listener.stop()
     if services.actors is not None:
         await services.actors.stop()
     if services.mcp is not None:
