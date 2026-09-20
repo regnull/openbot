@@ -15,7 +15,7 @@ from openbot.channels.telegram import (
     deliver_to_telegram,
     parse_telegram_update,
     process_telegram_message,
-    validate_webhook_signature,
+    validate_webhook_token,
 )
 from openbot.services import Services
 
@@ -29,7 +29,7 @@ async def telegram_webhook(request: Request):
     """Handle incoming Telegram webhook updates.
 
     Flow:
-        1. Validate HMAC signature (if a webhook secret is configured).
+        1. Validate secret token (if a webhook secret is configured).
         2. Parse the Telegram update.
         3. For commands (/new, /start, /help): process synchronously and send the
            response immediately.
@@ -40,13 +40,13 @@ async def telegram_webhook(request: Request):
     if services is None:
         raise HTTPException(500, "Services not initialized")
 
-    # --- HMAC signature validation ---
+    # --- Secret-token validation (Telegram sends the raw token, not HMAC) ---
     body = await request.body()
     secret = services.settings.telegram_webhook_secret
     if secret:
-        signature = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-        if not validate_webhook_signature(secret, body, signature):
-            raise HTTPException(403, "Invalid webhook signature")
+        token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if not validate_webhook_token(secret, token):
+            raise HTTPException(403, "Invalid webhook secret token")
 
     try:
         data = json.loads(body)

@@ -822,8 +822,8 @@ class TestWebhookEndpoint:
         assert resp.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_webhook_rejects_bad_hmac_when_secret_configured(self, client, services):
-        """When a webhook secret is set, requests without a valid HMAC are rejected."""
+    async def test_webhook_rejects_bad_token_when_secret_configured(self, client, services):
+        """When a webhook secret is set, requests without the correct token are rejected."""
         services.settings = services.settings.model_copy(
             update={"telegram_webhook_secret": "test-secret-123"}
         )
@@ -841,14 +841,11 @@ class TestWebhookEndpoint:
             json=payload,
         )
         assert resp.status_code == 403
-        assert "signature" in resp.text.lower()
+        assert "token" in resp.text.lower()
 
     @pytest.mark.asyncio
-    async def test_webhook_accepts_valid_hmac(self, client, services):
-        """When a webhook secret is set, a valid HMAC passes validation."""
-        import hashlib
-        import hmac as _hmac
-
+    async def test_webhook_accepts_valid_token(self, client, services):
+        """When a webhook secret is set, the correct raw token passes validation."""
         secret = "test-secret-456"
         services.settings = services.settings.model_copy(
             update={"telegram_webhook_secret": secret}
@@ -859,18 +856,14 @@ class TestWebhookEndpoint:
                 "message_id": 4,
                 "chat": {"id": 42},
                 "from": {"id": 100, "first_name": "Alice"},
-                "text": "Hello with HMAC",
+                "text": "Hello with valid token",
             },
         }
-        import json as _json
-        body = _json.dumps(payload).encode()
-        expected = _hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
         resp = await client.post(
             "/api/v1/channels/telegram/webhook",
-            content=body,
+            json=payload,
             headers={
-                "content-type": "application/json",
-                "X-Telegram-Bot-Api-Secret-Token": f"sha256={expected}",
+                "X-Telegram-Bot-Api-Secret-Token": secret,
             },
         )
         assert resp.status_code == 200
