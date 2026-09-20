@@ -11,7 +11,6 @@ then environment, then the built-in default.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,7 +18,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from openbot.config import Settings
+from openbot.config import TELEGRAM_TOKEN_RE, Settings
 from openbot.db.models import AppSetting, utcnow
 
 log = logging.getLogger(__name__)
@@ -156,7 +155,7 @@ def coerce(key: str, value: Any) -> Any:
     if minimum is not None and isinstance(value, int | float) and value < minimum:
         raise ValueError(f"{key} must be at least {minimum:g}")
     # --- field-specific format validation ----------------------------------------------------------------
-    if key == "telegram_bot_token" and value is not None and not re.match(r"^\d+:[A-Za-z0-9_-]{30,}$", str(value)):
+    if key == "telegram_bot_token" and value is not None and not TELEGRAM_TOKEN_RE.match(str(value)):
         raise ValueError(
             "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
         )
