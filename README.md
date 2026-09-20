@@ -320,6 +320,7 @@ name, if set, is the default the page shows and the value a reset returns to.
 | Model routing | `openrouter_provider_order` | Preferred OpenRouter upstream slugs (e.g. `z-ai`); each upstream has its own prompt cache. |
 | Model routing | `prompt_caching` (true), `direct_anthropic` (true) | Anthropic cache breakpoints on every call; send OpenRouter `anthropic/...` models straight to Anthropic when a key exists so caching covers tool results. |
 | Model retries | `model_retry_max_attempts` (3), `model_retry_base_delay` (2.0), `model_retry_backoff_cap` (60.0) | Retries a model call that failed with a transient upstream provider error (rate limit, 5xx, "model stopped before completing"); 0 or 1 attempts disables retries. Delays double from the base with jitter up to the cap. Auth/permission/invalid-request errors fail immediately. |
+| Telegram | `telegram_bot_token`, `telegram_webhook_url`, `telegram_webhook_secret` | Telegram Bot API token (secret: encrypted at rest, masked in API), public webhook URL for receiving updates, and shared secret for `X-Telegram-Bot-Api-Secret-Token` header validation. Token overrides the `TELEGRAM_BOT_TOKEN` env var when set via the UI. |
 
 ## Database
 

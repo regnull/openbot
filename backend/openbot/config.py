@@ -6,6 +6,9 @@ from typing import Annotated
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+# Shared regex for validating Telegram Bot API tokens (format: <bot_id>:<token>).
+TELEGRAM_TOKEN_RE = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_file_encoding="utf-8", extra="ignore")
@@ -130,7 +133,7 @@ class Settings(BaseSettings):
     def _validate_telegram_bot_token(cls, v):
         if v == "":
             return None
-        if v is not None and not re.match(r"^\d+:[A-Za-z0-9_-]{30,}$", str(v)):
+        if v is not None and not TELEGRAM_TOKEN_RE.match(str(v)):
             raise ValueError(
                 "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
             )
