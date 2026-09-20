@@ -32,6 +32,12 @@ def resolve_targets(*, sender: Actor | None, mentioned_handles: list[str], to_ha
         # fan-out so they can still address several bots in one message.
         actionable = [a for a in ordered if a.enabled and a.id != sender.id]
         ordered = actionable[:1]
+    # If a bot mentioned a handle that didn't resolve to any actionable bot (unknown
+    # handle, bot not in thread, disabled bot), fall back to the thread's default bot
+    # so the handoff isn't silently dropped.
+    if not ordered and sender is not None and sender.kind == "bot" and default_bot_id is not None:
+        default = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
+        ordered = [a for a in default if a.enabled and a.id != sender.id]
     if not ordered and not (to_handles or mentioned_handles):
         if sender.kind == "human" and default_bot_id is not None:
             ordered = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
