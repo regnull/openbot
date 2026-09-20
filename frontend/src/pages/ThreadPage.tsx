@@ -159,7 +159,7 @@ export default function ThreadPage() {
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         {notice && <p className="mb-1 text-xs text-amber-600">{notice}</p>}
         <ErrorText error={send.error} />
-        <Composer handles={handles} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />
+        <Composer handles={handles} autoFocus={!id} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />
       </div>
     </div>
   );

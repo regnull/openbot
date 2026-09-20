@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { applyMention, mentionQuery } from "../lib/mentions";
 import type { AttachmentIn } from "../api/client";
 import { Button } from "./ui";
@@ -48,7 +48,7 @@ async function decodeImages(files: File[]): Promise<{ attachments: AttachmentIn[
   return { attachments, skipped };
 }
 
-export default function Composer({ handles, onSend, disabled, hint }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string }) {
+export default function Composer({ handles, onSend, disabled, hint, autoFocus }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean }) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [sel, setSel] = useState(0);
@@ -57,6 +57,8 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
   const [skipped, setSkipped] = useState(false);
   const [dropped, setDropped] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  // Auto-focus the textarea on mount when requested (e.g. new thread).
+  useEffect(() => { if (autoFocus && ref.current) ref.current.focus(); }, [autoFocus]);
   const q = mentionQuery(text, caret);
   const options = q ? handles.filter((h) => h.startsWith(q.query)).slice(0, 6) : [];
   const pick = (h: string) => {
@@ -126,33 +128,33 @@ export default function Composer({ handles, onSend, disabled, hint }: { handles:
           ].filter(Boolean).join(" ")}
         </p>
       )}
-      <textarea
-        ref={ref}
-        rows={3}
-        value={text}
-        disabled={disabled}
-        placeholder={hint ?? "Message… use @handle to address a bot"}
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-950"
-        onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setSel(0); }}
-        onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
-        onPaste={(e) => {
-          const files = Array.from(e.clipboardData?.items ?? [], (it) => (it.kind === "file" ? it.getAsFile() : null))
-            .filter((f): f is File => !!f);
-          if (!files.length) return; // plain-text paste falls through unchanged
-          e.preventDefault();
-          attach(files);
-        }}
-        onKeyDown={(e) => {
-          if (options.length) {
-            if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => (s + 1) % options.length); return; }
-            if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => (s - 1 + options.length) % options.length); return; }
-            if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); pick(options[sel]); return; }
-          }
-          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
-        }}
-      />
-      <div className="mt-1 flex justify-end">
-        <Button onClick={() => void send()} disabled={disabled || sending || (!text.trim() && attachments.length === 0)}>
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={ref}
+          rows={3}
+          value={text}
+          disabled={disabled}
+          placeholder={hint ?? "Message… use @handle to address a bot"}
+          className="min-h-[5rem] flex-1 resize-none rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-950"
+          onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setSel(0); }}
+          onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
+          onPaste={(e) => {
+            const files = Array.from(e.clipboardData?.items ?? [], (it) => (it.kind === "file" ? it.getAsFile() : null))
+              .filter((f): f is File => !!f);
+            if (!files.length) return; // plain-text paste falls through unchanged
+            e.preventDefault();
+            attach(files);
+          }}
+          onKeyDown={(e) => {
+            if (options.length) {
+              if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => (s + 1) % options.length); return; }
+              if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => (s - 1 + options.length) % options.length); return; }
+              if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); pick(options[sel]); return; }
+            }
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
+          }}
+        />
+        <Button onClick={() => void send()} disabled={disabled || sending || (!text.trim() && attachments.length === 0)} className="h-10 shrink-0 self-end">
           {sending ? "Sending…" : "Send"}
         </Button>
       </div>
