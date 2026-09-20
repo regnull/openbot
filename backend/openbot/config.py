@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     log_file: Path = Path("logs/openbot.log")
     webhook_retry_delays: Annotated[list[float], NoDecode] = [5.0, 30.0, 120.0]
 
+    # Telegram channel
+    telegram_bot_token: str | None = None
+    telegram_webhook_url: str | None = None
+    telegram_webhook_secret: str | None = None
+
     @field_validator("cors_origins", "webhook_retry_delays", "openrouter_provider_order", mode="before")
     @classmethod
     def _split_csv(cls, v):
