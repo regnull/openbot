@@ -32,7 +32,7 @@ from openbot.db.models import (
     ThreadParticipant,
     utcnow,
 )
-from openbot.runtime import memory
+from openbot.runtime import activity, memory
 from openbot.runtime.caching import caching_middleware
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt
@@ -177,6 +177,12 @@ class Runner:
                 run.started_at = utcnow()
             if status in ("completed", "failed", "cancelled"):
                 run.finished_at = utcnow()
+            await activity.record(self.s, "run.status", session=session, level="error" if status == "failed" else "info",
+                                  thread_id=run.thread_id, actor_id=run.actor_id, run_id=run.id,
+                                  summary=f"run {status}" + (f": {error}" if error else "")
+                                          + (f" ({interrupt.get('kind')})" if interrupt else ""),
+                                  status=status, error=error, interrupt_kind=interrupt.get("kind") if interrupt else None,
+                                  usage=usage, langsmith_run_id=langsmith_run_id)
             await session.commit()
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             if status in ("running", "waiting_human", "completed", "failed", "cancelled"):
@@ -327,12 +333,19 @@ class Runner:
                 if source == "__interrupt__":
                     interrupt = normalize_interrupt(update[0].value)
                     seq = await self._record(run, seq, "interrupt", interrupt)
+                    await activity.record(self.s, "run.interrupt", thread_id=run.thread_id, actor_id=run.actor_id, run_id=run.id,
+                                          summary=f"agent paused for a {interrupt.get('kind')}: {activity.preview(interrupt, 200)}",
+                                          kind=interrupt.get("kind"), interrupt=activity.preview(interrupt))
                 elif source == "tools" and isinstance(update, dict):
                     for m in update.get("messages", []):
                         if isinstance(m, ToolMessage):
                             log.info("run %s tool_result %s status=%s len=%d: %s", run.id, m.name, m.status, len(_text(m)), _preview(_text(m)))
                             seq = await self._record(run, seq, "tool_result", {"tool_call_id": m.tool_call_id, "name": m.name,
                                                                               "status": m.status, "content": _text(m)[:TOOL_RESULT_CAP]})
+                            await activity.record(self.s, "run.tool_result", level="warning" if m.status == "error" else "debug",
+                                                  thread_id=run.thread_id, actor_id=run.actor_id, run_id=run.id,
+                                                  summary=f"{m.name} -> {m.status} ({len(_text(m))} chars)",
+                                                  name=m.name, status=m.status, chars=len(_text(m)), content=activity.preview(_text(m)))
                 elif isinstance(update, dict):
                     # "model" is the LLM turn; middleware nodes (e.g. the model-call limit ending the run with a
                     # notice) also emit AI messages, and those must become the reply too.
@@ -347,9 +360,17 @@ class Runner:
                         if inc is not None:
                             log.info("run %s model call %d: prompt=%d (cache_read=%d) completion=%d", run.id, usage["model_calls"],
                                      inc["prompt_tokens"], inc["cache_read_tokens"], inc["completion_tokens"])
+                        await activity.record(self.s, "run.model_call", level="debug", thread_id=run.thread_id, actor_id=run.actor_id,
+                                              run_id=run.id,
+                                              summary=f"model replied: {len(m.tool_calls)} tool call(s), {len(_text(m))} chars of text",
+                                              tool_calls=[tc["name"] for tc in m.tool_calls], text_chars=len(_text(m)), usage=inc,
+                                              calls_so_far=usage["model_calls"])
                         for tc in m.tool_calls:
                             log.info("run %s tool_call %s(%s)", run.id, tc["name"], _preview(tc["args"]))
                             seq = await self._record(run, seq, "tool_call", {"id": tc["id"], "name": tc["name"], "args": tc["args"]})
+                            await activity.record(self.s, "run.tool_call", level="debug", thread_id=run.thread_id, actor_id=run.actor_id,
+                                                  run_id=run.id, summary=f"{tc['name']}({activity.preview(tc['args'], 200)})",
+                                                  name=tc["name"], args=activity.preview(tc["args"]))
                         if _text(m):
                             final_text = _text(m)
                             seq = await self._record(run, seq, "text", {"content": final_text})
@@ -383,6 +404,13 @@ class Runner:
                      workspace_root, eff_provider, eff_model,
                      ",".join([*bot.bot.tool_names, *(t.get("name") or t["type"] for t in builtin_tools(bot.bot, self.s.settings))]) or "-")
             log.debug("run %s system prompt:\n%s", run.id, system_prompt)
+            await activity.record(self.s, "run.started", thread_id=thread.id, actor_id=bot.id, run_id=run.id,
+                                  summary=f"@{bot.handle} run started (hop {hop}, {eff_provider}/{eff_model})"
+                                          + (" resuming" if resume is not None else ""),
+                                  hop=hop, resume=resume is not None, provider=eff_provider, model=eff_model,
+                                  working_directory=thread.working_directory or ".", tool_root=str(workspace_root),
+                                  tools=list(bot.bot.tool_names), history_messages=len(inputs.get("messages", [])),
+                                  model_call_limit=self.model_call_limit(bot))
             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
                              thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap,
                              shell_output_cap=self.s.settings.shell_output_cap)

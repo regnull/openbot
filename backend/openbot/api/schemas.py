@@ -189,6 +189,22 @@ class RunEventOut(BaseModel):
     created_at: datetime
 
 
+class ActivityOut(BaseModel):
+    """One row of the activity log (runtime/activity.py)."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: datetime
+    level: str
+    event: str
+    summary: str
+    thread_id: str | None
+    actor_id: str | None
+    run_id: str | None
+    item_id: str | None
+    message_id: str | None
+    detail: dict[str, Any]
+
+
 class RunDetail(RunOut):
     events: list[RunEventOut] = []
 
@@ -316,6 +332,12 @@ class DirectPost(BaseModel):
         if not v.strip():
             raise ValueError("content must not be blank")
         return v
+
+
+class PurgeOut(BaseModel):
+    """What POST /bots/{id}/purge did: open runs cancelled and queued inbox items dropped."""
+    cancelled_runs: int
+    purged_items: int
 
 
 class MemoryOut(BaseModel):

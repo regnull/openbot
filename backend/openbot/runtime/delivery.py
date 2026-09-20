@@ -18,7 +18,7 @@ from openbot.db.models import (
     now_local,
     utcnow,
 )
-from openbot.runtime import memory
+from openbot.runtime import activity, memory
 from openbot.runtime.renaming import maybe_auto_rename
 from openbot.runtime.router import parse_mentions, resolve_targets
 from openbot.runtime.waiters import publish_waiters
@@ -73,11 +73,11 @@ async def _participants(session: AsyncSession, thread_id: str) -> list[ThreadPar
     return list((await session.execute(select(ThreadParticipant).where(ThreadParticipant.thread_id == thread_id))).scalars().all())
 
 
-async def notify(services, actor_ids: Iterable[str]) -> None:
+async def notify(services, items: Iterable[InboxItem]) -> None:
     if services.actors is None:
         return
-    for aid in dict.fromkeys(actor_ids):
-        await services.actors.notify(aid)
+    for aid, thread_id in dict.fromkeys((it.actor_id, it.thread_id) for it in items):
+        await services.actors.notify(aid, thread_id=thread_id)
 
 
 async def _publish_items(services, items: list[InboxItem]) -> None:
@@ -128,6 +128,10 @@ async def create_thread(services, session: AsyncSession, *, title: str, handles:
     for aid in ids:
         session.add(ThreadParticipant(thread_id=thread.id, actor_id=aid))
     await session.commit()
+    await activity.record(services, "thread.created", thread_id=thread.id,
+                          summary=f"thread {effective_title!r} created by @{created_by.handle if created_by else 'system'}",
+                          kind=kind, handles=list(handles), default_bot=effective_default if default_bot else None,
+                          working_directory=normalized_working_directory)
     return thread
 
 
@@ -173,14 +177,15 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
             session.add(ThreadParticipant(thread_id=thread_id, actor_id=bot.id))
             part_ids.append(bot.id)
     messages = [msg]
-    if targets and hop >= services.settings.max_bot_hops:
+    hop_limited = bool(targets) and hop >= services.settings.max_bot_hops
+    if hop_limited:
         if not thread.hop_limit_notified:
             notice = Message(thread_id=thread_id, sender_kind="system", sender_name="system", content=HOP_LIMIT_NOTICE,
                              created_at=utcnow(), meta={"kind": "hop_limit"})
             session.add(notice)
             messages.append(notice)
             thread.hop_limit_notified = True
-        targets = []
+        dropped, targets = targets, []
     await session.flush()
     items: list[InboxItem] = []
     for bot in targets:
@@ -194,6 +199,26 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
                 continue
             items.append(InboxItem(actor_id=a.id, thread_id=thread_id, kind="message", message_id=m.id))
     session.add_all(items)
+    await session.flush()       # the log rows below name the items by id
+    sender_handle = sender.handle if sender else "system"
+    addressed = [b.handle for b in targets]
+    await activity.record(services, "message.posted", session=session, thread_id=thread_id, message_id=msg.id, run_id=run_id,
+                          actor_id=sender.id if sender is not None and sender.kind == "bot" else None,
+                          summary=f"@{sender_handle} posted (hop {hop}) -> {', '.join('@' + h for h in addressed) or 'nobody'}",
+                          sender=sender_handle, sender_kind=msg.sender_kind, hop=hop, addressed=addressed, mentions=mentioned,
+                          to=to_handles, unaddressed=unaddressed, content=activity.preview(content))
+    if hop_limited:
+        await activity.record(services, "message.hop_limit", session=session, level="warning", thread_id=thread_id,
+                              message_id=msg.id, actor_id=sender.id if sender else None,
+                              summary=f"hop {hop} >= max_bot_hops {services.settings.max_bot_hops}: not delivered to "
+                                      f"{', '.join('@' + b.handle for b in dropped)}",
+                              dropped=[b.handle for b in dropped], hop=hop, max_bot_hops=services.settings.max_bot_hops)
+    for it in items:
+        owner = by_id.get(it.actor_id)
+        await activity.record(services, "inbox.enqueued", session=session, thread_id=thread_id, actor_id=it.actor_id,
+                              item_id=it.id, message_id=it.message_id,
+                              summary=f"queued {it.kind} for @{owner.handle if owner else it.actor_id}",
+                              kind=it.kind, owner_kind=owner.kind if owner else None)
     await session.commit()
     for m in messages:
         if services.store is not None:
@@ -203,7 +228,7 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
     # Delivering to a bot that cannot pick the items up right now is what makes the thread window
     # show its waiting state, so publish it in the same breath as the inbox items themselves.
     await publish_waiters(services, session, thread_id)
-    await notify(services, [it.actor_id for it in items])
+    await notify(services, items)
     await maybe_auto_rename(services, thread_id)
     return PostResult(message=msg, addressed=targets, unaddressed=unaddressed, items=items)
 
@@ -216,9 +241,16 @@ async def deliver_question(services, run: Run, interrupt: dict) -> list[InboxIte
                            payload={"run_id": run.id, "bot_id": run.actor_id, "interrupt": interrupt})
                  for a in actors.values() if a.kind in ("human", "external")]
         session.add_all(items)
+        await session.flush()
+        for it in items:
+            await activity.record(services, "question.delivered", session=session, thread_id=run.thread_id, actor_id=run.actor_id,
+                                  run_id=run.id, item_id=it.id,
+                                  summary=f"{interrupt.get('kind', 'question')} delivered to @{actors[it.actor_id].handle}",
+                                  recipient=actors[it.actor_id].handle, kind=interrupt.get("kind"),
+                                  interrupt=activity.preview(interrupt))
         await session.commit()
     await _publish_items(services, items)
-    await notify(services, [it.actor_id for it in items])
+    await notify(services, items)
     return items
 
 
@@ -226,6 +258,9 @@ async def ack_items(services, session: AsyncSession, items: list[InboxItem]) -> 
     threads = {it.thread_id for it in items}
     for it in items:
         it.status, it.processed_at = "done", utcnow()
+        await activity.record(services, "inbox.acked", session=session, thread_id=it.thread_id, actor_id=it.actor_id,
+                              item_id=it.id, run_id=it.run_id, message_id=it.message_id,
+                              summary=f"{it.kind} item acked", kind=it.kind)
     await session.commit()
     await _publish_items(services, items)
     # Acking queued mail settles it without a run, so the waiting state it produced has to go too.

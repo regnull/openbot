@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -12,7 +13,8 @@ from langgraph.types import Command
 from sqlalchemy import select
 
 from openbot.api.schemas import InboxItemOut, MessageOut, RunOut, to_json
-from openbot.db.models import Actor, InboxItem, Message, Run, utcnow
+from openbot.db.models import OPEN_RUN_STATUSES, Actor, InboxItem, Message, Run, utcnow
+from openbot.runtime import activity
 from openbot.runtime.delivery import post_message
 from openbot.runtime.waiters import publish_waiters, refresh_waiters_at_start
 
@@ -44,6 +46,7 @@ class _Worker:
         self._wake = asyncio.Event()
         self._task: asyncio.Task | None = None
         self.busy = False
+        self.drained = 0            # batches/items handled during the current drain, for the log
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._loop(), name=f"actor:{self.actor_id}")
@@ -61,14 +64,24 @@ class _Worker:
             await self._wake.wait()
             self._wake.clear()
             self.busy = True
+            self.drained = 0
+            started = time.monotonic()
+            await activity.record(self.system.s, "worker.drain.start", level="debug", actor_id=self.actor_id,
+                                  summary="worker woke up and is draining its inbox")
             try:
                 await self._drain()
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as e:
                 log.exception("actor %s worker error", self.actor_id)
+                await activity.record(self.system.s, "worker.error", level="error", actor_id=self.actor_id,
+                                      summary=f"worker loop crashed: {type(e).__name__}: {e}"[:500],
+                                      error=f"{type(e).__name__}: {e}"[:2000])
             finally:
                 self.busy = False
+                await activity.record(self.system.s, "worker.drain.end", level="debug", actor_id=self.actor_id,
+                                      summary=f"worker went idle after {self.drained} item(s) in {time.monotonic() - started:.1f}s",
+                                      drained=self.drained, seconds=round(time.monotonic() - started, 3))
 
     async def _drain(self) -> None:
         raise NotImplementedError
@@ -89,10 +102,22 @@ class BotActor(_Worker):
         # "processing", so picking first and then waiting on the semaphore left a phantom "queued"
         # run (blocking bot deletion, drawing an active card) for as long as the wait lasted.
         while True:
-            async with self.system.sem:
+            sem = self.system.sem
+            waiting = sem.locked()
+            if waiting:
+                await activity.record(self.system.s, "worker.slot.wait", level="warning", actor_id=self.actor_id,
+                                      summary=f"all {self.system.max_concurrent} run slots are busy; waiting for one",
+                                      max_concurrent_runs=self.system.max_concurrent)
+            t0 = time.monotonic()
+            async with sem:
+                if waiting:
+                    await activity.record(self.system.s, "worker.slot.acquired", actor_id=self.actor_id,
+                                          summary=f"got a run slot after {time.monotonic() - t0:.1f}s",
+                                          waited_seconds=round(time.monotonic() - t0, 3))
                 batch = await self._pick()
                 if batch is None:
                     return
+                self.drained += 1
                 await self._process(batch)
 
     async def _pick(self) -> Batch | None:
@@ -105,9 +130,21 @@ class BotActor(_Worker):
             parked = set((await session.execute(select(Run.thread_id).where(Run.actor_id == self.actor_id, Run.status == "waiting_human"))).scalars().all())
             chosen = next((i for i in items if not (i.kind == "message" and i.thread_id in parked)), None)
             if chosen is None:
+                # Everything queued is mail for threads parked on a question this bot asked: nothing can
+                # run until someone answers. The most common reason a thread "does nothing".
+                await activity.record(s, "worker.parked", session=session, level="warning", actor_id=self.actor_id,
+                                      summary=f"{len(items)} queued item(s) all belong to {len(parked)} thread(s) parked on a "
+                                              f"question; nothing to run until it is answered",
+                                      queued=len(items), queued_item_ids=[i.id for i in items],
+                                      thread_ids=sorted({i.thread_id for i in items}), parked_thread_ids=sorted(parked))
+                await session.commit()
                 return None
             if chosen.kind == "resume":
                 chosen.status = "processing"
+                await activity.record(s, "resume.picked", session=session, thread_id=chosen.thread_id, actor_id=self.actor_id,
+                                      run_id=chosen.run_id, item_id=chosen.id,
+                                      summary=f"picked the answer from @{chosen.payload.get('from') or '?'}; resuming the run",
+                                      queued=len(items), skipped_parked=len(parked))
                 await session.commit()
                 return Batch(run_id=chosen.run_id, items=[chosen], resume=chosen.payload.get("resume"))
             group = [i for i in items if i.kind == "message" and i.thread_id == chosen.thread_id]
@@ -116,6 +153,12 @@ class BotActor(_Worker):
             await session.flush()
             for i in group:
                 i.status, i.run_id = "processing", run.id
+            await activity.record(s, "run.created", session=session, thread_id=run.thread_id, actor_id=self.actor_id, run_id=run.id,
+                                  summary=f"picked {len(group)} item(s) into a new run; {len(items) - len(group)} left queued",
+                                  item_ids=[i.id for i in group], message_ids=[i.message_id for i in group],
+                                  queued_before=len(items), left_queued=len(items) - len(group),
+                                  other_threads_queued=sorted({i.thread_id for i in items if i.thread_id != run.thread_id}),
+                                  parked_thread_ids=sorted(parked))
             await session.commit()
             await s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             await s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": True})
@@ -127,19 +170,31 @@ class BotActor(_Worker):
     async def _process(self, batch: Batch) -> None:
         s = self.system.s
         cmd = Command(resume=batch.resume) if batch.resume is not None else None
+        thread_id = batch.items[0].thread_id if batch.items else None
         self.current_run_id = batch.run_id
+        await activity.record(s, "run.dispatched", thread_id=thread_id, actor_id=self.actor_id, run_id=batch.run_id,
+                              summary="handed to the runner" + (" (resume)" if batch.resume is not None else ""),
+                              resume=batch.resume is not None, item_ids=[i.id for i in batch.items])
+        started = time.monotonic()
         self.current_task = asyncio.create_task(s.runner.execute(batch.run_id, resume=cmd))
         status = "done"
+        crash: str | None = None
         try:
             await self.current_task
         except asyncio.CancelledError:
             if asyncio.current_task().cancelling():
                 raise
             status = "cancelled"
-        except Exception:
+        except Exception as e:
             log.exception("run %s crashed", batch.run_id)
+            crash = f"{type(e).__name__}: {e}"[:2000]
         finally:
             self.current_task, self.current_run_id = None, None
+            await activity.record(s, "run.finished", level="error" if crash else "info", thread_id=thread_id,
+                                  actor_id=self.actor_id, run_id=batch.run_id,
+                                  summary=f"runner returned after {time.monotonic() - started:.1f}s; settling items as {status}"
+                                          + (f"; runner crashed: {crash}" if crash else ""),
+                                  status=status, seconds=round(time.monotonic() - started, 3), crash=crash)
             rows: list[InboxItem] = []
             try:
                 async with s.session_factory() as session:
@@ -149,6 +204,10 @@ class BotActor(_Worker):
                                                                           InboxItem.status == "processing"))).scalars().all()
                     for i in rows:
                         i.status, i.processed_at = status, utcnow()
+                    await activity.record(s, "inbox.settled", session=session, thread_id=thread_id, actor_id=self.actor_id,
+                                          run_id=batch.run_id, summary=f"{len(rows)} item(s) marked {status}",
+                                          status=status, item_ids=[i.id for i in rows],
+                                          already_settled=[i.id for i in batch.items if i.id not in {r.id for r in rows}])
                     await session.commit()
                 for i in rows:
                     await s.bus.publish("inbox.updated", i.thread_id, to_json(InboxItemOut, i))
@@ -174,6 +233,9 @@ class ExternalActor(_Worker):
             if item is None:
                 return None
             item.status = "processing"
+            await activity.record(self.system.s, "inbox.picked", session=session, thread_id=item.thread_id, actor_id=self.actor_id,
+                                  item_id=item.id, message_id=item.message_id, run_id=item.run_id,
+                                  summary=f"picked {item.kind} item for webhook delivery", kind=item.kind)
             await session.commit()
             return item
 
@@ -202,6 +264,10 @@ class ExternalActor(_Worker):
                 ok, last_error = r.status_code < 300, None if r.status_code < 300 else f"HTTP {r.status_code}"
             except httpx.HTTPError as e:
                 ok, last_error = False, f"{type(e).__name__}: {e}"
+            await activity.record(s, "webhook.attempt", level="info" if ok else "warning", thread_id=item.thread_id,
+                                  actor_id=self.actor_id, item_id=item.id, run_id=item.run_id,
+                                  summary=f"webhook attempt {attempt}/{len(delays)}: {'ok' if ok else last_error}",
+                                  attempt=attempt, of=len(delays), ok=ok, error=last_error)
             await self._update(item.id, "done" if ok else "processing", attempt, last_error)
             if ok:
                 return
@@ -214,6 +280,11 @@ class ExternalActor(_Worker):
             it.status, it.attempts, it.last_error = status, attempts, error
             if status in ("done", "failed"):
                 it.processed_at = utcnow()
+                await activity.record(s, "inbox.settled", session=session, level="error" if status == "failed" else "info",
+                                      thread_id=it.thread_id, actor_id=self.actor_id, item_id=it.id, run_id=it.run_id,
+                                      summary=f"webhook item marked {status} after {attempts} attempt(s)"
+                                              + (f": {error}" if error else ""),
+                                      status=status, item_ids=[it.id], attempts=attempts, error=error)
             await session.commit()
         if status in ("done", "failed"):
             await s.bus.publish("inbox.updated", it.thread_id, to_json(InboxItemOut, it))
@@ -222,6 +293,7 @@ class ExternalActor(_Worker):
 class ActorSystem:
     def __init__(self, services, max_concurrent: int) -> None:
         self.s = services
+        self.max_concurrent = max_concurrent
         self.sem = asyncio.Semaphore(max_concurrent)
         self._workers: dict[str, _Worker] = {}
         self._started = False
@@ -240,16 +312,32 @@ class ActorSystem:
             stale = select(Run).where(Run.status.in_(["running", "queued"]))
             failed_ids: list[str] = []
             for run in (await session.execute(stale)).scalars():
+                was = run.status
                 run.status, run.error, run.finished_at = "failed", "server restarted", utcnow()
                 failed_ids.append(run.id)
                 bot = await session.get(Actor, run.actor_id)
                 interrupted.append((run.thread_id, bot.handle if bot else "bot"))
+                settled = []
                 for it in (await session.execute(select(InboxItem).where(InboxItem.run_id == run.id, InboxItem.status == "processing"))).scalars():
                     it.status, it.processed_at = "done", utcnow()
+                    settled.append(it.id)
+                await activity.record(self.s, "recovery.run_failed", session=session, level="warning", thread_id=run.thread_id,
+                                      actor_id=run.actor_id, run_id=run.id,
+                                      summary=f"run was {was} at the last shutdown; marked failed, {len(settled)} item(s) settled",
+                                      previous_status=was, item_ids=settled)
+            requeued = []
             for it in (await session.execute(select(InboxItem).where(InboxItem.status == "processing"))).scalars():
                 it.status = "queued"
+                requeued.append(it.id)
+            if requeued:
+                await activity.record(self.s, "recovery.items_requeued", session=session, level="warning",
+                                      summary=f"{len(requeued)} item(s) were processing at the last shutdown; requeued",
+                                      item_ids=requeued)
             await session.commit()
             pending = (await session.execute(select(InboxItem.actor_id).where(InboxItem.status == "queued").distinct())).scalars().all()
+        await activity.record(self.s, "system.started",
+                              summary=f"actor system started: {len(failed_ids)} interrupted run(s), {len(pending)} actor(s) with queued mail",
+                              interrupted_runs=failed_ids, pending_actor_ids=list(pending), max_concurrent_runs=self.max_concurrent)
         for run_id in failed_ids:
             await self._drop_checkpoint(run_id)
         # A failed run draws no card in the thread, so without this a run killed by a restart leaves
@@ -273,10 +361,11 @@ class ActorSystem:
         for w in workers:
             await w.stop()
 
-    async def notify(self, actor_id: str) -> None:
+    async def notify(self, actor_id: str, thread_id: str | None = None) -> None:
         if not self._started:
             return
         w = self._workers.get(actor_id)
+        created = False
         if w is None:
             async with self.s.session_factory() as session:
                 actor = await session.get(Actor, actor_id)
@@ -289,28 +378,84 @@ class ActorSystem:
                 w = BotActor(self, actor_id) if actor.kind == "bot" else ExternalActor(self, actor_id)
                 self._workers[actor_id] = w
                 w.start()
+                created = True
+        busy, already = w.busy, w._wake.is_set()
         w.wake()
+        state = ("started" if created else "already busy; will re-check its inbox when done" if busy
+                 else "already awake" if already else "woken")
+        await activity.record(self.s, "worker.notified", level="debug", thread_id=thread_id, actor_id=actor_id,
+                              summary=f"worker {state}", worker_created=created, busy=busy, already_awake=already,
+                              current_run_id=getattr(w, "current_run_id", None))
 
     async def cancel_run(self, run_id: str) -> bool:
+        async with self.s.session_factory() as session:
+            run = await session.get(Run, run_id)
+        if run is None:
+            return False
         for w in self._workers.values():
             if isinstance(w, BotActor) and w.current_run_id == run_id and w.current_task:
+                await activity.record(self.s, "run.cancel_requested", level="warning", thread_id=run.thread_id,
+                                      actor_id=run.actor_id, run_id=run_id, summary="cancelling the live run", live=True)
                 w.current_task.cancel()
                 return True
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
             if run is None or run.status not in ("queued", "waiting_human"):
                 return False
+            was = run.status
             run.status, run.finished_at = "cancelled", utcnow()
             items = (await session.execute(select(InboxItem).where(InboxItem.run_id == run_id, InboxItem.status.in_(["queued", "processing"])))).scalars().all()
             for i in items:
                 i.status, i.processed_at = "cancelled", utcnow()
+            await activity.record(self.s, "run.cancel_requested", session=session, level="warning", thread_id=run.thread_id,
+                                  actor_id=run.actor_id, run_id=run_id,
+                                  summary=f"cancelled the {was} run; {len(items)} item(s) cancelled",
+                                  live=False, previous_status=was, item_ids=[i.id for i in items])
+            # A live run's status changes go through the runner; this one ends here, so say so the same way.
+            await activity.record(self.s, "run.status", session=session, thread_id=run.thread_id, actor_id=run.actor_id,
+                                  run_id=run_id, summary="run cancelled", status="cancelled", error=None,
+                                  interrupt_kind=None, usage=None, langsmith_run_id=None)
             await session.commit()
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             await self.s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": False})
             await publish_waiters(self.s, session, run.thread_id)
         await self._drop_checkpoint(run_id)
-        await self.notify(run.actor_id)     # parked thread may now have waiting mail
+        await self.notify(run.actor_id, thread_id=run.thread_id)     # parked thread may now have waiting mail
         return True
+
+    async def purge(self, actor_id: str) -> dict[str, int]:
+        """Stop everything a bot is doing and is about to do: every queued inbox item is cancelled first
+        (so the worker finds nothing to pick next), then every open run (queued, waiting on a question,
+        or live). Waits for a live run to actually end, bounded, so the caller sees the settled state.
+        Returns the counts; a bot with nothing going on gives zeros."""
+        async with self.s.session_factory() as session:
+            queued = (await session.execute(select(InboxItem).where(InboxItem.actor_id == actor_id, InboxItem.status == "queued"))).scalars().all()
+            for i in queued:
+                i.status, i.processed_at = "cancelled", utcnow()
+            open_runs = (await session.execute(select(Run).where(Run.actor_id == actor_id, Run.status.in_(OPEN_RUN_STATUSES)))).scalars().all()
+            await activity.record(self.s, "inbox.purged", session=session, level="warning", actor_id=actor_id,
+                                  summary=f"operator purged the inbox: {len(queued)} queued item(s) cancelled, "
+                                          f"{len(open_runs)} open run(s) to cancel",
+                                  purged=len(queued), item_ids=[i.id for i in queued], thread_ids=sorted({i.thread_id for i in queued}),
+                                  run_ids=[r.id for r in open_runs], run_statuses={r.id: r.status for r in open_runs})
+            await session.commit()
+        for i in queued:
+            await self.s.bus.publish("inbox.updated", i.thread_id, to_json(InboxItemOut, i))
+        cancelled, live = 0, []
+        for run in open_runs:
+            w = self._workers.get(actor_id)
+            task = w.current_task if isinstance(w, BotActor) and w.current_run_id == run.id else None
+            if await self.cancel_run(run.id):
+                cancelled += 1
+                if task is not None:
+                    live.append(task)
+        if live:
+            await asyncio.wait(live, timeout=10)
+        async with self.s.session_factory() as session:
+            for thread_id in sorted({i.thread_id for i in queued}):
+                await publish_waiters(self.s, session, thread_id)
+        await self.s.bus.publish("bots.updated", None, {"id": actor_id, "active": False})
+        return {"cancelled_runs": cancelled, "purged_items": len(queued)}
 
     async def _drop_checkpoint(self, run_id: str) -> None:
         """A run that ends outside the runner (cancelled while waiting, or failed by a restart) still
@@ -325,9 +470,14 @@ class ActorSystem:
             item = InboxItem(actor_id=run.actor_id, thread_id=run.thread_id, kind="resume", run_id=run.id,
                              payload={"resume": value, "from": from_actor.handle if from_actor else None})
             session.add(item)
+            await session.flush()
+            await activity.record(self.s, "inbox.enqueued", session=session, thread_id=run.thread_id, actor_id=run.actor_id,
+                                  run_id=run.id, item_id=item.id,
+                                  summary=f"queued resume from @{from_actor.handle if from_actor else '?'} for the waiting run",
+                                  kind="resume", value=activity.preview(value))
             await session.commit()
         await self.s.bus.publish("inbox.updated", item.thread_id, to_json(InboxItemOut, item))
-        await self.notify(run.actor_id)
+        await self.notify(run.actor_id, thread_id=run.thread_id)
         return item
 
     async def wait_idle(self, timeout: float = 30.0) -> None:
