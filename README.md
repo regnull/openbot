@@ -13,6 +13,8 @@ when mail arrives, runs an LLM-driven agent loop with tools and memory, and repl
 delivers new mail and can wake the next bot. This uniform model is what lets a human, a bot, and a
 webhook-driven external system all participate in the same conversation the same way.
 
+![OpenBot Screenshot](docs/images/openbot-screenshot.png)
+
 ## Features
 
 - **Actor model runtime**: bots, humans, and external systems are all actors with inboxes; one
