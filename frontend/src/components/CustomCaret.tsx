@@ -31,11 +31,8 @@ export default function CustomCaret() {
       pointerEvents: "none",
       zIndex: "9999",
       borderRadius: "1px",
-      opacity: "0",
+      display: "none",
     });
-    if (!REDUCED_MOTION) {
-      overlay.style.animation = "caret-fade 1s ease-in-out infinite";
-    }
     document.body.appendChild(overlay);
 
     // ── State ──────────────────────────────────────────────────────────────
@@ -43,13 +40,32 @@ export default function CustomCaret() {
     let raf = 0;
 
     // ── Helpers ────────────────────────────────────────────────────────────
+    const show = () => {
+      overlay.style.display = "";
+      if (!REDUCED_MOTION) {
+        // Restart the CSS fade animation so the caret blinks fresh on each
+        // position update (keystroke / click).
+        overlay.style.animation = "none";
+        // Force a reflow so the browser registers the reset before we
+        // re-enable the animation.
+        void overlay.offsetHeight;
+        overlay.style.animation = "";
+      } else {
+        overlay.style.opacity = "1";
+      }
+    };
+
+    const hide = () => {
+      overlay.style.display = "none";
+    };
+
     const update = () => {
       raf = 0;
       if (!active) return;
 
       const m = getCaretMetrics(active);
       if (!m) {
-        overlay.style.opacity = "0";
+        hide();
         return;
       }
 
@@ -57,12 +73,7 @@ export default function CustomCaret() {
       overlay.style.left = `${m.left}px`;
       overlay.style.height = `${m.height}px`;
       overlay.style.backgroundColor = m.color;
-
-      // When reduced-motion is preferred, drive opacity imperatively instead
-      // of relying on the CSS animation.
-      if (REDUCED_MOTION) {
-        overlay.style.opacity = "1";
-      }
+      show();
     };
 
     const schedule = () => {
@@ -84,10 +95,11 @@ export default function CustomCaret() {
     };
 
     const onFocusOut = (e: FocusEvent) => {
-      if (e.target !== active) return;
+      // `active` is reassigned by the listeners, so TS cannot narrow it through the comparison alone.
+      if (!active || e.target !== active) return;
       active.removeEventListener("scroll", schedule);
       active = null;
-      overlay.style.opacity = "0";
+      hide();
     };
 
     const onInput = () => {
@@ -118,6 +130,7 @@ export default function CustomCaret() {
       document.removeEventListener("mouseup", onInput);
       document.removeEventListener("selectionchange", onSelectionChange);
       window.removeEventListener("resize", onResize);
+      active?.removeEventListener("scroll", schedule);
       cancelAnimationFrame(raf);
       overlay.remove();
     };
