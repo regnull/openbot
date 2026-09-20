@@ -758,3 +758,139 @@ async def test_delivery_listener_start_stop_idempotent(services):
     await listener.stop()
     await listener.stop()  # second stop is a no-op
     # No exception means success
+
+
+# ---------------------------------------------------------------------------
+# HTTP endpoint tests (via ASGI test client)
+# ---------------------------------------------------------------------------
+
+
+class TestWebhookEndpoint:
+    """Tests for POST /api/v1/channels/telegram/webhook."""
+
+    @pytest.mark.asyncio
+    async def test_webhook_returns_200_for_valid_message(self, client):
+        payload = {
+            "update_id": 1000,
+            "message": {
+                "message_id": 1,
+                "chat": {"id": 42},
+                "from": {"id": 100, "first_name": "Alice", "username": "alice"},
+                "text": "Hello bot",
+            },
+        }
+        resp = await client.post(
+            "/api/v1/channels/telegram/webhook",
+            json=payload,
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_webhook_returns_200_for_command(self, client):
+        payload = {
+            "update_id": 1001,
+            "message": {
+                "message_id": 2,
+                "chat": {"id": 42},
+                "from": {"id": 100, "first_name": "Alice"},
+                "text": "/start",
+            },
+        }
+        resp = await client.post(
+            "/api/v1/channels/telegram/webhook",
+            json=payload,
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_webhook_returns_200_for_non_message_update(self, client):
+        """Updates without a message (e.g. callback queries) should be acked."""
+        payload = {"update_id": 1002, "callback_query": {"data": "btn1"}}
+        resp = await client.post(
+            "/api/v1/channels/telegram/webhook",
+            json=payload,
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_webhook_rejects_invalid_json(self, client):
+        resp = await client.post(
+            "/api/v1/channels/telegram/webhook",
+            content=b"not json",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_webhook_rejects_bad_hmac_when_secret_configured(self, client, services):
+        """When a webhook secret is set, requests without a valid HMAC are rejected."""
+        services.settings = services.settings.model_copy(
+            update={"telegram_webhook_secret": "test-secret-123"}
+        )
+        payload = {
+            "update_id": 1003,
+            "message": {
+                "message_id": 3,
+                "chat": {"id": 42},
+                "from": {"id": 100, "first_name": "Alice"},
+                "text": "Hello",
+            },
+        }
+        resp = await client.post(
+            "/api/v1/channels/telegram/webhook",
+            json=payload,
+        )
+        assert resp.status_code == 403
+        assert "signature" in resp.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_webhook_accepts_valid_hmac(self, client, services):
+        """When a webhook secret is set, a valid HMAC passes validation."""
+        import hashlib
+        import hmac as _hmac
+
+        secret = "test-secret-456"
+        services.settings = services.settings.model_copy(
+            update={"telegram_webhook_secret": secret}
+        )
+        payload = {
+            "update_id": 1004,
+            "message": {
+                "message_id": 4,
+                "chat": {"id": 42},
+                "from": {"id": 100, "first_name": "Alice"},
+                "text": "Hello with HMAC",
+            },
+        }
+        import json as _json
+        body = _json.dumps(payload).encode()
+        expected = _hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        resp = await client.post(
+            "/api/v1/channels/telegram/webhook",
+            content=body,
+            headers={
+                "content-type": "application/json",
+                "X-Telegram-Bot-Api-Secret-Token": f"sha256={expected}",
+            },
+        )
+        assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_test_endpoint(client):
+    """GET /api/v1/channels/telegram/webhook/test returns ok."""
+    resp = await client.post(
+        "/api/v1/channels/telegram/webhook/test",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_status_endpoint(client, services):
+    """GET /api/v1/channels/telegram/status reflects config."""
+    resp = await client.get("/api/v1/channels/telegram/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "configured" in body
+    assert body["configured"] is False  # no token in test

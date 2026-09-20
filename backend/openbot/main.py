@@ -20,6 +20,7 @@ from openbot.api import actors, bots, events, inbox, messages, providers, runs, 
 from openbot.api import mcp as mcp_api
 from openbot.api import settings as settings_api
 from openbot.api import setup as setup_api
+from openbot.api import telegram as telegram_api
 from openbot.api import workspace as workspace_api
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
@@ -116,7 +117,7 @@ async def start_background(services: Services) -> None:
 
 async def stop_background(services: Services) -> None:
     # Stop the Telegram delivery listener before actors (so no new deliveries start).
-    listener = getattr(services, '_telegram_listener', None)
+    listener = services._telegram_listener
     if listener is not None:
         await listener.stop()
     if services.actors is not None:
@@ -258,6 +259,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         api.include_router(r)
     app.include_router(public)
     app.include_router(api)
+    # Telegram webhook must be public (Telegram sends updates without our API key).
+    # Mounted at /api/v1/channels/telegram/* — no API-key guard.
+    app.include_router(telegram_api.router, prefix="/api/v1")
 
     dist = settings.frontend_dist
     if dist and Path(dist).is_dir():

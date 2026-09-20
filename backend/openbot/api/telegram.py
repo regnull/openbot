@@ -6,6 +6,7 @@ Bot responses are delivered asynchronously via the TelegramDeliveryListener.
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -14,6 +15,7 @@ from openbot.channels.telegram import (
     deliver_to_telegram,
     parse_telegram_update,
     process_telegram_message,
+    validate_webhook_signature,
 )
 from openbot.services import Services
 
@@ -27,25 +29,34 @@ async def telegram_webhook(request: Request):
     """Handle incoming Telegram webhook updates.
 
     Flow:
-        1. Parse the Telegram update.
-        2. For commands (/new, /start, /help): process synchronously and send the
+        1. Validate HMAC signature (if a webhook secret is configured).
+        2. Parse the Telegram update.
+        3. For commands (/new, /start, /help): process synchronously and send the
            response immediately.
-        3. For regular messages: post to the thread and return 200. The bot response
+        4. For regular messages: post to the thread and return 200. The bot response
            is generated asynchronously and delivered by TelegramDeliveryListener.
     """
+    services: Services = request.app.state.services
+    if services is None:
+        raise HTTPException(500, "Services not initialized")
+
+    # --- HMAC signature validation ---
+    body = await request.body()
+    secret = services.settings.telegram_webhook_secret
+    if secret:
+        signature = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if not validate_webhook_signature(secret, body, signature):
+            raise HTTPException(403, "Invalid webhook signature")
+
     try:
-        data = await request.json()
-    except ValueError:
+        data = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
         raise HTTPException(400, "Invalid JSON")
 
     update = parse_telegram_update(data)
     if update is None:
         # Return 200 to acknowledge the update even if we can't process it
         return Response(status_code=200)
-
-    services: Services = request.app.state.services
-    if services is None:
-        raise HTTPException(500, "Services not initialized")
 
     session_factory = services.session_factory
 
