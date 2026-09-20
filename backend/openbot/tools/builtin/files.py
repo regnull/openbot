@@ -1,3 +1,4 @@
+import asyncio
 import itertools
 import os
 import tempfile
@@ -67,12 +68,121 @@ async def write_file(path: str, content: str, runtime: ToolRuntime[RunContext]) 
         return f"error: {e}"
 
 
-@tool
-async def patch_file(path: str, edits: list[dict[str, str]], runtime: ToolRuntime[RunContext]) -> str:
-    """Apply exact, unambiguous text replacements to an existing UTF-8 file atomically.
+async def _apply_patch_command(
+    patch_content: str,
+    path: str | None,
+    dry_run: bool,
+    backup: bool,
+    strip_level: int,
+    runtime: ToolRuntime[RunContext],
+    timeout: float = 30.0,
+) -> str:
+    """Apply a unified diff patch using the system ``patch`` command.
 
-    Each edit must contain ``old`` and ``new`` strings. Every old string must occur exactly once
-    in the original file; all validation happens before the file is replaced."""
+    The diff is piped to ``patch`` via stdin.  *path* (optional) is forwarded as the positional
+    file argument so that ``patch`` knows which file(s) to operate on.
+
+    Supported options:
+    * ``dry_run``  – ``--dry-run`` – validate the patch without writing.
+    * ``backup``   – ``--backup``  – keep originals as ``*.orig``.
+    * ``strip_level`` – ``-p<N>``  – leading path-component strip (default 1).
+    * ``timeout``  – Maximum seconds to wait for the subprocess (default 30).
+    """
+    if not patch_content.strip():
+        return "error: patch_content is empty"
+    if strip_level < 0:
+        return f"error: strip_level must be >= 0, got {strip_level}"
+
+    cmd = ["patch"]
+    cmd.append(f"-p{strip_level}")
+    if dry_run:
+        cmd.append("--dry-run")
+    if backup:
+        cmd.append("--backup")
+    if path:
+        # --posix keeps behaviour predictable across platforms.
+        cmd.extend(["--posix", path])
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(runtime.context.workspace_root),
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=patch_content.encode("utf-8")),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        return f"error: patch command timed out after {timeout}s"
+
+    stdout_text = stdout.decode(errors="replace").strip()
+    stderr_text = stderr.decode(errors="replace").strip()
+
+    if proc.returncode != 0:
+        details = stderr_text or stdout_text or "(no output)"
+        return f"error: patch failed (exit {proc.returncode}): {details}"
+
+    # Build a human-friendly summary from patch's stdout (e.g. "patching file foo.txt").
+    summary = stdout_text or "patch applied"
+    return summary
+
+
+@tool
+async def patch_file(
+    path: str,
+    runtime: ToolRuntime[RunContext],
+    edits: list[dict[str, str]] | None = None,
+    diff_input: str | None = None,
+    dry_run: bool = False,
+    backup: bool = False,
+    strip_level: int = 1,
+) -> str:
+    """Apply exact text replacements or a unified diff patch to files.
+
+    **Mode 1 – exact replacements (original behaviour):**
+    Pass *path* and *edits* (a list of ``{"old": ..., "new": ...}`` dicts).
+    Each ``old`` string must occur exactly once in the file; all validation happens
+    before the file is replaced.
+
+    **Mode 2 – unified diff via the system ``patch`` command:**
+    Pass *path* and *diff_input* (a unified-diff string).  The diff is piped to the
+    ``patch`` command.  Use *dry_run*, *backup* and *strip_level* to control
+    the command options.
+
+    Exactly one of *edits* or *diff_input* must be provided."""
+    # ── Mode selection ──────────────────────────────────────────────────
+    has_edits = edits is not None and len(edits) > 0
+    has_diff = diff_input is not None and len(diff_input) > 0
+
+    if has_edits and has_diff:
+        return "error: provide either 'edits' or 'diff_input', not both"
+    if not has_edits and not has_diff:
+        return "error: either 'edits' or 'diff_input' must be provided"
+
+    # ── Mode 2: unified diff via system patch ───────────────────────────
+    if has_diff:
+        try:
+            p = resolve_in_workspace(runtime.context.workspace_root, path)
+        except ValueError as e:
+            return f"error: {e}"
+        return await _apply_patch_command(
+            patch_content=diff_input,  # type: ignore[arg-type]
+            path=str(p) if p.is_file() else None,
+            dry_run=dry_run,
+            backup=backup,
+            strip_level=strip_level,
+            runtime=runtime,
+        )
+
+    # ── Mode 1: exact replacements (original logic) ─────────────────────
+    assert edits is not None  # for type-checker
     try:
         p = resolve_in_workspace(runtime.context.workspace_root, path)
         if not p.is_file():
