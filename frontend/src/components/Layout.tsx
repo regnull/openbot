@@ -1,39 +1,64 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Api } from "../api/client";
 import { useBusEvents } from "../api/sse";
 import { shouldRefreshBots } from "../lib/botActivity";
 import { isThreadActive, recentThreads, threadLabel } from "../lib/recentThreads";
 import BotActivityIndicator from "./BotActivityIndicator";
 import BotIcon from "./BotIcon";
+import ThemeToggle from "./ThemeToggle";
+import { BotsIcon, InboxIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SettingsIcon, ThreadsIcon } from "./icons";
 
 // ── Local-storage helpers ─────────────────────────────────────────────────────
 const LS_WIDTH = "openbot:sidebar-width";
 const LS_COLLAPSED = "openbot:sidebar-collapsed";
 
-const MIN_WIDTH = 160;
+const MIN_WIDTH = 180;
 const MAX_WIDTH = 360;
-const COLLAPSED_WIDTH = 48;
+const COLLAPSED_WIDTH = 52;
 
 function readStoredWidth(): number {
   try {
     const v = Number(localStorage.getItem(LS_WIDTH));
-    return Number.isFinite(v) && v >= MIN_WIDTH && v <= MAX_WIDTH ? v : 208; // 208 = w-52
-  } catch { return 208; }
+    return Number.isFinite(v) && v >= MIN_WIDTH && v <= MAX_WIDTH ? v : 232;
+  } catch { return 232; }
 }
 
 function readStoredCollapsed(): boolean {
   try { return localStorage.getItem(LS_COLLAPSED) === "1"; } catch { return false; }
 }
 
+/** Below this width the sidebar is an icon rail and the full list opens as a drawer over the page. */
+const NARROW = "(max-width: 767px)";
+function useNarrow(): boolean {
+  return useSyncExternalStore(
+    (cb) => { const mq = window.matchMedia(NARROW); mq.addEventListener("change", cb); return () => mq.removeEventListener("change", cb); },
+    () => window.matchMedia(NARROW).matches,
+    () => false,
+  );
+}
+
 // ── Style helpers ─────────────────────────────────────────────────────────────
-const link = ({ isActive }: { isActive: boolean }) =>
-  `block rounded-md px-3 py-2 text-sm ${isActive ? "bg-zinc-200 font-medium dark:bg-zinc-800" : "hover:bg-zinc-100 dark:hover:bg-zinc-900"}`;
-const linkIcon = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center justify-center rounded-md p-2 ${isActive ? "bg-zinc-200 font-medium dark:bg-zinc-800" : "hover:bg-zinc-100 dark:hover:bg-zinc-900"}`;
-const item = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${isActive ? "bg-zinc-200 font-medium dark:bg-zinc-800" : "hover:bg-zinc-100 dark:hover:bg-zinc-900"}`;
+/** Nav rows: the active one is marked by a short accent bar in the gutter, not by a filled pill. */
+const row = ({ isActive }: { isActive: boolean }) =>
+  `relative flex h-8 items-center gap-2.5 rounded-ui px-2 text-[13px] leading-none transition-colors ${
+    isActive
+      ? "bg-sunken font-medium text-fg before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-0.5 before:rounded-full before:bg-accent"
+      : "text-muted hover:bg-sunken/60 hover:text-fg"}`;
+const iconRow = ({ isActive }: { isActive: boolean }) =>
+  `relative flex h-9 w-9 items-center justify-center rounded-ui transition-colors ${
+    isActive
+      ? "bg-sunken text-fg before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-full before:bg-accent"
+      : "text-muted hover:bg-sunken/60 hover:text-fg"}`;
+const SectionLabel = ({ children }: { children: string }) => <div className="mb-1 px-2 text-[11px] leading-4 text-faint">{children}</div>;
+
+const NAV = [
+  { to: "/inbox", label: "Inbox", Icon: InboxIcon, end: false },
+  { to: "/threads", label: "Threads", Icon: ThreadsIcon, end: true },
+  { to: "/bots", label: "Bots", Icon: BotsIcon, end: true },
+  { to: "/settings", label: "Settings", Icon: SettingsIcon, end: false },
+] as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function Layout() {
@@ -59,20 +84,30 @@ export default function Layout() {
 
   // ── Sidebar width & collapse state ──────────────────────────────────────────
   const [width, setWidth] = useState(readStoredWidth);
-  const [collapsed, setCollapsed] = useState(readStoredCollapsed);
+  const [storedCollapsed, setCollapsed] = useState(readStoredCollapsed);
   const dragging = useRef(false);
+  // On a phone the sidebar is always a rail; "expand" opens it as a drawer. The drawer remembers the
+  // path it was opened on, so any navigation closes it without an effect.
+  const narrow = useNarrow();
+  const { pathname } = useLocation();
+  const [drawerPath, setDrawerPath] = useState<string | null>(null);
+  const drawerOpen = drawerPath === pathname;
+  const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
+  const collapsed = narrow ? !drawerOpen : storedCollapsed;
+  const expand = () => (narrow ? setDrawerOpen(true) : setCollapsed(false));
+  const collapse = () => (narrow ? setDrawerOpen(false) : setCollapsed(true));
 
   // Persist width (only when expanded).
   useEffect(() => {
-    if (!collapsed) {
+    if (!storedCollapsed) {
       try { localStorage.setItem(LS_WIDTH, String(width)); } catch { /* noop */ }
     }
-  }, [width, collapsed]);
+  }, [width, storedCollapsed]);
 
   // Persist collapsed state.
   useEffect(() => {
-    try { localStorage.setItem(LS_COLLAPSED, collapsed ? "1" : "0"); } catch { /* noop */ }
-  }, [collapsed]);
+    try { localStorage.setItem(LS_COLLAPSED, storedCollapsed ? "1" : "0"); } catch { /* noop */ }
+  }, [storedCollapsed]);
 
   // ── Drag-resize logic ───────────────────────────────────────────────────────
   const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -89,149 +124,135 @@ export default function Layout() {
 
   const onPointerUp = useCallback(() => { dragging.current = false; }, []);
 
-  const effectiveWidth = collapsed ? COLLAPSED_WIDTH : width;
+  const effectiveWidth = collapsed ? COLLAPSED_WIDTH : narrow ? Math.min(width, 280) : width;
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
+      {/* On a phone the open drawer floats over the page; a tap outside closes it. */}
+      {narrow && drawerOpen && <div className="fixed inset-0 z-30 bg-overlay" onClick={() => setDrawerOpen(false)} aria-hidden />}
+      {narrow && drawerOpen && <div className="shrink-0" style={{ width: COLLAPSED_WIDTH }} aria-hidden />}
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       <aside
-        className="group/sidebar shrink-0 overflow-hidden border-r border-zinc-200 p-3 transition-[width] duration-200 ease-in-out dark:border-zinc-800"
+        className={`flex h-full shrink-0 flex-col overflow-hidden border-r border-line bg-surface transition-[width] duration-200 ease-in-out ${narrow && drawerOpen ? "fixed inset-y-0 left-0 z-40 shadow-[0_0_60px_-10px_rgb(0_0_0/0.5)]" : ""}`}
         style={{ width: effectiveWidth }}
       >
         {/* ── Expanded content ───────────────────────────────────────────────── */}
         {!collapsed && (
           <>
-            <div className="mb-4 flex items-center gap-2 px-3">
-              <img src="/logo-icon.svg" alt="" className="h-7 w-7" aria-hidden="true" />
-              <span className="text-lg font-bold">OpenBot</span>
+            <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
+              <img src="/logo-icon.svg" alt="" className="h-5 w-5 rounded-[4px]" aria-hidden="true" />
+              <span className="text-[13px] font-semibold tracking-tight">OpenBot</span>
             </div>
-            <nav className="space-y-1">
-              <NavLink to="/inbox" className={link}>
-                Inbox{" "}
-                {unread > 0 && (
-                  <span className="ml-1 rounded-full bg-blue-600 px-2 text-xs text-white">{unread}</span>
-                )}
-              </NavLink>
-              <NavLink to="/threads" className={link} end>Threads</NavLink>
-              <NavLink to="/bots" className={link} end>Bots</NavLink>
-              <NavLink to="/settings" className={link}>Settings</NavLink>
-            </nav>
-            <div className="mt-4 px-2">
-              <NavLink to="/threads" end className="flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                New Thread
-              </NavLink>
-            </div>
-            <section className="mt-6" aria-label="Recent threads">
-              <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Recent threads</div>
-              <div className="space-y-1">
-                {recent.visible.map((t) => (
-                  <NavLink key={t.id} to={`/threads/${t.id}`} className={item} title={threadLabel(t)}>
-                    <span className="min-w-0 flex-1 truncate">{threadLabel(t)}</span>
-                    <BotActivityIndicator active={isThreadActive(t)} />
+            <div className="scrollbar-subtle flex-1 overflow-y-auto px-2 py-3">
+              <nav className="space-y-0.5" aria-label="Main">
+                {NAV.map(({ to, label, Icon, end }) => (
+                  <NavLink key={to} to={to} className={row} end={end}>
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {to === "/inbox" && unread > 0 && (
+                      <span className="rounded-ui bg-accent px-1.5 text-[11px] font-medium leading-4 text-on-accent" aria-label={`${unread} unread`}>{unread}</span>
+                    )}
                   </NavLink>
                 ))}
-                {threads.data?.length === 0 && <div className="px-3 text-xs text-zinc-500">No threads</div>}
-                {recent.hasMore && (
-                  <NavLink to="/threads" end className="block px-2 py-1.5 text-xs text-zinc-500 hover:underline">See more…</NavLink>
-                )}
+              </nav>
+              <div className="mt-3">
+                <NavLink to="/threads" end className="flex h-8 items-center justify-center gap-1.5 rounded-ui border border-accent bg-accent px-3 text-[13px] font-medium leading-none text-on-accent transition-colors hover:border-accent-strong hover:bg-accent-strong">
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  New thread
+                </NavLink>
               </div>
-            </section>
-            <section className="mt-6" aria-label="Bots">
-              <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Bots</div>
-              <div className="space-y-1">
-                {bots.data?.map((bot) => (
-                  <NavLink key={bot.id} to={`/bots/${bot.id}`} className={item}>
-                    <BotIcon icon={bot.icon} className="h-8 w-8 text-base" />
-                    <span className="min-w-0 flex-1 truncate">@{bot.handle}</span>
-                    <BotActivityIndicator active={bot.active} />
-                  </NavLink>
-                ))}
-                {bots.data?.length === 0 && <div className="px-3 text-xs text-zinc-500">No bots</div>}
-              </div>
-            </section>
+              <section className="mt-5" aria-label="Recent threads">
+                <SectionLabel>recent threads</SectionLabel>
+                <div className="space-y-0.5">
+                  {recent.visible.map((t) => (
+                    <NavLink key={t.id} to={`/threads/${t.id}`} className={row} title={threadLabel(t)}>
+                      <span className="min-w-0 flex-1 truncate">{threadLabel(t)}</span>
+                      <BotActivityIndicator active={isThreadActive(t)} />
+                    </NavLink>
+                  ))}
+                  {threads.data?.length === 0 && <div className="px-2 text-xs text-faint">No threads yet</div>}
+                  {recent.hasMore && (
+                    <NavLink to="/threads" end className="block px-2 py-1.5 text-xs text-faint hover:text-muted">All threads</NavLink>
+                  )}
+                </div>
+              </section>
+              <section className="mt-5" aria-label="Bots">
+                <SectionLabel>bots</SectionLabel>
+                <div className="space-y-0.5">
+                  {bots.data?.map((bot) => (
+                    <NavLink key={bot.id} to={`/bots/${bot.id}`} className={row} title={bot.name}>
+                      <BotIcon icon={bot.icon} className="h-5 w-5 text-xs" />
+                      <span className="min-w-0 flex-1 truncate">@{bot.handle}</span>
+                      <BotActivityIndicator active={bot.active} />
+                    </NavLink>
+                  ))}
+                  {bots.data?.length === 0 && <div className="px-2 text-xs text-faint">No bots yet</div>}
+                </div>
+              </section>
+            </div>
+            <div className="flex h-11 shrink-0 items-center justify-between border-t border-line px-2">
+              <ThemeToggle />
+              <button
+                type="button"
+                onClick={collapse}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-ui text-muted hover:bg-sunken hover:text-fg"
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+              >
+                <PanelLeftCloseIcon className="h-4 w-4" />
+              </button>
+            </div>
           </>
         )}
 
         {/* ── Collapsed icons ────────────────────────────────────────────────── */}
         {collapsed && (
-          <nav className="mt-1 space-y-1">
-            <NavLink to="/inbox" className={`${linkIcon} relative`} title="Inbox">
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-              </svg>
-              {unread > 0 && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-blue-600" />}
-            </NavLink>
-            <NavLink to="/threads" className={linkIcon} title="Threads" end>
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </NavLink>
-            <NavLink to="/bots" className={linkIcon} title="Bots" end>
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="10" rx="2" /><circle cx="9" cy="16" r="1" /><circle cx="15" cy="16" r="1" /><path d="M8 11V7a4 4 0 1 1 8 0v4" />
-              </svg>
-            </NavLink>
-            <NavLink to="/settings" className={linkIcon} title="Settings">
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </NavLink>
-          </nav>
+          <>
+            <div className="flex h-12 shrink-0 items-center justify-center border-b border-line">
+              <img src="/logo-icon.svg" alt="OpenBot" className="h-5 w-5 rounded-[4px]" />
+            </div>
+            <nav className="flex flex-1 flex-col items-center gap-1 py-3" aria-label="Main">
+              {NAV.map(({ to, label, Icon, end }) => (
+                <NavLink key={to} to={to} className={iconRow} title={label} aria-label={label} end={end}>
+                  <Icon className="h-4 w-4" />
+                  {to === "/inbox" && unread > 0 && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" aria-label={`${unread} unread`} />}
+                </NavLink>
+              ))}
+              <NavLink to="/threads" end className="mt-2 flex h-9 w-9 items-center justify-center rounded-ui border border-accent bg-accent text-on-accent hover:bg-accent-strong" title="New thread" aria-label="New thread">
+                <PlusIcon className="h-4 w-4" />
+              </NavLink>
+            </nav>
+            <div className="flex shrink-0 flex-col items-center gap-1 border-t border-line py-2">
+              <ThemeToggle compact />
+              <button
+                type="button"
+                onClick={expand}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-ui text-muted hover:bg-sunken hover:text-fg"
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+              >
+                <PanelLeftOpenIcon className="h-4 w-4" />
+              </button>
+            </div>
+          </>
         )}
       </aside>
 
       {/* ── Resize handle ─────────────────────────────────────────────────────── */}
-      <div className="relative z-10 flex w-1 shrink-0 select-none">
-        {/* Collapse button — appears on hover near the top */}
-        {!collapsed && (
-          <button
-            type="button"
-            onClick={() => setCollapsed(true)}
-            className="absolute -right-3 top-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 opacity-0 shadow-sm transition-opacity hover:text-zinc-600 group-hover/sidebar:opacity-100 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:text-zinc-300"
-            aria-label="Collapse sidebar"
-          >
-            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
-            </svg>
-          </button>
-        )}
+      {!collapsed && !narrow && (
         <div
           role="separator"
           aria-orientation="vertical"
-          className="group/sidebar h-full w-full cursor-col-resize touch-none hover:bg-blue-500/30"
+          aria-label="Resize sidebar"
+          className="relative z-10 -ml-px w-1 shrink-0 cursor-col-resize touch-none select-none transition-colors hover:bg-accent/50"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-        >
-          {/* Visual grip dots */}
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 transition-opacity group-hover/sidebar:opacity-100">
-            <span className="block h-0.5 w-0.5 rounded-full bg-zinc-400" />
-            <span className="block h-0.5 w-0.5 rounded-full bg-zinc-400" />
-            <span className="block h-0.5 w-0.5 rounded-full bg-zinc-400" />
-          </span>
-        </div>
-      </div>
+        />
+      )}
 
       {/* ── Main content ──────────────────────────────────────────────────────── */}
-      <main className="min-w-0 flex-1 p-6">
-        {/* Expand sidebar button — shown only when collapsed */}
-        {collapsed && (
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            className="mb-4 flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            aria-label="Expand sidebar"
-          >
-            <svg className="h-3.5 w-3.5 rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
-            </svg>
-            Show sidebar
-          </button>
-        )}
+      <main className="scrollbar-subtle min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
         <Outlet />
       </main>
     </div>

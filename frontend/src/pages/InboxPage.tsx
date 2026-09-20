@@ -4,12 +4,14 @@ import { Api } from "../api/client";
 import { isBackendUnavailable } from "../api/errors";
 import type { InboxItem, RunDetail } from "../api/types";
 import InterruptCard from "../components/InterruptCard";
-import { Button, Card, ErrorText, OfflineNotice, Spinner } from "../components/ui";
+import { Button, Card, EmptyState, ErrorText, OfflineNotice, PageTitle, SectionTitle, Spinner } from "../components/ui";
 import { parseTs } from "../lib/time";
 
 export default function InboxPage() {
   const qc = useQueryClient();
   const inbox = useQuery({ queryKey: ["inbox"], queryFn: Api.listInbox });
+  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
+  const botName = (actorId: string) => bots.data?.find((b) => b.id === actorId)?.name;
   const questionIds = (inbox.data ?? []).filter((i) => i.kind === "question" && i.run_id).map((i) => i.run_id as string);
   // Backend down/restarting: show a friendly notice instead of the raw response body.
   const inboxUnavailable = isBackendUnavailable(inbox.error);
@@ -28,37 +30,43 @@ export default function InboxPage() {
   });
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-xl font-semibold">Inbox</h1>
+      <PageTitle>Inbox</PageTitle>
       {inboxUnavailable ? <OfflineNotice /> : <ErrorText error={inbox.error} />}
       {inbox.isLoading && <Spinner />}
       {questions.length > 0 && (
         <section className="space-y-3">
-          <h2 className="font-medium">Waiting for you</h2>
+          <SectionTitle>Waiting for you</SectionTitle>
           {questions.map((q) => {
             const run = q.run_id ? runs.data?.[q.run_id] : undefined;
             return (
               <Card key={q.id} className="space-y-2">
-                <div className="text-xs text-zinc-500">
-                  <Link className="underline" to={`/threads/${q.thread_id}`}>Open thread</Link> · {parseTs(q.created_at).toLocaleString()}
+                <div className="flex items-center gap-3 text-[11px] text-muted">
+                  <Link className="hover:text-fg hover:underline" to={`/threads/${q.thread_id}`}>Open thread</Link>
+                  <time className="text-faint" dateTime={q.created_at}>{parseTs(q.created_at).toLocaleString()}</time>
                 </div>
-                {run ? <InterruptCard run={run} onDone={() => qc.invalidateQueries({ queryKey: ["inbox-runs"] })} /> : <Spinner />}
+                {run ? <InterruptCard run={run} botName={botName(run.actor_id)} onDone={() => qc.invalidateQueries({ queryKey: ["inbox-runs"] })} /> : <Spinner />}
               </Card>
             );
           })}
         </section>
       )}
       <section className="space-y-3">
-        <h2 className="font-medium">Unread messages</h2>
-        {byThread.size === 0 && !inbox.isLoading && <p className="text-sm text-zinc-500">All caught up.</p>}
+        <SectionTitle>Unread messages</SectionTitle>
+        {byThread.size === 0 && !inbox.isLoading && (
+          <EmptyState>All caught up. Replies and questions from your bots land here as they arrive.</EmptyState>
+        )}
         {[...byThread.entries()].map(([tid, items]) => (
           <Card key={tid} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Link to={`/threads/${tid}`} className="font-medium underline">{items.length} new message{items.length === 1 ? "" : "s"}</Link>
-              <Button variant="secondary" onClick={() => items.forEach((i) => ack.mutate(i.id))}>Mark read</Button>
+            <div className="flex items-center justify-between gap-3">
+              <Link to={`/threads/${tid}`} className="text-[13px] font-medium hover:underline">{items.length} new message{items.length === 1 ? "" : "s"}</Link>
+              <Button variant="secondary" size="sm" onClick={() => items.forEach((i) => ack.mutate(i.id))}>Mark read</Button>
             </div>
-            {items.slice(0, 3).map((i) => (
-              <div key={i.id} className="truncate text-sm"><span className="text-zinc-500">{i.message?.sender_name}:</span> {i.message?.content}</div>
-            ))}
+            <div className="space-y-1">
+              {items.slice(0, 3).map((i) => (
+                <div key={i.id} className="truncate font-sans text-[13px]"><span className="font-mono text-xs text-muted">{i.message?.sender_name}</span> <span className="text-fg/90">{i.message?.content}</span></div>
+              ))}
+              {items.length > 3 && <div className="text-[11px] text-faint">and {items.length - 3} more</div>}
+            </div>
           </Card>
         ))}
         <ErrorText error={ack.error} />

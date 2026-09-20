@@ -45,20 +45,29 @@ describe("MarkdownContent", () => {
     expect(rendered.container.querySelector('a[href^="javascript:"]')).toBeNull();
   });
 
-  it("styles dark-theme inline code via prefers-color-scheme, not a .dark class", () => {
+  it("themes inline code through the shared palette tokens, in both theme mechanisms", () => {
     const css = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
-    // The app has no theme toggle: dark mode comes from the OS preference, and
-    // Tailwind's `dark:` variant compiles to the same media query. A `.dark`
-    // class selector would never match anything.
+    // Colors are semantic tokens flipped per theme. The toggle pins a theme with
+    // `<html data-theme>`; without it the OS preference applies. Both must define
+    // the same tokens, and no rule may hard-code a per-theme color or use a `.dark`
+    // class selector that nothing sets.
     expect(css).not.toMatch(/\.dark\s/);
-    const darkBlocks = [...css.matchAll(/@media \(prefers-color-scheme: dark\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]);
-    const darkCss = darkBlocks.join("\n");
-    const codeRule = darkCss.match(/\.markdown-content code\s*\{([^}]*)\}/);
-    expect(codeRule, "expected a dark-theme .markdown-content code rule").not.toBeNull();
-    expect(codeRule![1]).toMatch(/background:/);
-    expect(codeRule![1]).toMatch(/color:/);
-    // Code blocks must keep their own background even in dark mode.
-    expect(darkCss).toMatch(/\.markdown-content pre code\s*\{[^}]*background:\s*transparent/);
-    expect(darkCss).toMatch(/\.markdown-content blockquote\s*\{/);
+    const codeRule = css.match(/\.markdown-content code\s*\{([^}]*)\}/);
+    expect(codeRule, "expected a .markdown-content code rule").not.toBeNull();
+    expect(codeRule![1]).toMatch(/background:\s*var\(--sunken\)/);
+    expect(codeRule![1]).toMatch(/color:\s*var\(--fg\)/);
+    // Code blocks keep their own background: inline-code styling must not leak into them.
+    expect(css).toMatch(/\.markdown-content pre code\s*\{[^}]*background:\s*transparent/);
+    expect(css).toMatch(/\.markdown-content blockquote\s*\{[^}]*var\(--accent\)/);
+    const pinned = css.match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/);
+    const system = css.match(/@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{([^}]*)\}/);
+    expect(pinned, "expected a pinned dark theme block").not.toBeNull();
+    expect(system, "expected an OS-preference dark theme block").not.toBeNull();
+    for (const token of ["--canvas", "--surface", "--sunken", "--fg", "--muted", "--accent"]) {
+      expect(pinned![1]).toContain(`${token}:`);
+      expect(system![1]).toContain(`${token}:`);
+    }
+    // The two dark definitions must agree, or the toggle and the OS preference would drift apart.
+    expect(pinned![1].replace(/\s+/g, "")).toBe(system![1].replace(/\s+/g, ""));
   });
 });
