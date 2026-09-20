@@ -199,6 +199,28 @@ class RunEvent(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
 
+class ActivityLog(Base):
+    """One step in the life of a message, an inbox item or a run (see runtime/activity.py): the
+    database-side diagnostic timeline for "why is this thread not progressing?".
+
+    No foreign keys on purpose: the log must outlive the thread, bot or run it describes, or deleting
+    a stuck thread would also delete the evidence. The integer id is the timeline order."""
+    __tablename__ = "activity_log"
+    __table_args__ = (Index("ix_activity_thread", "thread_id", "id"), Index("ix_activity_actor", "actor_id", "id"),
+                      Index("ix_activity_run", "run_id", "id"), Index("ix_activity_created", "created_at"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    level: Mapped[str] = mapped_column(String(8), default="info", nullable=False)
+    event: Mapped[str] = mapped_column(String(48), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    thread_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    item_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+
 class McpServer(Base):
     """An MCP server spec (see mcp/store.py). `secrets` is Fernet-encrypted JSON holding `headers` (http)
     or `env` (stdio); `mcp.json` is only ever imported into this table."""

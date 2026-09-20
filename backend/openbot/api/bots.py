@@ -14,6 +14,7 @@ from openbot.api.schemas import (
     DirectPost,
     MemoryOut,
     MessageOut,
+    PurgeOut,
     bot_out,
 )
 from openbot.api.tool_validation import known_tool
@@ -168,6 +169,14 @@ async def post_to_bot_inbox(bot_id: str, body: DirectPost, session: AsyncSession
     res = await post_message(services, session, thread_id=thread.id, sender=you, content=content, to_handles=[bot.handle])
     item = next(i for i in res.items if i.actor_id == bot.id)
     return (await _bot_inbox_rows(session, bot, [item]))[0]
+
+
+@router.post("/{bot_id}/purge", response_model=PurgeOut)
+async def purge_bot(bot_id: str, session: AsyncSession = Depends(get_session), services: Services = Depends(get_services)):
+    """Cancel whatever the bot is doing (a live run, or one waiting on a question) and drop everything queued
+    for it. The operator's way out when a bot is wedged: nothing is deleted, items and runs are marked cancelled."""
+    await _get_bot_or_404(session, bot_id)
+    return PurgeOut(**await services.actors.purge(bot_id))
 
 
 # --- memory -------------------------------------------------------------------------------------------------

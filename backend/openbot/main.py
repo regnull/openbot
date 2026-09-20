@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from openbot.api import activity as activity_api
 from openbot.api import actors, bots, events, inbox, messages, providers, runs, threads, tools
 from openbot.api import mcp as mcp_api
 from openbot.api import settings as settings_api
@@ -27,7 +28,7 @@ from openbot.config import Settings, get_settings
 from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
 from openbot.logsetup import configure_logging
 from openbot.mcp import build_mcp_manager
-from openbot.runtime import app_settings
+from openbot.runtime import activity, app_settings
 from openbot.runtime.actors import ActorSystem
 from openbot.runtime.bus import EventBus
 from openbot.runtime.memory import MemoryReflector
@@ -105,6 +106,7 @@ async def start_background(services: Services) -> None:
     if services.mcp is not None:
         # Before the actors: a run that starts during boot should find the MCP tools already registered.
         await services.mcp.start()
+    await activity.prune(services, services.settings.activity_log_retention_days)
     if services.actors is not None:
         await services.actors.start()
     # Start the Telegram delivery listener if a bot token is configured.
@@ -255,7 +257,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
     for r in (actors.router, bots.router, threads.router, messages.router, inbox.router, runs.router, tools.router,
               providers.router, events.router, settings_api.router, mcp_api.router, setup_api.router,
-              workspace_api.router):
+              workspace_api.router, activity_api.router):
         api.include_router(r)
     app.include_router(public)
     app.include_router(api)

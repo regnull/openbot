@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     frontend_dist: Path | None = Path("frontend/dist")
     log_level: str = "INFO"
     log_file: Path = Path("logs/openbot.log")
+    # Days of per-thread/per-bot activity history kept in the database (see runtime/activity.py); 0 keeps everything.
+    activity_log_retention_days: int = 14
     webhook_retry_delays: Annotated[list[float], NoDecode] = [5.0, 30.0, 120.0]
 
     # Telegram channel

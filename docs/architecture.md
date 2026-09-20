@@ -59,6 +59,10 @@ threads ── thread_participants ── actors
    │      └── run_events (seq, type, payload)
    └── inbox_items     (actor_id, kind, message_id | run_id, payload, status)
 
+activity_log             (event, level, summary, thread_id, actor_id, run_id, item_id, message_id, detail)
+                         the diagnostic timeline of every step above; no foreign keys, so it outlives
+                         what it describes (runtime/activity.py, GET /activity)
+
 LangGraph checkpointer   keyed by run.id           (agent transcript of one run)
 LangGraph store          ("bots", bot_id, "memories")   long-term memory
                          ("threads", thread_id, "messages")  semantic index of every message

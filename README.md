@@ -246,6 +246,7 @@ route except `/health` requires an `X-API-Key` header.
 | POST | `/actors/{handle}/messages` | `{content, from?: handle (default "you"), thread_id?, external_ref?}` — reuses a thread by `external_ref` or `thread_id`, or creates a 1:1 thread; returns `{thread, message, addressed}` |
 | GET/POST | `/bots` | list bots; create a bot actor + profile |
 | GET/PATCH/DELETE | `/bots/{id}` | delete refuses while runs are open |
+| POST | `/bots/{id}/purge` | cancel the bot's open runs (live, queued or waiting on a question) and mark everything queued in its inbox `cancelled` → `{cancelled_runs, purged_items}`. The "Cancel & purge" button on the bot page. |
 | GET/POST | `/threads` | list (latest activity first); create `{title?, handles[], default_bot_handle?, working_directory?}`. `working_directory` must be an existing relative directory under `WORKSPACE_ROOT`; omit it to use `WORKSPACE_ROOT`. |
 | GET | `/threads/{id}?before=&limit=` | thread, participants, a page of messages, open runs |
 | DELETE | `/threads/{id}` | |
@@ -256,6 +257,7 @@ route except `/health` requires an `X-API-Key` header.
 | GET | `/runs?thread_id=`, `/runs/{id}` | |
 | POST | `/runs/{id}/resume` | `{answer}` for a question, or `{decisions: ["approve"\|"reject", ...]}` for an approval |
 | POST | `/runs/{id}/cancel` | cancels a queued/running/waiting run |
+| GET | `/activity?thread_id=&actor_id=&run_id=&event=&level=&after_id=&before_id=&limit=` | the activity log, oldest first: every delivery, queueing, pickup, run-status and settlement step. See [Troubleshooting](#troubleshooting). |
 | GET | `/tools`, `/providers`, `/health` | registry status, configured providers, liveness |
 | GET | `/events?thread_id=` | SSE stream: `message.created`, `run.updated`, `run.event`, `inbox.updated` |
 
@@ -298,6 +300,7 @@ opt out for that bot.
 | `WEBHOOK_RETRY_DELAYS` | `5,30,120` | Seconds between webhook delivery retries before an item is marked `failed`. |
 | `LOG_LEVEL` | `INFO` | Console verbosity. The log file always records `DEBUG` detail. |
 | `LOG_FILE` | `logs/openbot.log` | Rotating diagnostic log (10 MB x 5). See [Troubleshooting](#troubleshooting). |
+| `ACTIVITY_LOG_RETENTION_DAYS` | `14` | Days of activity-log rows (`activity_log` table) kept; pruned at startup. `0` keeps everything. |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | `false`, unset, `openbot`, unset | LangSmith tracing; the SDK reads these from the environment. |
 
 ### Settings
@@ -357,6 +360,40 @@ so it is the place to look when a bot misbehaves:
 
 A bot that reports `frontend does not exist` while listing only a handful of files is almost always
 looking at the wrong `tool_root`; the `startup:` and `run ... started:` lines show which one.
+
+### The activity log: "why is this thread not progressing?"
+
+The file log narrates runs; the **activity log** (table `activity_log`, `GET /api/v1/activity`)
+records the steps *around* them, the ones that decide whether a run happens at all, and it is
+queryable per thread, per bot and per run:
+
+```
+GET /api/v1/activity?thread_id=<id>      # everything that happened to one thread, oldest first
+GET /api/v1/activity?actor_id=<bot id>   # one bot's worker: what it was woken for, what it picked, what it skipped
+GET /api/v1/activity?level=warning       # only the stalls and failures
+GET /api/v1/activity?after_id=<last id>  # tail it
+```
+
+Every row has `event`, `summary`, `level`, the ids it concerns (`thread_id`, `actor_id`, `run_id`,
+`item_id`, `message_id`) and a `detail` object. The events, in the order a message goes through
+them: `message.posted` (sender, hop, who it was addressed to) → `inbox.enqueued` (one per recipient)
+→ `worker.notified` (was the bot's worker started, woken, or already busy on another run?) →
+`worker.slot.wait` / `worker.slot.acquired` (all `MAX_CONCURRENT_RUNS` slots were taken; how long it
+waited) → `run.created` (which items were picked, what was left queued, which threads were parked)
+→ `run.dispatched` → `run.started` (model, tools, working directory) → `run.model_call` /
+`run.tool_call` / `run.tool_result` / `run.interrupt` → `run.status` (every status change, with the
+error for `failed`) → `run.finished` → `inbox.settled`. The ones to look for when nothing moves:
+
+- `worker.parked`: everything queued for the bot belongs to threads parked on a question it asked;
+  `detail.parked_thread_ids` says which. Answer the question (or cancel the run) and it continues.
+- `worker.slot.wait` with no `worker.slot.acquired` after it: the bot is waiting for a run slot;
+  the other bots' `run.status` rows say who holds them.
+- `worker.error`: the worker loop itself crashed; the bot is idle until the next message wakes it.
+- `recovery.run_failed` / `recovery.items_requeued`: what a restart found in flight.
+- `inbox.purged` / `run.cancel_requested`: an operator stepped in (the bot page's "Cancel & purge").
+
+Rows older than `ACTIVITY_LOG_RETENTION_DAYS` are pruned at startup. Every row is also mirrored
+into the file log at `DEBUG` as `openbot.runtime.activity`, so the two timelines line up.
 
 ## Development
 

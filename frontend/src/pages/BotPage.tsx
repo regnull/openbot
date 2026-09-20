@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Api } from "../api/client";
-import type { BotInboxItem } from "../api/types";
+import type { BotInboxItem, PurgeResult } from "../api/types";
 import BotIcon from "../components/BotIcon";
 import { Badge, Button, Card, EmptyState, ErrorText, Hint, Kbd, Spinner, Textarea } from "../components/ui";
 import { ChevronLeftIcon } from "../components/icons";
@@ -13,14 +13,28 @@ import BotEditorPage from "./BotEditorPage";
 const TABS = ["inbox", "memory", "settings"] as const;
 type Tab = (typeof TABS)[number];
 
+/** One line for what a purge did, so "nothing happened" reads as such rather than as a silent no-op. */
+export function purgeSummary(r: PurgeResult): string {
+  if (!r.cancelled_runs && !r.purged_items) return "Nothing to cancel: no open run and an empty queue.";
+  const runs = r.cancelled_runs === 1 ? "1 run" : `${r.cancelled_runs} runs`;
+  const items = r.purged_items === 1 ? "1 queued item" : `${r.purged_items} queued items`;
+  return `Cancelled ${runs}, dropped ${items}.`;
+}
+
 export default function BotPage() {
   const { id = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const tab: Tab = (TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as Tab) : "inbox";
   const bot = useQuery({ queryKey: ["bot", id], queryFn: () => Api.getBot(id) });
+  const qc = useQueryClient();
+  const purge = useMutation({
+    mutationFn: () => Api.purgeBot(id),
+    onSuccess: () => { for (const key of [["bot", id], ["bot-inbox", id], ["bots"]]) qc.invalidateQueries({ queryKey: key }); },
+  });
   if (bot.isLoading) return <Spinner />;
   if (!bot.data) return <ErrorText error={bot.error} />;
   const b = bot.data;
+  const purged = purge.data;
   const tabClass = (t: Tab) => `relative -mb-px h-9 px-1 text-[13px] transition-colors ${tab === t ? "border-b-2 border-accent font-medium text-fg" : "border-b-2 border-transparent text-muted hover:text-fg"}`;
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -34,8 +48,15 @@ export default function BotPage() {
         <div className="flex shrink-0 items-center gap-2">
           {b.active && <Badge tone="green" pulse>active</Badge>}
           {!b.enabled && <Badge tone="amber">disabled</Badge>}
+          <Button variant="danger" size="sm" disabled={purge.isPending}
+            title="Cancel whatever this bot is doing and drop everything queued for it"
+            onClick={() => confirm(`Cancel @${b.handle}'s current run and drop everything queued in its inbox?`) && purge.mutate()}>
+            {purge.isPending ? "Purging…" : "Cancel & purge"}
+          </Button>
         </div>
       </div>
+      {purged && <Hint>{purgeSummary(purged)}</Hint>}
+      <ErrorText error={purge.error} />
       <div className="flex gap-5 border-b border-line" role="tablist">
         {TABS.map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tabClass(t)} onClick={() => setParams({ tab: t })}>{t[0].toUpperCase() + t.slice(1)}</button>)}
       </div>
