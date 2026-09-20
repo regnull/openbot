@@ -6,7 +6,6 @@ import { Api, type AttachmentIn } from "../api/client";
 import { isBackendUnavailable } from "../api/errors";
 import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
-import WaitingIndicator from "../components/WaitingIndicator";
 import MessageList from "../components/MessageList";
 import { Button, ErrorText, OfflineNotice, Spinner } from "../components/ui";
 import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
@@ -147,9 +146,7 @@ export default function ThreadPage() {
           </div>}
         </div>
       </header>
-      {/* Above the scroll area on purpose: in a long thread a banner inside it would scroll out
-          of view, and the whole point is a waiting state the reader cannot miss. */}
-      <WaitingIndicator waiters={state.waiters} />
+      {/* The thinking placeholder is rendered inline in MessageList, not as a separate banner. */}
       <div ref={scrollContainer} onScroll={updateScrollStickiness} className="scrollbar-subtle flex-1 overflow-y-auto py-4">
         {hasMore && state.messages.length > 0 && (
           <div className="mb-3 space-y-1 text-center">
