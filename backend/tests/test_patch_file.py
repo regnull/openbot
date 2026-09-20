@@ -9,7 +9,6 @@ Covers:
 """
 from __future__ import annotations
 
-import asyncio
 import stat
 from pathlib import Path
 from unittest.mock import patch as mock_patch
@@ -170,7 +169,7 @@ async def test_patch_file_diff_input_dry_run_does_not_modify(tmp_path):
         "dry_run": True,
         "runtime": runtime,
     })
-    assert "patching file" in result.lower() or "patch applied" in result.lower()
+    assert any(phrase in result.lower() for phrase in ("patching file", "patch applied", "checking file"))
     assert target.read_bytes() == before
 
 
@@ -287,8 +286,11 @@ async def test_apply_patch_command_timeout(tmp_path):
     _write_hello(tmp_path)
 
     class _FakeProc:
-        async def communicate(self, input=b""):
-            await asyncio.sleep(100)
+        def communicate(self, input=b""):
+            # Must be sync: the coroutine is created before ``wait_for`` is
+            # called, and if ``wait_for`` raises ``TimeoutError`` the coroutine
+            # is never awaited — an async version triggers
+            # ``RuntimeWarning: coroutine was never awaited``.
             return (b"", b"")
 
         def kill(self):
