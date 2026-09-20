@@ -3,7 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { Api } from "../api/client";
 import { useBusEvents } from "../api/sse";
 import { shouldRefreshBots } from "../lib/botActivity";
-import { recentThreads, threadLabel } from "../lib/recentThreads";
+import { isThreadActive, recentThreads, threadLabel } from "../lib/recentThreads";
 import BotActivityIndicator from "./BotActivityIndicator";
 import BotIcon from "./BotIcon";
 
@@ -56,6 +56,7 @@ export default function Layout() {
             {recent.visible.map((t) => (
               <NavLink key={t.id} to={`/threads/${t.id}`} className={item} title={threadLabel(t)}>
                 <span className="min-w-0 flex-1 truncate">{threadLabel(t)}</span>
+                <BotActivityIndicator active={isThreadActive(t)} />
               </NavLink>
             ))}
             {threads.data?.length === 0 && <div className="px-3 text-xs text-zinc-500">No threads</div>}
