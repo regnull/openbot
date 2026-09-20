@@ -9,7 +9,16 @@
     <meta property="og:title" content="OpenBot" />
     <meta property="og:description" content="AI-powered bot orchestration platform" />
     <meta property="og:image" content="%VITE_SITE_URL%/logo-lockup-dark.svg" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4ef" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1426" />
     <title>OpenBot</title>
+    <script>
+      // Apply the saved theme before first paint so the page never flashes the wrong one.
+      try {
+        var t = localStorage.getItem("openbot:theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

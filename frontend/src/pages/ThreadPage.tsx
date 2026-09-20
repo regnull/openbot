@@ -7,7 +7,8 @@ import { isBackendUnavailable } from "../api/errors";
 import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
 import MessageList from "../components/MessageList";
-import { Button, ErrorText, OfflineNotice, Spinner } from "../components/ui";
+import { Button, ErrorText, IconButton, OfflineNotice, Spinner } from "../components/ui";
+import { ChevronLeftIcon, MoreIcon } from "../components/icons";
 import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
 import { emptyThreadState, hydrate, mergeRun, reduceThreadEvent, type ThreadState } from "../lib/threadState";
 import { threadUsageLabel } from "../lib/threadUsage";
@@ -123,41 +124,53 @@ export default function ThreadPage() {
     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
     ...(bots.data ?? []).filter((b) => b.enabled).map((b) => b.handle),
   ])];
+  const defaultSelect = (className: string) => (
+    <select aria-label="Default bot" className={`rounded-ui border border-line bg-surface text-xs text-fg outline-none focus:border-accent ${className}`} value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>
+      {handles.map((h) => <option key={h} value={h}>@{h}</option>)}
+    </select>
+  );
   return (
-    <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-4xl flex-col">
-      <header className="thread-header sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b border-zinc-200 bg-white/95 px-1 py-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
-        <Link to="/threads" className="shrink-0 rounded-md px-2 py-2 text-sm text-zinc-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">← <span className="hidden sm:inline">Threads</span></Link>
+    <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-4xl flex-col md:h-[calc(100vh-3rem)]">
+      {/* Status line: what this thread is, who is in it, where its tools run, what it has cost. */}
+      <header className="thread-header sticky top-0 z-10 flex min-h-12 items-center gap-2 border-b border-line bg-canvas/95 pb-2.5 backdrop-blur">
+        <Link to="/threads" aria-label="Back to threads" title="Threads" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-ui text-muted hover:bg-sunken hover:text-fg">
+          <ChevronLeftIcon className="h-4 w-4" />
+        </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-semibold">{displayedTitle || "Untitled thread"}</h1>
-          <p className="truncate text-xs text-zinc-500">{t.participants.map((p) => `@${p.handle}`).join(" ")} · cwd {t.working_directory ?? "."}{usageLine ? ` · ${usageLine}` : ""}</p>
+          <h1 className="truncate text-sm font-semibold">{displayedTitle || "Untitled thread"}</h1>
+          <p className="flex flex-wrap items-baseline gap-x-3 text-[11px] leading-4 text-muted">
+            <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
+            <span className="truncate"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
+            {usageLine && <span className="truncate" title="Tokens across every run in this thread">{usageLine}</span>}
+          </p>
         </div>
-        <label className="hidden shrink-0 items-center gap-2 text-xs text-zinc-500 sm:flex">Default
-          <select aria-label="Default bot" className="h-10 rounded-md border border-zinc-300 bg-white px-2 dark:border-zinc-700 dark:bg-zinc-950" value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>
-            {handles.map((h) => <option key={h} value={h}>@{h}</option>)}
-          </select>
+        <label className="hidden shrink-0 items-center gap-1.5 text-[11px] text-muted sm:flex">default
+          {defaultSelect("h-8 px-1.5")}
         </label>
         <div className="relative" ref={menuRef}>
-          <button ref={menuButtonRef} type="button" aria-label="Thread actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((open) => !open)} className="h-11 w-11 rounded-md text-lg text-zinc-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">⋯</button>
-          {menuOpen && <div role="menu" className="absolute right-0 top-12 z-20 min-w-48 rounded-md border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-            <label className="flex items-center justify-between gap-3 px-3 py-2 text-sm sm:hidden">Default
-              <select aria-label="Default bot" className="h-10 max-w-32 rounded-md border border-zinc-300 bg-white px-2 dark:border-zinc-700 dark:bg-zinc-950" value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>{handles.map((h) => <option key={h} value={h}>@{h}</option>)}</select>
+          <IconButton ref={menuButtonRef} aria-label="Thread actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((open) => !open)}>
+            <MoreIcon className="h-4 w-4" />
+          </IconButton>
+          {menuOpen && <div role="menu" className="absolute right-0 top-10 z-20 min-w-48 rounded-ui border border-line bg-surface p-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
+            <label className="flex items-center justify-between gap-3 px-3 py-2 text-[13px] sm:hidden">Default bot
+              {defaultSelect("h-8 max-w-32 px-1.5")}
             </label>
-            <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm("Delete thread?")) del.mutate(); }} className="h-11 w-full rounded px-3 text-left text-sm text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">Delete thread</button>
+            <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm("Delete thread?")) del.mutate(); }} className="h-9 w-full rounded-ui px-3 text-left text-[13px] text-danger hover:bg-danger/10">Delete thread</button>
           </div>}
         </div>
       </header>
       {/* The thinking placeholder is rendered inline in MessageList, not as a separate banner. */}
-      <div ref={scrollContainer} onScroll={updateScrollStickiness} className="scrollbar-subtle flex-1 overflow-y-auto py-4">
+      <div ref={scrollContainer} onScroll={updateScrollStickiness} className="scrollbar-subtle flex-1 overflow-y-auto py-5">
         {hasMore && state.messages.length > 0 && (
-          <div className="mb-3 space-y-1 text-center">
-            <Button variant="secondary" onClick={() => loadOlder.mutate()} disabled={loadOlder.isPending}>Load older</Button>
+          <div className="mb-4 space-y-1 text-center">
+            <Button variant="secondary" size="sm" onClick={() => loadOlder.mutate()} disabled={loadOlder.isPending}>Load older messages</Button>
             <ErrorText error={loadOlder.error} />
           </div>
         )}
         <MessageList state={state} participants={t.participants} onRunLoaded={(run) => setState((s) => mergeRun(s, run))} iconByActor={iconByActor} nameByActor={nameByActor} />
       </div>
-      <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
-        {notice && <p className="mb-1 text-xs text-amber-600">{notice}</p>}
+      <div className="border-t border-line pt-3">
+        {notice && <p className="mb-1.5 text-xs text-warn">{notice}</p>}
         <ErrorText error={send.error} />
         <Composer handles={handles} autoFocus={!id} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />
       </div>

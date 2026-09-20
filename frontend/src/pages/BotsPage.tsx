@@ -3,30 +3,46 @@ import { Link } from "react-router-dom";
 import { Api } from "../api/client";
 import BotActivityIndicator from "../components/BotActivityIndicator";
 import BotIcon from "../components/BotIcon";
-import { Badge, Button, Card, ErrorText, Spinner } from "../components/ui";
+import { Badge, Card, EmptyState, ErrorText, PageTitle, Spinner } from "../components/ui";
+import { PlusIcon } from "../components/icons";
 
 export default function BotsPage() {
   const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between"><h1 className="text-xl font-semibold">Bots</h1><Link to="/bots/new"><Button>New bot</Button></Link></div>
+    <div className="space-y-5">
+      <PageTitle actions={
+        <Link to="/bots/new" className="inline-flex h-9 items-center gap-1.5 rounded-ui border border-accent bg-accent px-3 text-[13px] font-medium leading-none text-on-accent transition-colors hover:border-accent-strong hover:bg-accent-strong">
+          <PlusIcon className="h-3.5 w-3.5" /> New bot
+        </Link>
+      }>Bots</PageTitle>
       <ErrorText error={bots.error} />
       {bots.isLoading && <Spinner />}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {bots.data?.map((b) => (
-          <Link key={b.id} to={`/bots/${b.id}`}>
-            <Card className="h-full space-y-2 hover:border-blue-400">
+          <Link key={b.id} to={`/bots/${b.id}`} className="group">
+            <Card className="flex h-full flex-col gap-3 transition-colors group-hover:border-line-strong">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2"><BotIcon icon={b.icon} /><span className="truncate font-semibold">{b.name}</span></div>
-                <div className="flex shrink-0 items-center gap-2"><BotActivityIndicator active={b.active} showLabel />{!b.enabled && <Badge tone="amber">disabled</Badge>}</div>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <BotIcon icon={b.icon} />
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-medium">{b.name}</div>
+                    <div className="truncate text-xs text-muted">@{b.handle}</div>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 pt-1">
+                  <BotActivityIndicator active={b.active} showLabel />
+                  {!b.enabled && <Badge tone="amber">disabled</Badge>}
+                </div>
               </div>
-              <div className="text-sm text-zinc-500">@{b.handle} · {b.provider === "auto" ? "auto" : `${b.provider}/${b.model}`}</div>
-              <p className="line-clamp-3 text-sm">{b.description || "No description"}</p>
-              <div className="text-xs text-zinc-500">{b.tool_names.length} tools{b.approval_tools.length ? ` · ${b.approval_tools.length} need approval` : ""}</div>
+              <p className="line-clamp-3 flex-1 font-sans text-[13px] leading-relaxed text-muted">{b.description || "No description yet."}</p>
+              <div className="flex flex-wrap gap-x-3 text-[11px] leading-4 text-faint">
+                <span>{b.provider === "auto" ? "auto model" : `${b.provider}/${b.model}`}</span>
+                <span>{b.tool_names.length} tool{b.tool_names.length === 1 ? "" : "s"}{b.approval_tools.length ? `, ${b.approval_tools.length} need approval` : ""}</span>
+              </div>
             </Card>
           </Link>
         ))}
-        {bots.data?.length === 0 && <p className="text-zinc-500">No bots yet. Create one, or set a provider key and restart to seed the demo team.</p>}
+        {bots.data?.length === 0 && <EmptyState className="sm:col-span-2 lg:col-span-3">No bots yet. Create one, or set a provider key and restart to seed the demo team.</EmptyState>}
       </div>
     </div>
   );

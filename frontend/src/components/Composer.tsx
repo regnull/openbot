@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { applyMention, mentionQuery } from "../lib/mentions";
 import type { AttachmentIn } from "../api/client";
-import { Button } from "./ui";
+import { Button, Kbd } from "./ui";
+import { CloseIcon } from "./icons";
 
 // Paste constraints for attached images (client-side guard; the API re-validates).
 const MAX_IMAGES = 4;
@@ -48,6 +49,10 @@ async function decodeImages(files: File[]): Promise<{ attachments: AttachmentIn[
   return { attachments, skipped };
 }
 
+/**
+ * The prompt. A `❯` in the gutter, the text you type, and the keys that send it — the one place
+ * the interface is allowed to look like a terminal on purpose.
+ */
 export default function Composer({ handles, onSend, disabled, hint, autoFocus }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean }) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
@@ -96,67 +101,83 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus }:
       setSending(false);
     }
   };
+  const canSend = !disabled && !sending && (!!text.trim() || attachments.length > 0);
   return (
     <div className="relative">
       {options.length > 0 && (
-        <div className="absolute bottom-full mb-1 w-64 rounded-md border border-zinc-200 bg-white shadow dark:border-zinc-700 dark:bg-zinc-900">
+        <div role="listbox" aria-label="Mention a bot" className="absolute bottom-full left-6 z-10 mb-1 w-60 overflow-hidden rounded-ui border border-line bg-surface py-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
           {options.map((h, i) => (
-            <div key={h} onMouseDown={(e) => { e.preventDefault(); pick(h); }} className={`cursor-pointer px-3 py-1 text-sm ${i === sel ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}>@{h}</div>
-          ))}
-        </div>
-      )}
-      {attachments.length > 0 && (
-        <div className="mb-1 flex flex-wrap gap-2">
-          {attachments.map((a, i) => (
-            <div key={`${i}:${a.url.slice(-24)}`} className="relative">
-              <img src={a.url} alt={a.name ?? `attached image ${i + 1}`} title={a.name} className="h-16 rounded border border-zinc-200 dark:border-zinc-700" />
-              <button
-                type="button"
-                aria-label={`Remove attached image ${i + 1}`}
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs leading-none text-white hover:bg-zinc-600"
-                onClick={() => setAttachments((imgs) => imgs.filter((_, j) => j !== i))}
-              >×</button>
+            <div key={h} role="option" aria-selected={i === sel} onMouseDown={(e) => { e.preventDefault(); pick(h); }}
+              className={`cursor-pointer px-3 py-1.5 text-[13px] ${i === sel ? "bg-sunken text-fg" : "text-muted"}`}>
+              <span className="text-accent-strong">@</span>{h}
             </div>
           ))}
         </div>
       )}
-      {(skipped || dropped) && (
-        <p className="mb-1 text-xs text-amber-600">
-          {[
-            skipped ? "Some pasted images could not be read and were skipped." : null,
-            dropped ? `Only the first ${MAX_IMAGES} attached images are kept per message.` : null,
-          ].filter(Boolean).join(" ")}
-        </p>
-      )}
-      <div className="flex items-end gap-2">
-        <textarea
-          ref={ref}
-          rows={3}
-          value={text}
-          disabled={disabled}
-          placeholder={hint ?? "Message… use @handle to address a bot"}
-          className="min-h-[5rem] flex-1 resize-none rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-950"
-          onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setSel(0); }}
-          onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
-          onPaste={(e) => {
-            const files = Array.from(e.clipboardData?.items ?? [], (it) => (it.kind === "file" ? it.getAsFile() : null))
-              .filter((f): f is File => !!f);
-            if (!files.length) return; // plain-text paste falls through unchanged
-            e.preventDefault();
-            attach(files);
-          }}
-          onKeyDown={(e) => {
-            if (options.length) {
-              if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => (s + 1) % options.length); return; }
-              if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => (s - 1 + options.length) % options.length); return; }
-              if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); pick(options[sel]); return; }
-            }
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
-          }}
-        />
-        <Button onClick={() => void send()} disabled={disabled || sending || (!text.trim() && attachments.length === 0)} className="h-10 shrink-0 self-end">
-          {sending ? "Sending…" : "Send"}
-        </Button>
+      <div className={`flex flex-col rounded-ui border bg-surface transition-colors ${disabled ? "border-line opacity-70" : "border-line focus-within:border-accent"}`}>
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-3 pt-3">
+            {attachments.map((a, i) => (
+              <div key={`${i}:${a.url.slice(-24)}`} className="relative">
+                <img src={a.url} alt={a.name ?? `attached image ${i + 1}`} title={a.name} className="h-16 rounded-ui border border-line" />
+                <button
+                  type="button"
+                  aria-label={`Remove attached image ${i + 1}`}
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-surface text-fg hover:bg-sunken"
+                  onClick={() => setAttachments((imgs) => imgs.filter((_, j) => j !== i))}
+                ><CloseIcon className="h-3 w-3" /></button>
+              </div>
+            ))}
+          </div>
+        )}
+        {(skipped || dropped) && (
+          <p className="px-3 pt-2 text-xs text-warn">
+            {[
+              skipped ? "Some pasted images could not be read and were skipped." : null,
+              dropped ? `Only the first ${MAX_IMAGES} attached images are kept per message.` : null,
+            ].filter(Boolean).join(" ")}
+          </p>
+        )}
+        <div className="flex items-start gap-2 px-3 pt-2.5">
+          <span className="mt-[5px] select-none text-[13px] font-semibold leading-none text-accent" aria-hidden>❯</span>
+          <textarea
+            ref={ref}
+            rows={3}
+            value={text}
+            disabled={disabled}
+            aria-label="Message"
+            placeholder={hint ?? "Type a message. @handle addresses a bot."}
+            className="min-h-[4.25rem] flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed text-fg outline-none placeholder:text-faint disabled:cursor-not-allowed"
+            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setSel(0); }}
+            onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData?.items ?? [], (it) => (it.kind === "file" ? it.getAsFile() : null))
+                .filter((f): f is File => !!f);
+              if (!files.length) return; // plain-text paste falls through unchanged
+              e.preventDefault();
+              attach(files);
+            }}
+            onKeyDown={(e) => {
+              if (options.length) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => (s + 1) % options.length); return; }
+                if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => (s - 1 + options.length) % options.length); return; }
+                if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); pick(options[sel]); return; }
+              }
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
+            }}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3 px-3 pb-2 pt-1">
+          <div className="hidden items-center gap-3 text-[11px] text-faint sm:flex" aria-hidden>
+            <span className="inline-flex items-center gap-1"><Kbd>⏎</Kbd> send</span>
+            <span className="inline-flex items-center gap-1"><Kbd>⇧⏎</Kbd> new line</span>
+            <span className="inline-flex items-center gap-1"><Kbd>@</Kbd> mention a bot</span>
+            <span className="inline-flex items-center gap-1"><Kbd>⌘V</Kbd> paste an image</span>
+          </div>
+          <Button size="sm" onClick={() => void send()} disabled={!canSend} className="ml-auto">
+            {sending ? "Sending…" : "Send"}
+          </Button>
+        </div>
       </div>
     </div>
   );
