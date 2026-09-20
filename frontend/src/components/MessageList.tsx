@@ -5,10 +5,10 @@ import type { Message, MessageAttachment, Participant, RunDetail, RunEvent } fro
 import type { ThreadState } from "../lib/threadState";
 import { parseTs } from "../lib/time";
 import Avatar from "./Avatar";
+import BotBusyIndicator from "./BotBusyIndicator";
 import InterruptCard from "./InterruptCard";
 import MarkdownContent from "./MarkdownContent";
 import RunCard from "./RunCard";
-import ThinkingPlaceholder from "./ThinkingPlaceholder";
 import { EmptyState } from "./ui";
 
 const ACTIVE = ["queued", "running", "waiting_human"];
@@ -50,11 +50,11 @@ export default function MessageList({ state, participants, onRunLoaded, iconByAc
       const events = eventsFor(r.id);
       const stream = state.streaming[r.id];
       const hasContent = events.length > 0 || !!stream;
-      // Show the lightweight ThinkingPlaceholder when the run is still empty
+      // Show the lightweight BotBusyIndicator when the run is still empty
       // (no tool calls, no streaming text yet). Once content arrives, the
       // full RunCard takes over so the user sees the work in progress.
       if (!hasContent && (r.status === "queued" || r.status === "running")) {
-        return <ThinkingPlaceholder key={r.id} botName={botName(r.actor_id) ?? "bot"} icon={iconByActor?.[r.actor_id]} />;
+        return <BotBusyIndicator key={r.id} botName={botName(r.actor_id) ?? "bot"} icon={iconByActor?.[r.actor_id]} />;
       }
       return <div key={r.id} className="message-sheet message-assistant flex gap-3"><Avatar name={botName(r.actor_id) ?? "bot"} kind="bot" icon={iconByActor?.[r.actor_id]} /><div className="min-w-0 flex-1 space-y-1"><div className="message-meta"><span className="font-medium text-fg">{botName(r.actor_id) ?? "bot"}</span><span className="text-faint">{r.status.replace("_", " ")}</span></div><RunCard run={r} events={events} streaming={stream} />{r.status === "waiting_human" && <InterruptCard run={r} botName={botName(r.actor_id)} />}</div></div>;
     })}
