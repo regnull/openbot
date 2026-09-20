@@ -1,6 +1,10 @@
+import asyncio
+import time
+
 from sqlalchemy import select
 
 from openbot.db.models import Actor, Run
+from tests.fakes import call
 
 BOT = {"handle": "eng", "name": "Engineer", "description": "Builds", "instructions": "Do it",
        "provider": "openai", "model": "gpt-5.5"}
@@ -163,3 +167,60 @@ async def test_list_and_delete_bot_memories(client, services):
     assert [m["key"] for m in (await client.get(f"/api/v1/bots/{bot['id']}/memories")).json()] == ["k2"]
     assert (await client.delete(f"/api/v1/bots/{bot['id']}/memories/k1")).status_code == 404
     assert (await client.get("/api/v1/bots/nope/memories")).status_code == 404
+
+
+# --- purge: cancel the current run and clear the queue ------------------------------------------------------
+
+async def test_purge_cancels_the_waiting_run_and_the_queued_mail(client, services, scripts):
+    scripts["eng"] = [ai(tool_calls=[call("ask_human", question="?")]), ai("never")]
+    bot = (await client.post("/api/v1/bots", json=BOT)).json()
+    thread = (await client.post("/api/v1/threads", json={"title": "t", "handles": ["eng"]})).json()
+    await client.post(f"/api/v1/threads/{thread['id']}/messages", json={"content": "one @eng"})
+    await services.actors.wait_idle()
+    await client.post(f"/api/v1/threads/{thread['id']}/messages", json={"content": "two @eng"})     # parked behind the question
+    await services.actors.wait_idle()
+    assert (await client.get(f"/api/v1/bots/{bot['id']}")).json()["active"] is True
+    r = await client.post(f"/api/v1/bots/{bot['id']}/purge")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"cancelled_runs": 1, "purged_items": 1}
+    await services.actors.wait_idle()
+    assert (await client.get(f"/api/v1/bots/{bot['id']}")).json()["active"] is False
+    rows = (await client.get(f"/api/v1/bots/{bot['id']}/inbox")).json()
+    # "one" was settled "done" when its run parked on the question; the run itself is now cancelled. "two" never ran.
+    assert len(rows) == 2 and all(row["status"] == "cancelled" or row["run_status"] == "cancelled" for row in rows)
+    assert (await client.get("/api/v1/inbox")).json() == []                  # the question left the human's inbox too
+    detail = (await client.get(f"/api/v1/threads/{thread['id']}")).json()
+    assert detail["runs"] == [] and detail["waiters"] == []
+    log = (await client.get("/api/v1/activity", params={"actor_id": bot["id"], "event": "inbox.purged"})).json()
+    assert len(log) == 1 and log[0]["detail"]["purged"] == 1 and log[0]["level"] == "warning"
+    # idempotent: nothing left to purge
+    assert (await client.post(f"/api/v1/bots/{bot['id']}/purge")).json() == {"cancelled_runs": 0, "purged_items": 0}
+    assert (await client.post("/api/v1/bots/nope/purge")).status_code == 404
+
+
+async def test_purge_cancels_a_live_run(client, services, scripts):
+    def slow():
+        time.sleep(1.5)          # runs in the model's executor thread, so the loop (and the purge) keep going
+        yield ai("late")
+
+    scripts["eng"] = slow()
+    bot = (await client.post("/api/v1/bots", json=BOT)).json()
+    thread = (await client.post("/api/v1/threads", json={"title": "t", "handles": ["eng"]})).json()
+    await client.post(f"/api/v1/threads/{thread['id']}/messages", json={"content": "go @eng"})
+
+    async def running():
+        async with services.session_factory() as s:
+            return (await s.execute(select(Run).where(Run.status == "running"))).scalar_one_or_none()
+    for _ in range(100):
+        if await running():
+            break
+        await asyncio.sleep(0.02)
+    assert await running()
+    r = await client.post(f"/api/v1/bots/{bot['id']}/purge")
+    assert r.status_code == 200 and r.json()["cancelled_runs"] == 1
+    await services.actors.wait_idle()
+    async with services.session_factory() as s:
+        run = (await s.execute(select(Run))).scalar_one()
+    assert run.status == "cancelled"
+    rows = (await client.get(f"/api/v1/bots/{bot['id']}/inbox")).json()
+    assert [row["status"] for row in rows] == ["cancelled"]

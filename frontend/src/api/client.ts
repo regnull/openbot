@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, DirectoryListing, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import type { Actor, AppSetting, Bot, DirectoryListing, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface AttachmentIn { url: string; name?: string; }
@@ -44,6 +44,7 @@ export const Api = {
   deleteBot: (id: string) => api<void>(`/bots/${id}`, { method: "DELETE" }),
   getBotInbox: (id: string) => api<BotInboxItem[]>(`/bots/${id}/inbox`),
   postBotInbox: (id: string, content: string) => api<BotInboxItem>(`/bots/${id}/inbox`, { method: "POST", json: { content } }),
+  purgeBot: (id: string) => api<PurgeResult>(`/bots/${id}/purge`, { method: "POST" }),
   listBotMemories: (id: string) => api<BotMemory[]>(`/bots/${id}/memories`),
   deleteBotMemory: (id: string, key: string) => api<void>(`/bots/${id}/memories/${encodeURIComponent(key)}`, { method: "DELETE" }),
   listActors: () => api<Actor[]>("/actors"),
