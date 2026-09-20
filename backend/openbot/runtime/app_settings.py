@@ -11,6 +11,7 @@ then environment, then the built-in default.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -91,6 +92,13 @@ TUNABLES: dict[str, Tunable] = {
     "prompt_caching": Tunable("Model routing", "Prompt caching", "Add cache breakpoints to every Anthropic model call."),
     "direct_anthropic": Tunable("Model routing", "Direct Anthropic routing",
         "Send OpenRouter anthropic/... models straight to Anthropic when a key is configured, so caching covers tool results too."),
+    # --- Telegram --------------------------------------------------------------------------------------------
+    "telegram_bot_token": Tunable("Telegram", "Bot token",
+        "Telegram Bot API token (format: 123456:ABC-DEF…). Overrides the TELEGRAM_BOT_TOKEN env var.", secret=True),
+    "telegram_webhook_url": Tunable("Telegram", "Webhook URL",
+        "Public URL Telegram sends updates to, e.g. https://example.com/api/v1/channels/telegram/webhook."),
+    "telegram_webhook_secret": Tunable("Telegram", "Webhook secret",
+        "Shared secret for X-Telegram-Bot-Api-Secret-Token header validation.", secret=True),
     # --- Model retries ---------------------------------------------------------------------------------------
     "model_retry_max_attempts": Tunable("Model retries", "Max model-call attempts",
         "Times a model call may be attempted when it fails with a transient upstream provider error "
@@ -147,6 +155,11 @@ def coerce(key: str, value: Any) -> Any:
     minimum = TUNABLES[key].minimum
     if minimum is not None and isinstance(value, int | float) and value < minimum:
         raise ValueError(f"{key} must be at least {minimum:g}")
+    # --- field-specific format validation ----------------------------------------------------------------
+    if key == "telegram_bot_token" and value is not None and not re.match(r"^\d+:[A-Za-z0-9_-]{30,}$", str(value)):
+        raise ValueError(
+            "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
+        )
     return value
 
 

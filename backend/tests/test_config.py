@@ -76,3 +76,29 @@ def test_real_dotenv_file_matching_env_example_parses_correctly(tmp_path, monkey
     assert settings.frontend_dist == Path("frontend/dist")
     assert settings.bot_model is None
     assert settings.openrouter_model is None
+
+
+def test_telegram_bot_token_valid_format(monkeypatch):
+    token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    settings = Settings(_env_file=None)
+    assert settings.telegram_bot_token == token
+
+
+def test_telegram_bot_token_empty_becomes_none(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    settings = Settings(_env_file=None)
+    assert settings.telegram_bot_token is None
+
+
+def test_telegram_bot_token_invalid_format_raises(monkeypatch):
+    import pytest
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "invalid-token")
+    with pytest.raises(Exception, match="Invalid Telegram bot token format"):
+        Settings(_env_file=None)
+
+
+def test_telegram_bot_token_not_set_is_none(monkeypatch):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.telegram_bot_token is None
