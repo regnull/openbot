@@ -101,7 +101,10 @@ export default function Layout() {
         {/* ── Expanded content ───────────────────────────────────────────────── */}
         {!collapsed && (
           <>
-            <div className="mb-4 px-3 text-lg font-bold">OpenBot</div>
+            <div className="mb-4 flex items-center gap-2 px-3">
+              <img src="/logo-icon.svg" alt="" className="h-7 w-7" aria-hidden="true" />
+              <span className="text-lg font-bold">OpenBot</span>
+            </div>
             <nav className="space-y-1">
               <NavLink to="/inbox" className={link}>
                 Inbox{" "}
