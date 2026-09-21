@@ -188,7 +188,7 @@ export default function Layout() {
                 <div className="space-y-1">
                   {bots.data?.map((bot) => (
                     <NavLink key={bot.id} to={`/bots/${bot.id}`} className={row} title={bot.name}>
-                      <BotIcon icon={bot.icon} className="h-7 w-7 text-base" />
+                      <BotIcon icon={bot.icon} bare className="h-7 w-7 text-base" />
                       <span className="min-w-0 flex-1 truncate">@{bot.handle}</span>
                       <BotActivityIndicator active={bot.active} />
                     </NavLink>
