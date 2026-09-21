@@ -78,10 +78,10 @@ export interface CaretMetrics {
 }
 
 /** Vertical center of `el`'s content box (border and padding excluded either side), in
- * viewport coordinates -- where a browser centers an `<input>`'s one line of text. */
-function centerY(elRect: DOMRect, computed: CSSStyleDeclaration): number {
-  const borderTop = parseFloat(computed.borderTopWidth) || 0;
-  const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
+ * viewport coordinates -- where a browser centers an `<input>`'s one line of text. Takes the
+ * border widths already parsed by the caller rather than re-reading `computed` for them, since
+ * this runs on every animation frame while an `<input>` is focused. */
+function centerY(elRect: DOMRect, computed: CSSStyleDeclaration, borderTop: number, borderBottom: number): number {
   const paddingTop = parseFloat(computed.paddingTop) || 0;
   const paddingBottom = parseFloat(computed.paddingBottom) || 0;
   const contentTop = elRect.top + borderTop + paddingTop;
@@ -136,12 +136,13 @@ export function getCaretMetrics(
   const contentY = markerRect.top - mirrorRect.top;
 
   const borderTop = parseFloat(computed.borderTopWidth) || 0;
+  const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
   const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
 
   const left = elRect.left + borderLeft + contentX - el.scrollLeft;
   const align: CaretMetrics["align"] = isTextarea
     ? { kind: "bottom", y: elRect.top + borderTop + contentY - el.scrollTop }
-    : { kind: "center", y: centerY(elRect, computed) };
+    : { kind: "center", y: centerY(elRect, computed, borderTop, borderBottom) };
   const metrics: CaretMetrics = { left, align };
 
   // Keep the mirror element alive for reuse; just clear its content.
