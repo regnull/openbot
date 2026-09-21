@@ -101,6 +101,8 @@
   ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   input, textarea, select, button { font: inherit; color: inherit; }
+  /* Hide native caret — the CustomCaret overlay replaces it. */
+  input, textarea { caret-color: transparent; }
   input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   select option { background: var(--surface); color: var(--fg); }
   a { color: inherit; }
@@ -215,8 +217,17 @@
   .bot-busy-dot { animation: none; opacity: 0.8; }
 }
 
-@keyframes caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
-.caret { display: inline-block; width: 0.55em; height: 1.05em; vertical-align: text-bottom; background: var(--accent); animation: caret-blink 1.1s steps(1) infinite; }
+/* ── Custom caret ─────────────────────────────────────────────────────────────
+   Drives both the JS overlay caret (CustomCaret component) and the decorative
+   streaming cursor (.caret in RunCard). Smooth fade, not a hard blink.
+   Single keyframes definition shared by both use-cases. */
+
+.custom-caret-overlay { animation: caret-blink 1s ease-in-out infinite; }
+
+/* Decorative streaming cursor (RunCard). Matches the custom-caret style. */
+@keyframes caret-blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+.caret { display: inline-block; width: 0.55em; height: 1.05em; vertical-align: text-bottom; background: var(--accent); animation: caret-blink 1s ease-in-out infinite; }
+
 @keyframes live-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 70% { box-shadow: 0 0 0 4px transparent; } }
 .live-dot { animation: live-pulse 1.6s ease-out infinite; }
 
