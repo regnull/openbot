@@ -99,6 +99,14 @@ async def test_single_bot_legacy_default_and_unaddressed_without_default(service
         assert res.addressed == [] and res.unaddressed is True
 
 
+async def settle(s, actor_id):
+    """What a run does to its triggers before the bot replies: a bot replying with mail still `queued`
+    in the thread has its hand-off held (see test_handoff_hold.py), which is not what this test is about."""
+    for it in (await s.execute(select(InboxItem).where(InboxItem.actor_id == actor_id, InboxItem.status == "queued"))).scalars():
+        it.status = "done"
+    await s.commit()
+
+
 async def test_bot_reply_hops_and_limit(services):
     services.settings.max_bot_hops = 2
     eng, rev = await seed(services, bot_actor("eng"), bot_actor("rev"))
@@ -106,8 +114,10 @@ async def test_bot_reply_hops_and_limit(services):
         you = await human_actor(s)
         t = await create_thread(services, s, title="t", handles=["eng", "rev"], created_by=you)
         await post_message(services, s, thread_id=t.id, sender=you, content="@eng go")
+        await settle(s, eng.id)
         r2 = await post_message(services, s, thread_id=t.id, sender=eng, content="@rev review", hop=1)
         assert r2.message.hop == 1 and [a.id for a in r2.addressed] == [rev.id]
+        await settle(s, rev.id)
         r3 = await post_message(services, s, thread_id=t.id, sender=rev, content="@eng fix", hop=2)
         assert r3.addressed == []
         msgs = (await s.execute(select(Message).where(Message.thread_id == t.id).order_by(Message.created_at))).scalars().all()
@@ -118,7 +128,7 @@ async def test_bot_reply_hops_and_limit(services):
         r5 = await post_message(services, s, thread_id=t.id, sender=you, content="@eng human here")
         assert [a.id for a in r5.addressed] == [eng.id]
     eng_items = await items(services, eng.id)
-    assert [i.kind for i in eng_items] == ["message", "message"]  # "go" and "human here"; the hop-limited ones were dropped
+    assert [i.kind for i in eng_items] == ["message", "message"]  # "go" (settled) and "human here"; the hop-limited ones were dropped
     you_items = await items(services, you.id)
     assert len(you_items) == 4  # two bot messages, one notice... and the second "again" bot message
 

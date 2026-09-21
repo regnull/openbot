@@ -13,7 +13,15 @@ from langgraph.types import Command
 from sqlalchemy import select
 
 from openbot.api.schemas import InboxItemOut, MessageOut, RunOut, to_json
-from openbot.db.models import OPEN_RUN_STATUSES, Actor, InboxItem, Message, Run, utcnow
+from openbot.db.models import (
+    OPEN_RUN_STATUSES,
+    Actor,
+    InboxItem,
+    Message,
+    Run,
+    ThreadParticipant,
+    utcnow,
+)
 from openbot.runtime import activity
 from openbot.runtime.delivery import post_message
 from openbot.runtime.waiters import publish_waiters, refresh_waiters_at_start
@@ -215,6 +223,79 @@ class BotActor(_Worker):
                 # Best-effort: bookkeeping must never abort the drain or mask the run's own error.
                 # Items left "processing" are requeued by recovery on the next start().
                 log.exception("failed to finalize inbox items for run %s", batch.run_id)
+            if thread_id is not None:
+                await self._release_held_handoffs(thread_id)
+
+    async def _release_held_handoffs(self, thread_id: str) -> None:
+        """Deliver a hand-off this bot held in `thread_id` (see delivery.post_message) now that its own
+        queue there is empty, so the model never has to remember to re-mention the bot it held.
+
+        Held requests from this bot are grouped by target handle, keeping only the latest per target
+        (an older hold to the same target is superseded by a newer one and dropped). A hold is skipped,
+        not delivered, if a later reply from this bot already produced a real InboxItem for that target
+        (a fresh, unheld mention, or an earlier run of this same method) -- so this never double-wakes
+        anyone. What ships is the held message itself, unmodified: by the time the target's run reads
+        it, the rest of the thread (including whatever this bot said since) is visible too."""
+        s = self.system.s
+        try:
+            async with s.session_factory() as session:
+                still_queued = (await session.execute(select(InboxItem.id).where(
+                    InboxItem.actor_id == self.actor_id, InboxItem.thread_id == thread_id,
+                    InboxItem.kind == "message", InboxItem.status == "queued").limit(1))).first()
+                if still_queued is not None:
+                    return
+                held_msgs = (await session.execute(
+                    select(Message).where(Message.thread_id == thread_id, Message.sender_actor_id == self.actor_id)
+                    .order_by(Message.created_at, Message.id))).scalars().all()
+                by_target: dict[str, Message] = {}
+                for m in held_msgs:
+                    for handle in m.meta.get("held_handoff") or []:
+                        by_target[handle] = m         # chronological order: last write per handle wins
+                if not by_target:
+                    return
+                bots_by_handle = {a.handle: a for a in (await session.execute(select(Actor).where(Actor.kind == "bot"))).scalars()}
+                part_ids = {p.actor_id for p in (await session.execute(
+                    select(ThreadParticipant).where(ThreadParticipant.thread_id == thread_id))).scalars()}
+                released: list[InboxItem] = []
+                for handle, hm in by_target.items():
+                    target = bots_by_handle.get(handle)
+                    if target is None:
+                        continue
+                    covered = (await session.execute(
+                        select(InboxItem.id).join(Message, Message.id == InboxItem.message_id)
+                        .where(InboxItem.actor_id == target.id, InboxItem.thread_id == thread_id, InboxItem.kind == "message",
+                              Message.sender_actor_id == self.actor_id, Message.created_at >= hm.created_at)
+                        .limit(1))).first()
+                    if covered is not None:
+                        continue        # a later reply already reached it for real, or this hold was already delivered
+                    if target.id not in part_ids:
+                        session.add(ThreadParticipant(thread_id=thread_id, actor_id=target.id))
+                        part_ids.add(target.id)
+                    item = InboxItem(actor_id=target.id, thread_id=thread_id, kind="message", message_id=hm.id)
+                    session.add(item)
+                    released.append(item)
+                if not released:
+                    return
+                await session.flush()
+                me = await session.get(Actor, self.actor_id)
+                handle_by_target_id = {t.id: h for h, t in bots_by_handle.items()}
+                for item in released:
+                    handle = handle_by_target_id[item.actor_id]
+                    hm = by_target[handle]
+                    await activity.record(s, "inbox.hold_released", session=session, thread_id=thread_id, actor_id=item.actor_id,
+                                          item_id=item.id, message_id=item.message_id,
+                                          summary=f"delivered the hand-off @{me.handle if me else self.actor_id} held for "
+                                                  f"@{handle}: its queue in this thread is now empty",
+                                          held_by=me.handle if me else self.actor_id, target=handle,
+                                          held_since=hm.created_at.isoformat())
+                await session.commit()
+                await publish_waiters(s, session, thread_id)
+            for item in released:
+                await s.bus.publish("inbox.updated", item.thread_id, to_json(InboxItemOut, item))
+            for item in released:
+                await self.system.notify(item.actor_id, thread_id=thread_id)
+        except Exception:
+            log.exception("could not release held hand-offs for actor %s thread %s", self.actor_id, thread_id)
 
 
 class ExternalActor(_Worker):

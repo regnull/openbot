@@ -19,7 +19,7 @@ webhook-driven external system all participate in the same conversation the same
 
 - **Actor model runtime**: bots, humans, and external systems are all actors with inboxes; one
   run at a time per bot, with a global concurrency cap.
-- **Multi-bot workflows**: user messages without an explicit bot mention go to the thread default bot (`@chief_of_staff` unless changed); bots hand off to each other with `@mention` (only the first mention in a bot's reply wakes a bot, so a hand-off is always to one bot), with a hop limit to
+- **Multi-bot workflows**: user messages without an explicit bot mention go to the thread default bot (`@chief_of_staff` unless changed); bots hand off to each other with `@mention` (only the first mention in a bot's reply wakes a bot, so a hand-off is always to one bot; if the bot has newer messages waiting in the thread the hand-off is held and delivered automatically once it catches up), with a hop limit to
   prevent runaway bot-to-bot loops.
 - **Tools**: built-in shell/file/HTTP tools rooted at a workspace directory, a plugin
   directory of your own Python tools, and tools from any [MCP server](#mcp-servers) (remote
@@ -391,6 +391,11 @@ error for `failed`) → `run.finished` → `inbox.settled`. The ones to look for
 - `worker.error`: the worker loop itself crashed; the bot is idle until the next message wakes it.
 - `recovery.run_failed` / `recovery.items_requeued`: what a restart found in flight.
 - `inbox.purged` / `run.cancel_requested`: an operator stepped in (the bot page's "Cancel & purge").
+- `message.handoff_held` / `inbox.hold_released`: a bot mentioned another bot while it still had
+  newer messages queued in the thread, so the mention did not wake anyone (a system notice says so).
+  The platform delivers that original request itself, unmodified, once the sender's queue for the
+  thread is empty -- the model does not have to remember to re-mention the bot. If the sender's next
+  reply reaches the same target for real, the hold is superseded and nothing extra is delivered.
 
 Rows older than `ACTIVITY_LOG_RETENTION_DAYS` are pruned at startup. Every row is also mirrored
 into the file log at `DEBUG` as `openbot.runtime.activity`, so the two timelines line up.

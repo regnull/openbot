@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,6 +53,7 @@ class PostResult:
     addressed: list[Actor]
     unaddressed: bool
     items: list[InboxItem] = field(default_factory=list)
+    held: list[str] = field(default_factory=list)   # bot handles the sender mentioned but did not wake (see post_message)
 
 
 async def actor_by_handle(session: AsyncSession, handle: str) -> Actor | None:
@@ -83,6 +85,14 @@ async def notify(services, items: Iterable[InboxItem]) -> None:
 async def _publish_items(services, items: list[InboxItem]) -> None:
     for it in items:
         await services.bus.publish("inbox.updated", it.thread_id, to_json(InboxItemOut, it))
+
+
+def _system_notice(thread_id: str, content: str, *, created_at, mentions: list[str] | None = None, **meta) -> Message:
+    """A wake-nobody message recording the platform's own bookkeeping (hop limit, a held hand-off).
+    `sender_kind="system"` already means it never wakes anyone; `mentions` only decides whose *scoped*
+    history includes it (see runner._prepare)."""
+    return Message(thread_id=thread_id, sender_kind="system", sender_name="system", content=content,
+                   mentions=mentions or [], created_at=created_at, meta=meta)
 
 
 async def create_thread(services, session: AsyncSession, *, title: str, handles: list[str], created_by: Actor | None,
@@ -162,26 +172,59 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
                               actors_by_handle=by_handle, thread_bot_ids=thread_bot_ids,
                               default_bot_id=default_bot_id)
     unaddressed = sender is not None and not targets and not (mentioned or to_handles)
+    # A bot hands off only when it has nothing else waiting in this thread: messages that arrived while
+    # it was working are its next run's triggers, and if its reply woke another bot now, that bot would
+    # act on a state the sender is about to revise (two review requests for one PR, each reviewed). The
+    # reply is posted and the target added as a participant as usual; only the wake-up is held, and a
+    # notice says so. A held hand-off is not left to the model to remember: BotActor._release_held_handoffs
+    # (runtime/actors.py) delivers it, using this very message as the trigger, once the sender's queue for
+    # this thread is empty -- unless a later reply from the sender already reached the target for real, in
+    # which case this one is superseded and nothing more happens.
+    held: list[str] = []
+    pending_ids: list[str] = []
+    if sender is not None and sender.kind == "bot" and targets:
+        pending_ids = list((await session.execute(
+            select(InboxItem.id).where(InboxItem.actor_id == sender.id, InboxItem.thread_id == thread_id,
+                                       InboxItem.kind == "message", InboxItem.status == "queued"))).scalars().all())
+        if pending_ids:
+            held = [b.handle for b in targets]
     now = utcnow()
     msg = Message(thread_id=thread_id, sender_actor_id=sender.id if sender else None,
                   sender_kind=sender.kind if sender else "system", sender_name=sender.name if sender else "system",
                   content=content, mentions=[by_handle[h].id for h in mentioned if h in by_handle],
-                  hop=hop, run_id=run_id, meta=meta or {}, created_at=now)
+                  hop=hop, run_id=run_id, meta={**(meta or {}), **({"held_handoff": held} if held else {})}, created_at=now)
     session.add(msg)
     thread.last_message_at = now
     thread.updated_at = now
     if sender is not None and hop == 0:
         thread.hop_limit_notified = False
+    # Even a held target is added as a participant now: the mention is real (recorded in
+    # Message.mentions and shown in the message text), only the wake-up is deferred.
     for bot in targets:
         if bot.id not in part_ids:
             session.add(ThreadParticipant(thread_id=thread_id, actor_id=bot.id))
             part_ids.append(bot.id)
     messages = [msg]
+    if held:
+        n = len(pending_ids)
+        notice = _system_notice(
+            thread_id, created_at=now + timedelta(microseconds=1),
+            content=f"@{sender.handle} has {n} newer message{'s' if n != 1 else ''} waiting in this thread; "
+                    f"its hand-off to {', '.join('@' + h for h in held)} is held until it has handled them. "
+                    f"{'It' if len(held) == 1 else 'They'} will be delivered automatically once @{sender.handle} "
+                    f"is caught up here, whether or not @{sender.handle} mentions "
+                    f"{'it' if len(held) == 1 else 'them'} again.",
+            # Mentions the sender (so its own scoped history explains why it woke later) and the held
+            # targets (so their scoped history includes this once they are woken).
+            mentions=[sender.id, *(b.id for b in targets)],
+            kind="handoff_held", bot=sender.handle, held=held, pending=n)
+        session.add(notice)
+        messages.append(notice)
+        targets = []
     hop_limited = bool(targets) and hop >= services.settings.max_bot_hops
     if hop_limited:
         if not thread.hop_limit_notified:
-            notice = Message(thread_id=thread_id, sender_kind="system", sender_name="system", content=HOP_LIMIT_NOTICE,
-                             created_at=utcnow(), meta={"kind": "hop_limit"})
+            notice = _system_notice(thread_id, HOP_LIMIT_NOTICE, created_at=now + timedelta(microseconds=1), kind="hop_limit")
             session.add(notice)
             messages.append(notice)
             thread.hop_limit_notified = True
@@ -207,6 +250,12 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
                           summary=f"@{sender_handle} posted (hop {hop}) -> {', '.join('@' + h for h in addressed) or 'nobody'}",
                           sender=sender_handle, sender_kind=msg.sender_kind, hop=hop, addressed=addressed, mentions=mentioned,
                           to=to_handles, unaddressed=unaddressed, content=activity.preview(content))
+    if held:
+        await activity.record(services, "message.handoff_held", session=session, thread_id=thread_id, message_id=msg.id,
+                              actor_id=sender.id, run_id=run_id,
+                              summary=f"@{sender.handle}'s hand-off to {', '.join('@' + h for h in held)} held: "
+                                      f"{len(pending_ids)} newer message(s) queued for it in this thread",
+                              held=held, pending_item_ids=pending_ids)
     if hop_limited:
         await activity.record(services, "message.hop_limit", session=session, level="warning", thread_id=thread_id,
                               message_id=msg.id, actor_id=sender.id if sender else None,
@@ -230,7 +279,7 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
     await publish_waiters(services, session, thread_id)
     await notify(services, items)
     await maybe_auto_rename(services, thread_id)
-    return PostResult(message=msg, addressed=targets, unaddressed=unaddressed, items=items)
+    return PostResult(message=msg, addressed=targets, unaddressed=unaddressed, items=items, held=held)
 
 
 async def deliver_question(services, run: Run, interrupt: dict) -> list[InboxItem]:
