@@ -143,6 +143,8 @@ class ThreadOut(BaseModel):
     updated_at: datetime
     last_message_at: datetime | None
     participants: list[ParticipantOut] = []
+    # Live processing state; message recency is not activity.
+    active: bool = False
 
 
 class MessageOut(BaseModel):
