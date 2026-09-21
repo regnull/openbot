@@ -3,8 +3,16 @@
  * `<textarea>` using a hidden mirror-element technique.
  *
  * The mirror copies the element's computed styles and text, inserting a
- * zero-width sentinel at the caret offset.  Measuring the sentinel's bounding
- * rect gives us viewport-relative coordinates for the caret.
+ * zero-size sentinel at the caret offset. The sentinel is an inline-block
+ * with `vertical-align: text-bottom` and no width or height of its own, so
+ * its bounding rect collapses to a single point: the same "text-bottom"
+ * reference line an inline element like the `.caret` cursor aligns itself to
+ * (see index.css) -- not the top or the full height of the surrounding line
+ * box, which is usually taller once a line-height beyond the font's own
+ * metrics is applied (e.g. this app's `leading-relaxed` inputs). Anchoring a
+ * short cursor overlay at the line box's top left it floating visibly above
+ * the text; anchoring its bottom at this point instead puts it exactly where
+ * `.caret` would render inline, regardless of that extra leading.
  */
 
 let mirror: HTMLDivElement | null = null;
@@ -50,12 +58,11 @@ const STYLE_PROPS = [
 ];
 
 export interface CaretMetrics {
-  /** Top edge in viewport coordinates. */
-  top: number;
   /** Left edge in viewport coordinates. */
   left: number;
-  /** Height of the caret line (matches line-height). */
-  height: number;
+  /** Viewport Y of the caret's line's "text-bottom" reference -- where an element with
+   * `vertical-align: text-bottom` has its own bottom edge, same as `.caret` in RunCard. */
+  textBottom: number;
 }
 
 /**
@@ -84,18 +91,20 @@ export function getCaretMetrics(
   m.style.whiteSpace = isTextarea ? "pre-wrap" : "pre";
   m.style.wordWrap = isTextarea ? "break-word" : "normal";
 
-  // Build mirrored content with a zero-width sentinel at the caret offset ─
+  // Build mirrored content with a zero-size sentinel at the caret offset ──
   m.textContent = "";
   m.appendChild(document.createTextNode(el.value.substring(0, pos)));
 
   const marker = document.createElement("span");
-  marker.textContent = "\u200b";
+  // inline-block + 0×0 so it takes no layout space (wrapping matches the real element
+  // exactly) while still being a `vertical-align` target, unlike a zero-width character.
+  Object.assign(marker.style, { display: "inline-block", width: "0px", height: "0px", verticalAlign: "text-bottom" });
   m.appendChild(marker);
 
   m.appendChild(document.createTextNode(el.value.substring(pos)));
 
   // Measure ───────────────────────────────────────────────────────────────
-  const markerRect = marker.getBoundingClientRect();
+  const markerRect = marker.getBoundingClientRect(); // a point: top === bottom
   const mirrorRect = m.getBoundingClientRect();
   const elRect = el.getBoundingClientRect();
 
@@ -106,9 +115,8 @@ export function getCaretMetrics(
   const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
 
   const metrics: CaretMetrics = {
-    top: elRect.top + borderTop + contentY - el.scrollTop,
     left: elRect.left + borderLeft + contentX - el.scrollLeft,
-    height: markerRect.height,
+    textBottom: elRect.top + borderTop + contentY - el.scrollTop,
   };
 
   // Keep the mirror element alive for reuse; just clear its content.

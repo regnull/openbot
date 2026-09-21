@@ -13,6 +13,16 @@
  * pulse animation, reduced-motion handling) comes from that one class. Native
  * carets are hidden via `caret-color: transparent` in the base stylesheet.
  *
+ * Repositioned every animation frame while an element is focused, not on
+ * discrete DOM events: a controlled React input can have its value cleared
+ * (e.g. the composer resetting the textarea after Enter) without firing a
+ * real "input" or "selectionchange" event, since React writes `.value`
+ * directly rather than simulating user input. Listening for specific events
+ * left the overlay stuck at its last real position after such a clear;
+ * polling on rAF stays correct regardless of what moved the caret, and costs
+ * nothing while no input is focused (rAF runs only then, and pauses on a
+ * hidden tab).
+ *
  * This component renders nothing to the React tree — all DOM work is
  * imperative so it stays out of the reconciliation path.
  */
@@ -33,27 +43,26 @@ export default function CustomCaret() {
     let active: HTMLInputElement | HTMLTextAreaElement | null = null;
     let raf = 0;
 
-    // ── Helpers ────────────────────────────────────────────────────────────
-    const update = () => {
+    // ── Loop ───────────────────────────────────────────────────────────────
+    const loop = () => {
       raf = 0;
       if (!active) return;
 
       const m = getCaretMetrics(active);
       if (!m) {
         overlay.style.display = "none";
-        return;
+      } else {
+        overlay.style.display = "";
+        // `.caret`'s width/height are em-relative, matched to the font size they're drawn at
+        // (RunCard's streaming text); this is what makes the two cursors the same size.
+        overlay.style.fontSize = window.getComputedStyle(active).fontSize;
+        overlay.style.left = `${m.left}px`;
+        // `m.textBottom` is the same "text-bottom" reference `.caret` aligns itself to inline
+        // (see caretPosition.ts); place the overlay's own bottom edge there, so a `position:
+        // fixed` overlay renders at the exact spot the class would if it were inline.
+        overlay.style.top = `${m.textBottom - overlay.offsetHeight}px`;
       }
-
-      overlay.style.top = `${m.top}px`;
-      overlay.style.left = `${m.left}px`;
-      // `.caret`'s width/height are em-relative, matched to the font size they're drawn at
-      // (RunCard's streaming text); this is what makes the two cursors the same size.
-      overlay.style.fontSize = window.getComputedStyle(active).fontSize;
-      overlay.style.display = "";
-    };
-
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(update);
+      raf = requestAnimationFrame(loop);
     };
 
     // ── Delegated listeners ────────────────────────────────────────────────
@@ -66,40 +75,23 @@ export default function CustomCaret() {
       if (t.type === "password" || t.disabled || t.readOnly) return;
 
       active = t;
-      t.addEventListener("scroll", schedule, { passive: true });
-      schedule();
+      if (!raf) raf = requestAnimationFrame(loop);
     };
 
     const onFocusOut = (e: FocusEvent) => {
       // `active` is reassigned by the listeners, so TS cannot narrow it
       // through the comparison alone.
       if (!active || e.target !== active) return;
-      active.removeEventListener("scroll", schedule);
       active = null;
       overlay.style.display = "none";
     };
 
-    const onActivity = () => {
-      if (active) schedule();
-    };
-
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
-    document.addEventListener("input", onActivity, { passive: true });
-    document.addEventListener("keyup", onActivity, { passive: true });
-    document.addEventListener("mouseup", onActivity, { passive: true });
-    document.addEventListener("selectionchange", onActivity);
-    window.addEventListener("resize", onActivity, { passive: true });
 
     return () => {
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
-      document.removeEventListener("input", onActivity);
-      document.removeEventListener("keyup", onActivity);
-      document.removeEventListener("mouseup", onActivity);
-      document.removeEventListener("selectionchange", onActivity);
-      window.removeEventListener("resize", onActivity);
-      active?.removeEventListener("scroll", schedule);
       cancelAnimationFrame(raf);
       overlay.remove();
     };
