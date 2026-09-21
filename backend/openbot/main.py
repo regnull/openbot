@@ -111,13 +111,24 @@ async def start_background(services: Services) -> None:
         await services.actors.start()
     # Start the Telegram delivery listener if a bot token is configured.
     if services.settings.telegram_bot_token:
-        from openbot.channels.telegram import TelegramDeliveryListener
+        from openbot.channels.telegram import TelegramDeliveryListener, TelegramLongPoller
         listener = TelegramDeliveryListener(services)
         await listener.start()
         services._telegram_listener = listener
+        # Start long-polling transport unless webhook mode is explicitly selected.
+        if services.settings.telegram_transport != "webhook":
+            poller = TelegramLongPoller(services)
+            await poller.start()
+            services._telegram_poller = poller
+        else:
+            log.info("Telegram webhook transport selected; long-poller not started")
 
 
 async def stop_background(services: Services) -> None:
+    # Stop the Telegram long-poller (before actors, so no new updates enter).
+    poller = services._telegram_poller
+    if poller is not None:
+        await poller.stop()
     # Stop the Telegram delivery listener before actors (so no new deliveries start).
     listener = services._telegram_listener
     if listener is not None:

@@ -98,6 +98,8 @@ TUNABLES: dict[str, Tunable] = {
         "Public URL Telegram sends updates to, e.g. https://example.com/api/v1/channels/telegram/webhook."),
     "telegram_webhook_secret": Tunable("Telegram", "Webhook secret",
         "Shared secret for X-Telegram-Bot-Api-Secret-Token header validation.", secret=True),
+    "telegram_transport": Tunable("Telegram", "Transport mode",
+        "long_polling (default, no public URL needed) or webhook (requires public URL and webhook setup)."),
     # --- Model retries ---------------------------------------------------------------------------------------
     "model_retry_max_attempts": Tunable("Model retries", "Max model-call attempts",
         "Times a model call may be attempted when it fails with a transient upstream provider error "
