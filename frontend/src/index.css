@@ -217,27 +217,13 @@
   .bot-busy-dot { animation: none; opacity: 0.8; }
 }
 
-/* ── Custom caret ─────────────────────────────────────────────────────────────
-   Pulsating block cursor for text inputs. The JS overlay (CustomCaret component)
-   positions a fixed div over the input's caret; the animation below drives the
-   smooth 2-second pulse. The .custom-caret-paused modifier freezes the animation
-   briefly on keystroke for tactile feedback. The .caret class is a decorative
-   streaming cursor in RunCard and keeps its own keyframes. */
-
-@keyframes cursor-pulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1; }
-}
-
-.custom-caret-overlay {
-  animation: cursor-pulse 2s ease-in-out infinite;
-  will-change: opacity;
-}
-
-/* Typing feedback: freeze the pulse at its current opacity for 200 ms. */
-.custom-caret-paused { animation-play-state: paused !important; }
-
-/* Decorative streaming cursor (RunCard). Matches the custom-caret style. */
+/* ── Caret ────────────────────────────────────────────────────────────────────
+   One pulsing block cursor, used two places: inline as RunCard's decorative
+   streaming cursor while a bot is writing, and as a fixed-position overlay
+   (CustomCaret component) tracking the real caret in a focused text input.
+   Both are just this class -- same size (em-relative, scaled to whatever font
+   size it's drawn at), same color, same animation -- so they read as one
+   cursor rather than two similar-looking ones. */
 @keyframes caret-blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .caret { display: inline-block; width: 0.55em; height: 1.05em; vertical-align: text-bottom; background: var(--accent); animation: caret-blink 1s ease-in-out infinite; }
 

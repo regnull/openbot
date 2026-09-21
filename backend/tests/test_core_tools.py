@@ -1,3 +1,4 @@
+import pytest
 from langchain.tools import ToolRuntime
 from sqlalchemy import select
 
@@ -12,6 +13,18 @@ from openbot.tools.builtin.core import (
 )
 from openbot.tools.context import RunContext
 from tests.factories import bot_actor
+
+
+@pytest.fixture(autouse=True)
+async def _no_actor_runs(services):
+    """These tests exercise the CORE_TOOLS directly, using `eng`/`rev` and `setup()`'s posted messages
+    only as fixture data; nothing here calls into a run. With the actor system running, `setup()`'s
+    unmentioned human messages (each auto-routed to `eng`, the thread's only bot) wake eng's worker in
+    the background, and it can race ahead of the test: enough `await`s happen inside `post_message`
+    (session commits, activity.record) for the worker's task to interleave and even finish a full run
+    between `setup()`'s three posts, before assertions that expect only those three messages to exist.
+    Stopping the actor system removes the race without changing what any test asserts."""
+    await services.actors.stop()
 
 
 def rt(services, bot, thread_id, hop=1, root=None, working_directory=None):
