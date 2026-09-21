@@ -117,6 +117,7 @@ async def get_thread(thread_id: str, before: str | None = None, limit: int = Que
     d.messages = [MessageOut.model_validate(m) for m in reversed(rows[:limit])]
     d.has_more = len(rows) > limit
     d.runs = [RunOut.model_validate(r) for r in runs]
+    d.active = bool(runs)
     # Waiting bots are computed from the inbox queue, not stored, so a freshly opened page is right
     # even if every waiters.updated event was published before the SSE socket existed.
     d.waiters = await waiters_for(session, thread_id)

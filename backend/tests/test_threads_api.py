@@ -1,6 +1,10 @@
 import re
 from datetime import datetime, timedelta
 
+from sqlalchemy import select
+
+from openbot.db.models import Actor, Run
+
 from openbot.runtime.delivery import TITLE_TIME_FORMAT
 
 
@@ -42,6 +46,18 @@ async def test_thread_flow(client, services):
     assert (await client.post("/api/v1/threads", json={"handles": ["ghost"]})).status_code == 422
     assert (await client.delete(f"/api/v1/threads/{t['id']}")).status_code == 204
     assert (await client.get(f"/api/v1/threads/{t['id']}")).status_code == 404
+
+
+async def test_thread_detail_active_matches_live_runs(client, services):
+    await client.post("/api/v1/bots", json=BOT)
+    t = (await client.post("/api/v1/threads", json={"handles": ["eng"]})).json()
+    async with services.session_factory() as session:
+        actor = (await session.execute(select(Actor).where(Actor.handle == "eng"))).scalar_one()
+        session.add(Run(actor_id=actor.id, thread_id=t["id"], status="running"))
+        await session.commit()
+    detail = await client.get(f"/api/v1/threads/{t['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["active"] is True
 
 
 async def test_create_thread_with_custom_working_directory(client, services):
