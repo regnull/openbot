@@ -57,7 +57,7 @@ describe("CustomCaret", () => {
   });
 
   it("uses the shared .caret class, not a bespoke input-only style", async () => {
-    getCaretMetrics.mockReturnValue({ left: 20, textBottom: 40 });
+    getCaretMetrics.mockReturnValue({ left: 20, align: { kind: "bottom", y: 40 } });
     await focus(input, "focusin");
     const caret = overlay();
     expect(caret).not.toBeNull();
@@ -70,13 +70,13 @@ describe("CustomCaret", () => {
   });
 
   it("scales to the focused element's font size, so the shared em-based sizing matches it", async () => {
-    getCaretMetrics.mockReturnValue({ left: 0, textBottom: 24 });
+    getCaretMetrics.mockReturnValue({ left: 0, align: { kind: "bottom", y: 24 } });
     await focus(input, "focusin");
     expect(overlay()!.style.fontSize).toBe("20px");
   });
 
   it("hides on blur and ignores password fields", async () => {
-    getCaretMetrics.mockReturnValue({ left: 0, textBottom: 24 });
+    getCaretMetrics.mockReturnValue({ left: 0, align: { kind: "bottom", y: 24 } });
     await focus(input, "focusin");
     expect(overlay()!.style.display).toBe("");
     await focus(input, "focusout");
@@ -90,29 +90,40 @@ describe("CustomCaret", () => {
     pw.remove();
   });
 
-  it("aligns the block's own bottom with the caret's text-bottom reference, not the top of a taller line box", async () => {
-    // `textBottom` is the same "text-bottom" reference `vertical-align: text-bottom` uses for
-    // the inline `.caret` in RunCard (see caretPosition.ts). Anchoring the overlay's *top*
-    // there -- the old, buggy behavior -- left a short block floating near the top of a taller
-    // `leading-relaxed` line; anchoring its bottom there instead puts it where `.caret` would
-    // actually render inline, regardless of the block's own rendered height (21, here standing
-    // in for .caret's `1.05em` at this font size).
+  it("for a <textarea>-shaped caret ('bottom'), aligns the block's own bottom with the text-bottom reference, not the top of a taller line box", async () => {
+    // `align.y` for `kind: "bottom"` is the same "text-bottom" reference `vertical-align:
+    // text-bottom` uses for the inline `.caret` in RunCard (see caretPosition.ts). Anchoring the
+    // overlay's *top* there -- the old, buggy behavior -- left a short block floating near the
+    // top of a taller `leading-relaxed` line; anchoring its bottom there instead puts it where
+    // `.caret` would actually render inline, regardless of the block's own rendered height (21,
+    // here standing in for .caret's `1.05em` at this font size).
     stubOverlayOffsetHeight(21);
-    getCaretMetrics.mockReturnValue({ left: 50, textBottom: 130 });
+    getCaretMetrics.mockReturnValue({ left: 50, align: { kind: "bottom", y: 130 } });
     await focus(input, "focusin");
     expect(overlay()!.style.top).toBe(`${130 - 21}px`);
     expect(overlay()!.style.left).toBe("50px");
   });
 
+  it("for an <input>-shaped caret ('center'), centers the block on the content-box center instead of bottom-aligning it", async () => {
+    // <input> vertically centers its one line of text within its box regardless of line-height
+    // (see caretPosition.ts); bottom-aligning the cursor here, as for a <textarea>, put it too
+    // low relative to text that the browser had centered higher up in a tall fixed-height box
+    // (e.g. the "ask human" answer box, `Input`'s `h-9`).
+    stubOverlayOffsetHeight(20);
+    getCaretMetrics.mockReturnValue({ left: 50, align: { kind: "center", y: 118 } });
+    await focus(input, "focusin");
+    expect(overlay()!.style.top).toBe(`${118 - 10}px`);
+  });
+
   it("keeps repositioning every frame, not only on input/selectionchange -- a React-controlled value clear (e.g. the composer resetting the textarea after Enter) fires neither", async () => {
     stubOverlayOffsetHeight(21);
-    getCaretMetrics.mockReturnValue({ left: 200, textBottom: 24 }); // caret at the end of typed text
+    getCaretMetrics.mockReturnValue({ left: 200, align: { kind: "bottom", y: 24 } }); // caret at the end of typed text
     await focus(input, "focusin");
     expect(overlay()!.style.left).toBe("200px");
 
     // The composer clears the textarea via React state, not a real keystroke: no "input" or
     // "selectionchange" event follows. Only the metrics function's return value changes.
-    getCaretMetrics.mockReturnValue({ left: 0, textBottom: 24 }); // caret back at the start
+    getCaretMetrics.mockReturnValue({ left: 0, align: { kind: "bottom", y: 24 } }); // caret back at the start
     await nextFrame();
     expect(overlay()!.style.left).toBe("0px");
   });

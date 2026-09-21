@@ -57,10 +57,11 @@ export default function CustomCaret() {
         // (RunCard's streaming text); this is what makes the two cursors the same size.
         overlay.style.fontSize = window.getComputedStyle(active).fontSize;
         overlay.style.left = `${m.left}px`;
-        // `m.textBottom` is the same "text-bottom" reference `.caret` aligns itself to inline
-        // (see caretPosition.ts); place the overlay's own bottom edge there, so a `position:
-        // fixed` overlay renders at the exact spot the class would if it were inline.
-        overlay.style.top = `${m.textBottom - overlay.offsetHeight}px`;
+        // See caretPosition.ts: a <textarea> lays text out top-down (align to its "text-bottom",
+        // the same reference `.caret` itself uses via `vertical-align`); an <input> centers its
+        // one line regardless of line-height (align to the center of its content box instead).
+        const offset = m.align.kind === "center" ? overlay.offsetHeight / 2 : overlay.offsetHeight;
+        overlay.style.top = `${m.align.y - offset}px`;
       }
       raf = requestAnimationFrame(loop);
     };

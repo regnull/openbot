@@ -12,6 +12,12 @@ describe("getCaretMetrics", () => {
     els.push(el);
     return el;
   };
+  /** jsdom has no layout engine: getBoundingClientRect always reports zeros. Stubbing it is the
+   * only way to exercise the actual box-geometry math (the <input> centering formula). */
+  const stubRect = (el: HTMLElement, rect: Partial<DOMRect>) =>
+    vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
+      top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}), ...rect,
+    } as DOMRect);
 
   afterEach(() => { els.splice(0).forEach((e) => e.remove()); });
 
@@ -33,12 +39,35 @@ describe("getCaretMetrics", () => {
     expect(getCaretMetrics(selected)).toBeNull();
   });
 
-  it("returns left/textBottom for an ordinary focused element", () => {
+  it("returns left/align for an ordinary focused element", () => {
     const el = make("textarea", "hello world", 5);
     const m = getCaretMetrics(el);
     expect(m).not.toBeNull();
     expect(typeof m!.left).toBe("number");
-    expect(typeof m!.textBottom).toBe("number");
+    expect(typeof m!.align.y).toBe("number");
+  });
+
+  it("anchors a <textarea> to its text-bottom (top-down block flow), not a box center", () => {
+    // A <textarea> lays text out like any other block, so there is no "box" to center in --
+    // it must use the mirror's text-bottom reference, the same one .caret aligns to inline.
+    const el = make("textarea", "hello world", 5);
+    expect(getCaretMetrics(el)!.align.kind).toBe("bottom");
+  });
+
+  it("centers an <input>'s caret vertically in its content box, unlike a <textarea>", () => {
+    // <input> vertically centers its one line of text within its padding box regardless of
+    // line-height, in every mainstream browser -- a fixed-height Input (this app's h-9, no
+    // vertical padding) genuinely centers a short line inside a much taller box. Measuring it
+    // as top-anchored, like a <textarea>, put the cursor near the top of that box instead.
+    const el = make("input", "hello", 5) as HTMLInputElement;
+    Object.assign(el.style, { borderTopWidth: "2px", borderBottomWidth: "2px", paddingTop: "3px", paddingBottom: "5px" });
+    const rectSpy = stubRect(el, { top: 100, height: 36 });
+    const m = getCaretMetrics(el);
+    rectSpy.mockRestore();
+    expect(m!.align.kind).toBe("center");
+    // contentTop = 100 + border(2) + padding(3) = 105; contentHeight = 36 - 2 - 2 - 3 - 5 = 24;
+    // center = 105 + 24/2 = 117.
+    expect(m!.align.y).toBe(117);
   });
 
   it("marks the caret sentinel as a zero-size, vertical-align: text-bottom inline-block, not a zero-width character -- the same alignment mechanism the .caret class itself uses, and zero layout width so it can never shift wrapping", () => {
