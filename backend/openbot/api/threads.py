@@ -147,7 +147,7 @@ async def update_thread(thread_id: str, body: ThreadUpdate, session: AsyncSessio
         session.add(ThreadParticipant(thread_id=thread_id, actor_id=bot.id))
     await session.commit()
     parts = await participants_for(session, [thread_id])
-    return thread_out(thread, parts[thread_id], bot.handle)
+    return await thread_out(session, thread, parts[thread_id], bot.handle)
 
 
 @router.delete("/{thread_id}", status_code=204)

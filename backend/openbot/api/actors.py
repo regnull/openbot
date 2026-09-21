@@ -104,5 +104,5 @@ async def message_actor(handle: str, body: ActorMessageCreate, session: AsyncSes
         raise HTTPException(422, str(e)) from e
     parts = await participants_for(session, [thread.id])
     default_handles = await default_bot_handles_for(session, [thread.id])
-    return ActorMessageOut(thread=thread_out(thread, parts[thread.id], default_handles[thread.id]), message=MessageOut.model_validate(res.message),
+    return ActorMessageOut(thread=await thread_out(session, thread, parts[thread.id], default_handles[thread.id]), message=MessageOut.model_validate(res.message),
                            addressed=[a.handle for a in res.addressed])
