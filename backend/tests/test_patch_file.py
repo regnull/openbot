@@ -1,15 +1,13 @@
 """Tests for the ``patch_file`` tool.
 
 Covers:
-1. Exact-replacement mode (original behaviour)
-2. Unified-diff (``diff_input``) mode with the system ``patch`` command
-3. Dry-run, backup, strip-level options
-4. Error handling: empty input, invalid patches, mutual exclusivity, timeouts
-5. Edge cases: whitespace-only input, malformed diffs
+1. Unified-diff (``diff_input``) mode with the system ``patch`` command
+2. Dry-run, backup, strip-level options
+3. Error handling: empty input, invalid patches, missing diff_input
+4. Edge cases: whitespace-only input, malformed diffs
 """
 from __future__ import annotations
 
-import stat
 from pathlib import Path
 from unittest.mock import patch as mock_patch
 
@@ -44,103 +42,6 @@ SIMPLE_DIFF = """\
 +Universe
  Goodbye
 """
-
-# ── Existing tests (exact-replacement mode, preserved from main) ────────────
-
-
-async def test_patch_file_small_and_multiple_edits_preserves_newlines(tmp_path):
-    target = tmp_path / "note.txt"
-    target.write_bytes(b"one\r\ntwo\r\n")
-    runtime = rt(tmp_path)
-    result = await patch_file.ainvoke({
-        "path": "note.txt",
-        "edits": [{"old": "one", "new": "1"}, {"old": "two", "new": "2"}],
-        "runtime": runtime,
-    })
-    assert result == "patched note.txt (2 edits)"
-    assert target.read_bytes() == b"1\r\n2\r\n"
-
-
-async def test_patch_file_rejects_overlapping_occurrences_atomically(tmp_path):
-    target = tmp_path / "note.txt"
-    target.write_text("aaa")
-    before = target.read_bytes()
-    result = await patch_file.ainvoke({
-        "path": "note.txt",
-        "edits": [{"old": "aa", "new": "AA"}],
-        "runtime": rt(tmp_path),
-    })
-    assert "ambiguous (2 matches)" in result
-    assert target.read_bytes() == before
-
-
-async def test_patch_file_rejects_overlapping_anchors_atomically(tmp_path):
-    target = tmp_path / "note.txt"
-    target.write_text("abc")
-    before = target.read_bytes()
-    result = await patch_file.ainvoke({
-        "path": "note.txt",
-        "edits": [{"old": "ab", "new": "AB"}, {"old": "bc", "new": "BC"}],
-        "runtime": rt(tmp_path),
-    })
-    assert "overlapping anchors" in result
-    assert target.read_bytes() == before
-
-
-async def test_patch_file_late_failure_and_invalid_path_are_atomic(tmp_path):
-    target = tmp_path / "note.txt"
-    target.write_text("one\ntwo")
-    before = target.read_bytes()
-    runtime = rt(tmp_path)
-    result = await patch_file.ainvoke({
-        "path": "note.txt",
-        "edits": [{"old": "one", "new": "x"}, {"old": "missing", "new": "y"}],
-        "runtime": runtime,
-    })
-    assert "not found" in result and target.read_bytes() == before
-    result = await patch_file.ainvoke({
-        "path": "../note.txt",
-        "edits": [{"old": "one", "new": "x"}],
-        "runtime": runtime,
-    })
-    assert result.startswith("error:") and target.read_bytes() == before
-
-
-async def test_patch_file_replaces_text(tmp_path):
-    target = _write_hello(tmp_path)
-    runtime = rt(tmp_path)
-    result = await patch_file.ainvoke({
-        "path": "hello.txt",
-        "edits": [{"old": "World", "new": "Universe"}],
-        "runtime": runtime,
-    })
-    assert result == "patched hello.txt (1 edit)"
-    assert target.read_text() == "Hello\nUniverse\nGoodbye\n"
-
-
-async def test_patch_file_rejects_ambiguous_anchor(tmp_path):
-    _write_hello(tmp_path, "aaa\n")
-    runtime = rt(tmp_path)
-    result = await patch_file.ainvoke({
-        "path": "hello.txt",
-        "edits": [{"old": "a", "new": "b"}],
-        "runtime": runtime,
-    })
-    assert "ambiguous" in result
-
-
-async def test_patch_file_preserves_permissions(tmp_path):
-    target = _write_hello(tmp_path)
-    target.chmod(0o644)
-    original_mode = stat.S_IMODE(target.stat().st_mode)
-    runtime = rt(tmp_path)
-    await patch_file.ainvoke({
-        "path": "hello.txt",
-        "edits": [{"old": "World", "new": "Universe"}],
-        "runtime": runtime,
-    })
-    assert stat.S_IMODE(target.stat().st_mode) == original_mode
-
 
 # ── Tests for unified-diff (diff_input) mode ────────────────────────────────
 
@@ -232,20 +133,8 @@ async def test_patch_file_diff_input_whitespace_only_returns_error(tmp_path):
     assert "error:" in result
 
 
-async def test_patch_file_rejects_both_edits_and_diff_input(tmp_path):
-    """Providing both *edits* and *diff_input* must be rejected."""
-    runtime = rt(tmp_path)
-    result = await patch_file.ainvoke({
-        "path": "hello.txt",
-        "edits": [{"old": "a", "new": "b"}],
-        "diff_input": SIMPLE_DIFF,
-        "runtime": runtime,
-    })
-    assert "error:" in result and "not both" in result
-
-
-async def test_patch_file_rejects_neither_edits_nor_diff_input(tmp_path):
-    """Providing neither *edits* nor *diff_input* must be rejected."""
+async def test_patch_file_rejects_missing_diff_input(tmp_path):
+    """Providing neither *diff_input* must be rejected."""
     runtime = rt(tmp_path)
     result = await patch_file.ainvoke({
         "path": "hello.txt",

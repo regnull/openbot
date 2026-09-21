@@ -1,7 +1,5 @@
 import asyncio
-import itertools
 import os
-import tempfile
 
 from langchain.tools import ToolRuntime, tool
 
@@ -138,108 +136,36 @@ async def _apply_patch_command(
 async def patch_file(
     path: str,
     runtime: ToolRuntime[RunContext],
-    edits: list[dict[str, str]] | None = None,
     diff_input: str | None = None,
     dry_run: bool = False,
     backup: bool = False,
     strip_level: int = 1,
 ) -> str:
-    """Apply exact text replacements or a unified diff patch to files.
+    """Apply a unified diff patch to files.
 
-    **Mode 1 – exact replacements (original behaviour):**
-    Pass *path* and *edits* (a list of ``{"old": ..., "new": ...}`` dicts).
-    Each ``old`` string must occur exactly once in the file; all validation happens
-    before the file is replaced.
-
-    **Mode 2 – unified diff via the system ``patch`` command:**
     Pass *path* and *diff_input* (a unified-diff string).  The diff is piped to the
-    ``patch`` command.  Use *dry_run*, *backup* and *strip_level* to control
+    system ``patch`` command.  Use *dry_run*, *backup* and *strip_level* to control
     the command options.
 
-    Exactly one of *edits* or *diff_input* must be provided."""
-    # ── Mode selection ──────────────────────────────────────────────────
-    has_edits = edits is not None and len(edits) > 0
+    The *diff_input* must be a standard unified diff (the format produced by
+    ``git diff``, ``diff -u``, etc.)."""
     has_diff = diff_input is not None and len(diff_input) > 0
 
-    if has_edits and has_diff:
-        return "error: provide either 'edits' or 'diff_input', not both"
-    if not has_edits and not has_diff:
-        return "error: either 'edits' or 'diff_input' must be provided"
+    if not has_diff:
+        return "error: 'diff_input' must be provided and non-empty"
 
-    # ── Mode 2: unified diff via system patch ───────────────────────────
-    if has_diff:
-        try:
-            p = resolve_in_workspace(runtime.context.workspace_root, path)
-        except ValueError as e:
-            return f"error: {e}"
-        return await _apply_patch_command(
-            patch_content=diff_input,  # type: ignore[arg-type]
-            path=str(p) if p.is_file() else None,
-            dry_run=dry_run,
-            backup=backup,
-            strip_level=strip_level,
-            runtime=runtime,
-        )
-
-    # ── Mode 1: exact replacements (original logic) ─────────────────────
-    assert edits is not None  # for type-checker
     try:
         p = resolve_in_workspace(runtime.context.workspace_root, path)
-        if not p.is_file():
-            raise OSError(f"file does not exist or is not a regular file: {path}")
-        if not edits:
-            raise ValueError("edits must contain at least one replacement")
-        raw = p.read_bytes()
-        text = raw.decode("utf-8")
-        anchors: list[tuple[str, str, int, int]] = []
-        for index, edit in enumerate(edits, 1):
-            if not isinstance(edit, dict) or not isinstance(edit.get("old"), str) or not isinstance(edit.get("new"), str):
-                raise TypeError(f"edit {index} must contain string 'old' and 'new' fields")
-            old, new = edit["old"], edit["new"]
-            if not old:
-                raise ValueError(f"edit {index} has an empty anchor")
-            positions: list[int] = []
-            offset = 0
-            while True:
-                match = text.find(old, offset)
-                if match == -1:
-                    break
-                positions.append(match)
-                offset = match + 1
-            if not positions:
-                raise ValueError(f"edit {index} anchor was not found")
-            if len(positions) != 1:
-                raise ValueError(f"edit {index} anchor is ambiguous ({len(positions)} matches)")
-            start = positions[0]
-            anchors.append((old, new, start, start + len(old)))
-        if len({old for old, _, _, _ in anchors}) != len(anchors):
-            raise ValueError("edits must not contain duplicate anchors")
-        ordered = sorted(anchors, key=lambda anchor: anchor[2])
-        for previous, current in itertools.pairwise(ordered):
-            if current[2] < previous[3]:
-                raise ValueError("edits contain overlapping anchors")
-        patched = text
-        for old, new, _, _ in reversed(ordered):
-            patched = patched.replace(old, new, 1)
-        encoded = patched.encode("utf-8")
-        mode = p.stat().st_mode
-        fd, temp_name = tempfile.mkstemp(prefix=f".{p.name}.", dir=p.parent)
-        try:
-            with os.fdopen(fd, "wb") as temp:
-                temp.write(encoded)
-                temp.flush()
-                os.fsync(temp.fileno())
-            os.chmod(temp_name, mode)
-            os.replace(temp_name, p)
-        except BaseException:
-            try:
-                os.unlink(temp_name)
-            except OSError:
-                pass
-            raise
-        return f"patched {path} ({len(anchors)} edit{'s' if len(anchors) != 1 else ''})"
-    except (UnicodeDecodeError, ValueError, OSError, TypeError) as e:
+    except ValueError as e:
         return f"error: {e}"
+    return await _apply_patch_command(
+        patch_content=diff_input,  # type: ignore[arg-type]
+        path=str(p) if p.is_file() else None,
+        dry_run=dry_run,
+        backup=backup,
+        strip_level=strip_level,
+        runtime=runtime,
+    )
 
 
 @tool
