@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 
 from openbot.db.models import Actor, Run
-
 from openbot.runtime.delivery import TITLE_TIME_FORMAT
 
 
