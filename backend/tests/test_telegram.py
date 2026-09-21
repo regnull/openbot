@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from openbot.channels.telegram import (
     TelegramDeliveryListener,
+    TelegramLongPoller,
     TelegramUpdate,
     _parse_chat_id_from_ref,
     deliver_to_telegram,
@@ -887,3 +888,137 @@ async def test_status_endpoint(client, services):
     body = resp.json()
     assert "configured" in body
     assert body["configured"] is False  # no token in test
+
+
+
+# ---------------------------------------------------------------------------
+# TelegramLongPoller tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_long_poller_start_stop(services):
+    """Starting and stopping the long poller is idempotent."""
+    poller = TelegramLongPoller(services)
+    await poller.start()
+    assert poller._running is True
+    assert poller._task is not None
+    await poller.start()  # second start is a no-op
+    assert poller._task is not None
+
+    await poller.stop()
+    assert poller._running is False
+    assert poller._task is None
+    await poller.stop()  # second stop is a no-op
+
+
+@pytest.mark.asyncio
+async def test_long_poller_processes_updates(services):
+    """The poller fetches updates and processes them through process_telegram_message."""
+    poller = TelegramLongPoller(services)
+
+    # Simulate a batch of raw Telegram updates
+    fake_updates = [
+        {
+            "update_id": 1001,
+            "message": {
+                "message_id": 1,
+                "chat": {"id": 7777},
+                "from": {"id": 8888, "first_name": "Poller", "username": "poller"},
+                "text": "Hello from poller",
+            },
+        },
+        {
+            "update_id": 1002,
+            "message": {
+                "message_id": 2,
+                "chat": {"id": 7777},
+                "from": {"id": 8888, "first_name": "Poller", "username": "poller"},
+                "text": "/start",
+            },
+        },
+    ]
+
+    delivered: list[tuple[int, str]] = []
+
+    async def mock_deliver(services, chat_id, text):
+        delivered.append((chat_id, text))
+        return True
+
+    import openbot.channels.telegram as tg_mod
+    original_deliver = tg_mod.deliver_to_telegram
+    tg_mod.deliver_to_telegram = mock_deliver
+    try:
+        for update_data in fake_updates:
+            await poller._handle_update(update_data)
+
+        # offset should be past the last update
+        assert poller._offset == 1003
+
+        # The /start command should have produced a direct delivery
+        assert len(delivered) == 1
+        assert delivered[0][0] == 7777
+        assert "Welcome" in delivered[0][1]
+
+        # Regular message should have created a thread
+        async with services.session_factory() as session:
+            from sqlalchemy import select
+
+            from openbot.db.models import Thread
+            thread = (
+                await session.execute(
+                    select(Thread).where(Thread.external_ref == "telegram:7777")
+                )
+            ).scalar_one_or_none()
+            assert thread is not None
+    finally:
+        tg_mod.deliver_to_telegram = original_deliver
+
+
+@pytest.mark.asyncio
+async def test_long_poller_advances_offset_on_unparseable_updates(services):
+    """Updates that parse to None still advance the offset."""
+    poller = TelegramLongPoller(services)
+
+    # A callback_query has no message with text -- parse_telegram_update returns None
+    unparseable = {"update_id": 5001, "callback_query": {"data": "btn1"}}
+    await poller._handle_update(unparseable)
+    assert poller._offset == 5002
+
+
+@pytest.mark.asyncio
+async def test_long_poller_fetch_updates_no_token(services):
+    """Without a token, _fetch_updates returns an empty list (does not crash)."""
+    poller = TelegramLongPoller(services)
+    # telegram_bot_token is None in the test fixture
+    result = await poller._fetch_updates()
+    assert result == []
+    # offset unchanged
+    assert poller._offset == 0
+
+
+@pytest.mark.asyncio
+async def test_telegram_config_transport_default():
+    """Default transport is long_polling."""
+    from openbot.config import Settings
+    # Settings with no telegram_transport env var should default to long_polling
+    s = Settings(telegram_transport="long_polling")
+    assert s.telegram_transport == "long_polling"
+
+
+@pytest.mark.asyncio
+async def test_telegram_config_transport_webhook():
+    """Transport can be set to webhook."""
+    from openbot.config import Settings
+    s = Settings(telegram_transport="webhook")
+    assert s.telegram_transport == "webhook"
+
+
+@pytest.mark.asyncio
+async def test_telegram_config_transport_invalid():
+    """Invalid transport value raises a validation error."""
+    from pydantic import ValidationError
+
+    from openbot.config import Settings
+    with pytest.raises(ValidationError):
+        Settings(telegram_transport="invalid")

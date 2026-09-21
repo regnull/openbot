@@ -86,6 +86,9 @@ async def telegram_status(request: Request):
 
     return {
         "configured": services.settings.telegram_bot_token is not None,
+        "transport": services.settings.telegram_transport,
         "webhook_url": services.settings.telegram_webhook_url,
         "webhook_secret": services.settings.telegram_webhook_secret is not None,
+        "poller_running": getattr(services, "_telegram_poller", None) is not None
+            and getattr(services._telegram_poller, "_running", False),
     }

@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_webhook_url: str | None = None
     telegram_webhook_secret: str | None = None
+    telegram_transport: str = "long_polling"  # "long_polling" or "webhook"
 
     @field_validator("cors_origins", "webhook_retry_delays", "openrouter_provider_order", mode="before")
     @classmethod
@@ -139,6 +140,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
             )
+        return v
+
+    @field_validator("telegram_transport", mode="before")
+    @classmethod
+    def _validate_telegram_transport(cls, v):
+        if isinstance(v, str):
+            v = v.strip().lower()
+        if v not in ("long_polling", "webhook"):
+            raise ValueError("TELEGRAM_TRANSPORT must be 'long_polling' or 'webhook'.")
         return v
 
 
