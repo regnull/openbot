@@ -2,17 +2,26 @@
  * Measures the pixel position of the caret (cursor) inside an `<input>` or
  * `<textarea>` using a hidden mirror-element technique.
  *
- * The mirror copies the element's computed styles and text, inserting a
- * zero-size sentinel at the caret offset. The sentinel is an inline-block
- * with `vertical-align: text-bottom` and no width or height of its own, so
- * its bounding rect collapses to a single point: the same "text-bottom"
- * reference line an inline element like the `.caret` cursor aligns itself to
- * (see index.css) -- not the top or the full height of the surrounding line
- * box, which is usually taller once a line-height beyond the font's own
- * metrics is applied (e.g. this app's `leading-relaxed` inputs). Anchoring a
- * short cursor overlay at the line box's top left it floating visibly above
- * the text; anchoring its bottom at this point instead puts it exactly where
- * `.caret` would render inline, regardless of that extra leading.
+ * `<textarea>` lays its text out top-down, one line at a time, exactly like
+ * any other block: the mirror copies its computed styles and text, inserts a
+ * zero-size sentinel at the caret offset, and the sentinel's bounding rect
+ * gives the same "text-bottom" reference line an inline element like the
+ * `.caret` cursor aligns itself to (see index.css) -- not the top or the
+ * full height of the surrounding line box, which is usually taller once a
+ * line-height beyond the font's own metrics is applied (e.g. this app's
+ * `leading-relaxed` composer). Anchoring a short cursor at the line box's
+ * top left it floating visibly above the text; anchoring at this point
+ * instead puts it exactly where `.caret` would render inline.
+ *
+ * `<input>`, in every mainstream browser, instead vertically *centers* its
+ * one line of text within its padding box, regardless of `line-height` --
+ * this is intrinsic control rendering, not something a cloned CSS block on a
+ * mirror `<div>` reproduces. A fixed-height `Input` (this app's `h-9`, no
+ * vertical padding) genuinely centers a short line inside a much taller box;
+ * measuring it as if it were top-anchored, like a textarea, put the cursor
+ * near the top of that box instead of centered in it. So for `<input>` this
+ * returns the vertical *center* of its content box instead, derived from
+ * the element's own geometry rather than the mirror.
  */
 
 let mirror: HTMLDivElement | null = null;
@@ -60,9 +69,24 @@ const STYLE_PROPS = [
 export interface CaretMetrics {
   /** Left edge in viewport coordinates. */
   left: number;
-  /** Viewport Y of the caret's line's "text-bottom" reference -- where an element with
-   * `vertical-align: text-bottom` has its own bottom edge, same as `.caret` in RunCard. */
-  textBottom: number;
+  /** Where to vertically anchor a cursor of a given height at this caret, and how:
+   * `{kind: "bottom", y}` -- align the cursor's own bottom edge with `y` (a `<textarea>`'s
+   * "text-bottom" reference, the same one `vertical-align: text-bottom` uses).
+   * `{kind: "center", y}` -- center the cursor on `y` (an `<input>`'s content-box center,
+   * matching how the browser itself centers the input's one line of text). */
+  align: { kind: "bottom" | "center"; y: number };
+}
+
+/** Vertical center of `el`'s content box (border and padding excluded either side), in
+ * viewport coordinates -- where a browser centers an `<input>`'s one line of text. Takes the
+ * border widths already parsed by the caller rather than re-reading `computed` for them, since
+ * this runs on every animation frame while an `<input>` is focused. */
+function centerY(elRect: DOMRect, computed: CSSStyleDeclaration, borderTop: number, borderBottom: number): number {
+  const paddingTop = parseFloat(computed.paddingTop) || 0;
+  const paddingBottom = parseFloat(computed.paddingBottom) || 0;
+  const contentTop = elRect.top + borderTop + paddingTop;
+  const contentHeight = elRect.height - borderTop - borderBottom - paddingTop - paddingBottom;
+  return contentTop + contentHeight / 2;
 }
 
 /**
@@ -112,12 +136,14 @@ export function getCaretMetrics(
   const contentY = markerRect.top - mirrorRect.top;
 
   const borderTop = parseFloat(computed.borderTopWidth) || 0;
+  const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
   const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
 
-  const metrics: CaretMetrics = {
-    left: elRect.left + borderLeft + contentX - el.scrollLeft,
-    textBottom: elRect.top + borderTop + contentY - el.scrollTop,
-  };
+  const left = elRect.left + borderLeft + contentX - el.scrollLeft;
+  const align: CaretMetrics["align"] = isTextarea
+    ? { kind: "bottom", y: elRect.top + borderTop + contentY - el.scrollTop }
+    : { kind: "center", y: centerY(elRect, computed, borderTop, borderBottom) };
+  const metrics: CaretMetrics = { left, align };
 
   // Keep the mirror element alive for reuse; just clear its content.
   m.textContent = "";
