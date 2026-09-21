@@ -52,7 +52,6 @@ describe("isThreadActive", () => {
 
   it("returns false when the server reports no live active run, even for a recent message", () => {
     const now = new Date("2026-06-01T12:00:00Z").getTime();
-    const tenMinutesAgo = new Date(now - 10 * 60 * 1000).toISOString();
     expect(isThreadActive({ ...thread("a", new Date(now - 1_000).toISOString()), active: false }, now)).toBe(false);
   });
 
