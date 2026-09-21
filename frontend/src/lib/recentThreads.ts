@@ -1,13 +1,9 @@
 import type { Thread } from "../api/types";
-import { parseTs } from "./time";
-
-/** How many minutes of recency make a thread "active" for the sidebar dot. */
-export const ACTIVE_THREAD_WINDOW_MS = 5 * 60 * 1000;
 
 /** A thread is considered active when its most recent message is within the activity window. */
-export function isThreadActive(t: Thread, now = Date.now()): boolean {
-  const ref = t.last_message_at ?? t.updated_at;
-  return now - parseTs(ref).getTime() < ACTIVE_THREAD_WINDOW_MS;
+export function isThreadActive(t: Thread, _now = Date.now()): boolean {
+  // Server-derived live-run state; recent messages remain after completion.
+  return t.active === true;
 }
 
 /** How many threads the sidebar shows before offering "See more". */

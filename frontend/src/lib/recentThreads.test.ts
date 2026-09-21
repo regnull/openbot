@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Thread } from "../api/types";
-import { ACTIVE_THREAD_WINDOW_MS, isThreadActive, RECENT_THREADS_LIMIT, recentThreads, threadLabel } from "./recentThreads";
+import { isThreadActive, RECENT_THREADS_LIMIT, recentThreads, threadLabel } from "./recentThreads";
 
 const thread = (id: string, last: string | null, updated = "2026-01-01T00:00:00Z", title = ""): Thread => ({
   id, title, kind: "chat", created_by_actor_id: null, default_bot_actor_id: null, default_bot_handle: null, working_directory: null,
   external_ref: null, created_at: updated, updated_at: updated, last_message_at: last,
+  active: false,
   participants: [{ actor_id: "a", kind: "human", handle: "you", name: "You" }, { actor_id: "b", kind: "bot", handle: "eng", name: "Engineer" }],
 });
 
@@ -43,33 +44,32 @@ describe("threadLabel", () => {
 });
 
 describe("isThreadActive", () => {
-  it("returns true when last_message_at is within the activity window", () => {
+  it("returns true when the server reports a live active run", () => {
     const now = new Date("2026-06-01T12:00:00Z").getTime();
     const twoMinutesAgo = new Date(now - 2 * 60 * 1000).toISOString();
-    expect(isThreadActive(thread("a", twoMinutesAgo), now)).toBe(true);
+    expect(isThreadActive({ ...thread("a", twoMinutesAgo), active: true }, now)).toBe(true);
   });
 
-  it("returns false when last_message_at is outside the activity window", () => {
+  it("returns false when the server reports no live active run, even for a recent message", () => {
     const now = new Date("2026-06-01T12:00:00Z").getTime();
-    const tenMinutesAgo = new Date(now - 10 * 60 * 1000).toISOString();
-    expect(isThreadActive(thread("a", tenMinutesAgo), now)).toBe(false);
+    expect(isThreadActive({ ...thread("a", new Date(now - 1_000).toISOString()), active: false }, now)).toBe(false);
   });
 
-  it("returns false when last_message_at is exactly at the window boundary", () => {
+  it("returns false when active is false at the activity window boundary", () => {
     const now = new Date("2026-06-01T12:00:00Z").getTime();
-    const atBoundary = new Date(now - ACTIVE_THREAD_WINDOW_MS).toISOString();
-    expect(isThreadActive(thread("a", atBoundary), now)).toBe(false);
+    const atBoundary = new Date(now - 5 * 60 * 1000).toISOString();
+    expect(isThreadActive({ ...thread("a", atBoundary), active: false }, now)).toBe(false);
   });
 
-  it("falls back to updated_at when last_message_at is null", () => {
+  it("returns true for an active thread even when its message is old", () => {
     const now = new Date("2026-06-01T12:00:00Z").getTime();
     const oneMinuteAgo = new Date(now - 1 * 60 * 1000).toISOString();
-    expect(isThreadActive(thread("a", null, oneMinuteAgo), now)).toBe(true);
+    expect(isThreadActive({ ...thread("a", null, oneMinuteAgo), active: true }, now)).toBe(true);
   });
 
-  it("falls back to updated_at and returns false when it is old", () => {
+  it("returns false for an inactive thread even when its updated_at is recent", () => {
     const now = new Date("2026-06-01T12:00:00Z").getTime();
-    const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
-    expect(isThreadActive(thread("a", null, oneHourAgo), now)).toBe(false);
+    const oneSecondAgo = new Date(now - 1_000).toISOString();
+    expect(isThreadActive({ ...thread("a", null, oneSecondAgo), active: false }, now)).toBe(false);
   });
 });
