@@ -36,7 +36,6 @@ async def test_seed_uses_configured_bot_model(services):
 def test_chief_of_staff_delegates_in_the_same_thread():
     chief = next(b for b in DEMO_BOTS if b["handle"] == "chief_of_staff")
     assert "in this same thread" in chief["instructions"]
-    assert "Never use start_thread" in chief["instructions"]
 
 
 async def test_sync_updates_existing_demo_bots_without_touching_the_rest(services):

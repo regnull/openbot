@@ -127,7 +127,7 @@ export default function BotEditorPage() {
       </Card>
       <Card className="space-y-3">
         <SectionTitle>Tools</SectionTitle>
-        <Hint className="text-xs">Core tools (ask_human, start_thread, list_bots, memory, history recall) are always available.</Hint>
+        <Hint className="text-xs">Core tools (ask_human, list_bots, memory, history recall) are always available.</Hint>
         <p className="rounded-ui border border-warn/40 border-l-2 border-l-warn bg-warn/[0.06] px-3 py-2 font-sans text-xs leading-relaxed text-fg"><span className="font-mono text-warn">run_shell</span> is not sandboxed. It runs any command as the server user, with access to the whole filesystem and the server environment, including your provider API keys. Only the file tools are confined to the workspace.</p>
         {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-danger">{e.file}: {e.error}</p>)}
         <div className="divide-y divide-line">

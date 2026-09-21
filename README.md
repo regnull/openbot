@@ -136,7 +136,7 @@ locally, and run it as a dedicated low-privilege user (or in a VM/container) if 
 
 Bots select from a registry of built-in tools (`run_shell`, `read_file`, `write_file`,
 `list_files`, `search_code`, `http_request`, `fetch_url`) plus a handful of
-core tools every bot always has (`list_bots`, `start_thread`, `ask_human`, `read_history`,
+core tools every bot always has (`list_bots`, `ask_human`, `read_history`,
 `recall_messages`, and LangMem's `manage_memory`/`search_memory`).
 
 To add your own tools, drop a Python file with one or more

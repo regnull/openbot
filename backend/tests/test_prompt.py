@@ -45,14 +45,13 @@ def test_system_prompt_contents():
     assert "Be terse." in p and "@rev" in p and "@off" not in p and "prefers squash" in p
     assert "12 older messages" in p and "/w" in p and "ask_human" in p and "@eng" in p and "run_shell" in p
     assert "thread default bot" in p and "@chief_of_staff" in p
-    assert "current directory/root for shell and file tools" in p and "omit working_directory" in p
+    assert "current directory/root for shell and file tools" in p
     # Bots used to @-mention other bots while merely narrating ("handing this to @reviewer"), which
     # woke them for no reason. Spell out that @ is an imperative, not a way of naming a bot.
     assert ("Only write @handle when you want that bot to act now. When merely referring to a bot, "
             "use its plain name without @.") in p
-    # The chief of staff used start_thread to delegate, which split the conversation into a new thread
-    # nobody was watching. Hand-offs must stay in the current thread; start_thread is not for delegation.
-    assert "Never use start_thread to delegate or hand off work from this thread" in p
+    # There is no tool for starting a separate thread; hand-offs must stay in the current one.
+    assert "There is no way to start a separate thread" in p
 
 
 def test_history_marks_the_messages_that_triggered_this_run():
