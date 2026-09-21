@@ -41,12 +41,15 @@ function useNarrow(): boolean {
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 /**
- * Keep the row at 36px to match the collapsed rail controls; a 16px line box
- * (rather than leading-none) leaves enough ascent/descent room for labels.
+ * Keep the row at 36px to match the collapsed rail controls. The 20px line
+ * box is intentional: the 13px labels need room for font descenders (notably
+ * `g`, `p`, `q`, and `y`) while the flex row keeps that box vertically centered.
+ * The label wrappers also inherit this line-height, so `truncate` does not
+ * clip glyphs inside its overflow-hidden box.
  */
 /** Nav rows: the active one is marked by a short accent bar in the gutter, not by a filled pill. */
 const row = ({ isActive }: { isActive: boolean }) =>
-  `relative flex h-9 items-center gap-2.5 rounded-ui px-2 text-[13px] leading-4 transition-colors ${
+  `relative flex h-9 items-center gap-2.5 rounded-ui px-2 text-[13px] leading-5 transition-colors ${
     isActive
       ? "bg-sunken font-medium text-fg before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-0.5 before:rounded-full before:bg-accent"
       : "text-muted hover:bg-sunken/60 hover:text-fg"}`;
@@ -160,7 +163,7 @@ export default function Layout() {
                 ))}
               </nav>
               <div className="mt-3">
-                <NavLink to="/threads" end className="flex h-9 items-center justify-center gap-1.5 rounded-ui border border-accent bg-accent px-3 text-[13px] font-medium leading-4 text-on-accent transition-colors hover:border-accent-strong hover:bg-accent-strong">
+                <NavLink to="/threads" end className="flex h-9 items-center justify-center gap-1.5 rounded-ui border border-accent bg-accent px-3 text-[13px] font-medium leading-5 text-on-accent transition-colors hover:border-accent-strong hover:bg-accent-strong">
                   <PlusIcon className="h-3.5 w-3.5" />
                   New thread
                 </NavLink>
