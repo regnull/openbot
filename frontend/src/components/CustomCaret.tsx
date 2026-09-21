@@ -25,6 +25,7 @@ export default function CustomCaret() {
     // ── Overlay element ────────────────────────────────────────────────────
     const overlay = document.createElement("div");
     overlay.setAttribute("aria-hidden", "true");
+    overlay.classList.add("custom-caret-overlay");
     Object.assign(overlay.style, {
       position: "fixed",
       width: "2px",

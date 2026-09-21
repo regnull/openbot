@@ -219,8 +219,10 @@
 
 /* ── Custom caret ─────────────────────────────────────────────────────────────
    Drives both the JS overlay caret (CustomCaret component) and the decorative
-   streaming cursor (.caret in RunCard). Smooth fade, not a hard blink. */
-@keyframes caret-fade { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+   streaming cursor (.caret in RunCard). Smooth fade, not a hard blink.
+   Single keyframes definition shared by both use-cases. */
+
+.custom-caret-overlay { animation: caret-blink 1s ease-in-out infinite; }
 
 /* Decorative streaming cursor (RunCard). Matches the custom-caret style. */
 @keyframes caret-blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
