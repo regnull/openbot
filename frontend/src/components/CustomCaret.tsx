@@ -17,7 +17,8 @@
 import { useEffect } from "react";
 import { getCaretMetrics } from "../lib/caretPosition";
 
-const REDUCED_MOTION =
+/** Live check so runtime preference changes are respected. */
+const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -49,11 +50,9 @@ export default function CustomCaret() {
     /** Show the overlay and ensure the CSS animation is running. */
     const show = () => {
       overlay.style.display = "";
-      if (REDUCED_MOTION) {
+      if (prefersReducedMotion()) {
         overlay.style.opacity = "1";
       } else {
-        // Make sure the animation is playing (not paused from a prior keystroke).
-        overlay.classList.remove("custom-caret-paused");
         overlay.style.animation = "";
       }
     };
@@ -85,7 +84,7 @@ export default function CustomCaret() {
 
     /** Pause the pulse animation for PAUSE_MS, then let it resume. */
     const pausePulse = () => {
-      if (REDUCED_MOTION) return;
+      if (prefersReducedMotion()) return;
       clearTimeout(pauseTimer);
       overlay.classList.add("custom-caret-paused");
       pauseTimer = window.setTimeout(() => {
@@ -103,17 +102,21 @@ export default function CustomCaret() {
       if (t.type === "password" || t.disabled || t.readOnly) return;
 
       active = t;
+      // Clear any stale paused state from a prior blur-during-typing cycle.
+      overlay.classList.remove("custom-caret-paused");
       t.addEventListener("scroll", schedule, { passive: true });
       schedule();
     };
 
     const onFocusOut = (e: FocusEvent) => {
-      // `active` is reassigned by the listeners, so TS cannot narrow it through the comparison alone.
+      // `active` is reassigned by the listeners, so TS cannot narrow it
+      // through the comparison alone.
       if (!active || e.target !== active) return;
       active.removeEventListener("scroll", schedule);
       active = null;
       hide();
       clearTimeout(pauseTimer);
+      overlay.classList.remove("custom-caret-paused");
     };
 
     /** Typing: update position + freeze pulse briefly for feedback. */
