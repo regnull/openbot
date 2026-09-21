@@ -10,10 +10,10 @@ export default function Avatar({ name, kind, small, icon }: { name: string; kind
     : kind === "external" ? "border-line bg-sunken text-muted"
     : kind === "system" ? "border-dashed border-line-strong bg-transparent text-muted"
     : "border-line bg-sunken text-accent-strong";
-  const dims = small ? "h-8 w-8 text-xs" : "h-10 w-10 text-sm";
+  const dims = small ? "h-10 w-10 text-sm" : "h-12 w-12 text-base";
   const glyph = icon ? botIconFor(icon).glyph : null;
   return (
-    <span title={name} className={`inline-flex ${dims} shrink-0 items-center justify-center rounded-ui border font-medium leading-none ${cls} ${glyph ? (small ? "text-sm" : "text-base") : ""}`}>
+    <span title={name} className={`inline-flex ${dims} shrink-0 items-center justify-center rounded-ui border font-medium leading-none ${cls} ${glyph ? (small ? "text-base" : "text-lg") : ""}`}>
       {glyph ?? name.slice(0, 2).toUpperCase()}
     </span>
   );

@@ -13,14 +13,14 @@ function render(el: React.ReactNode): HTMLElement {
   return container;
 }
 
-describe("icon sizes — 25% bump", () => {
+describe("icon sizes — ~30% bump", () => {
   describe("BotIcon", () => {
-    it("renders at 36×36 (h-9 w-9) by default", () => {
+    it("renders at 48×48 (h-12 w-12) by default (+33% from h-9)", () => {
       const { firstChild } = render(<BotIcon icon="🤖" />);
       const span = firstChild as HTMLElement;
-      expect(span.className).toContain("h-9");
-      expect(span.className).toContain("w-9");
-      expect(span.className).toContain("text-lg");
+      expect(span.className).toContain("h-12");
+      expect(span.className).toContain("w-12");
+      expect(span.className).toContain("text-xl");
     });
 
     it("allows caller to override dimensions via className", () => {
@@ -32,20 +32,20 @@ describe("icon sizes — 25% bump", () => {
   });
 
   describe("Avatar", () => {
-    it("renders at 40×40 (h-10 w-10) by default", () => {
+    it("renders at 48×48 (h-12 w-12) by default (+20% from h-10)", () => {
       const { firstChild } = render(<Avatar name="Alice" kind="bot" />);
+      const span = firstChild as HTMLElement;
+      expect(span.className).toContain("h-12");
+      expect(span.className).toContain("w-12");
+      expect(span.className).toContain("text-base");
+    });
+
+    it("renders at 40×40 (h-10 w-10) in small mode (+25% from h-8)", () => {
+      const { firstChild } = render(<Avatar name="Alice" kind="bot" small />);
       const span = firstChild as HTMLElement;
       expect(span.className).toContain("h-10");
       expect(span.className).toContain("w-10");
       expect(span.className).toContain("text-sm");
-    });
-
-    it("renders at 32×32 (h-8 w-8) in small mode", () => {
-      const { firstChild } = render(<Avatar name="Alice" kind="bot" small />);
-      const span = firstChild as HTMLElement;
-      expect(span.className).toContain("h-8");
-      expect(span.className).toContain("w-8");
-      expect(span.className).toContain("text-xs");
     });
   });
 });
