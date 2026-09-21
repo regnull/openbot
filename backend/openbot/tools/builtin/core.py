@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import posixpath
-from pathlib import Path
-
 from langchain.tools import ToolRuntime, tool
 from langgraph.types import interrupt
 from sqlalchemy import select
 
 from openbot.db.models import Actor, Message
 from openbot.runtime import memory
-from openbot.tools.builtin.workspace import thread_workspace_root, validate_workspace_directory
 from openbot.tools.context import RunContext
 
 
@@ -21,41 +17,6 @@ async def list_bots(runtime: ToolRuntime[RunContext]) -> str:
         bots = (await s.execute(q)).scalars().all()
     return "\n".join(f"@{b.handle} ({b.name}): {b.description}" for b in bots
                      if b.id != runtime.context.actor_id) or "(none)"
-
-
-@tool
-async def start_thread(handles: list[str], message: str, runtime: ToolRuntime[RunContext],
-                       title: str | None = None, working_directory: str | None = None) -> str:
-    """Start a separate, unrelated conversation with the given actor handles (bots, or "you" for the human) and post
-    the first message. Title is optional; when omitted the thread is titled with the current timestamp.
-    Do not use this to delegate or hand off work from the current thread: reply in the current thread and @mention the bot instead.
-    `working_directory`, when provided, must be an existing accessible directory; absolute paths are allowed.
-    Mention bots with @handle in the message to wake them up."""
-    from openbot.runtime.delivery import create_thread, post_message
-    ctx = runtime.context
-    async with ctx.services.session_factory() as s:
-        me = await s.get(Actor, ctx.actor_id)
-        try:
-            next_working_directory = ctx.working_directory
-            if working_directory is not None:
-                if ctx.working_directory and ctx.working_directory.startswith("~") \
-                        and not Path(working_directory).is_absolute():
-                    candidate = posixpath.join(ctx.working_directory, working_directory)
-                    next_working_directory = validate_workspace_directory(
-                        ctx.services.settings.workspace_root, candidate)
-                else:
-                    next_working_directory = validate_workspace_directory(ctx.workspace_root, working_directory)
-                    selected_root = thread_workspace_root(ctx.workspace_root, next_working_directory)
-                    if (next_working_directory and not next_working_directory.startswith("~")
-                            and not Path(next_working_directory).is_absolute()):
-                        next_working_directory = selected_root.relative_to(
-                            ctx.services.settings.workspace_root.resolve()).as_posix()
-            t = await create_thread(ctx.services, s, title=title, handles=handles, created_by=me, include_human=False,
-                                    working_directory=next_working_directory)
-            await post_message(ctx.services, s, thread_id=t.id, sender=me, content=message, hop=ctx.hop)
-        except ValueError as e:
-            return f"error: {e}"
-    return f"started thread {t.id}"
 
 
 @tool
@@ -88,4 +49,4 @@ async def recall_messages(query: str, runtime: ToolRuntime[RunContext], limit: i
     return "\n".join(f"[{h.get('message_id')}] {h.get('created_at')} [{h.get('sender')}]: {h.get('content')}" for h in hits) or "(no matches)"
 
 
-CORE_TOOLS = [list_bots, start_thread, ask_human, read_history, recall_messages]
+CORE_TOOLS = [list_bots, ask_human, read_history, recall_messages]
