@@ -56,8 +56,6 @@ export interface CaretMetrics {
   left: number;
   /** Height of the caret line (matches line-height). */
   height: number;
-  /** Computed text color of the element. */
-  color: string;
 }
 
 /**
@@ -111,7 +109,6 @@ export function getCaretMetrics(
     top: elRect.top + borderTop + contentY - el.scrollTop,
     left: elRect.left + borderLeft + contentX - el.scrollLeft,
     height: markerRect.height,
-    color: computed.color,
   };
 
   // Keep the mirror element alive for reuse; just clear its content.
