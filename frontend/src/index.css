@@ -218,11 +218,24 @@
 }
 
 /* ── Custom caret ─────────────────────────────────────────────────────────────
-   Drives both the JS overlay caret (CustomCaret component) and the decorative
-   streaming cursor (.caret in RunCard). Smooth fade, not a hard blink.
-   Single keyframes definition shared by both use-cases. */
+   Pulsating block cursor for text inputs. The JS overlay (CustomCaret component)
+   positions a fixed div over the input's caret; the animation below drives the
+   smooth 2-second pulse. The .custom-caret-paused modifier freezes the animation
+   briefly on keystroke for tactile feedback. The .caret class is a decorative
+   streaming cursor in RunCard and keeps its own keyframes. */
 
-.custom-caret-overlay { animation: caret-blink 1s ease-in-out infinite; }
+@keyframes cursor-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+.custom-caret-overlay {
+  animation: cursor-pulse 2s ease-in-out infinite;
+  will-change: opacity;
+}
+
+/* Typing feedback: freeze the pulse at its current opacity for 200 ms. */
+.custom-caret-paused { animation-play-state: paused !important; }
 
 /* Decorative streaming cursor (RunCard). Matches the custom-caret style. */
 @keyframes caret-blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
