@@ -29,6 +29,16 @@ describe("icon sizes — ~30% bump", () => {
       expect(span.className).toContain("h-8");
       expect(span.className).toContain("w-8");
     });
+
+    it("supports an unenclosed presentation for navbar icons", () => {
+      const { firstChild } = render(<BotIcon icon="🤖" bare />);
+      const span = firstChild as HTMLElement;
+      expect(span.className).not.toContain("border");
+      expect(span.className).not.toContain("bg-sunken");
+      expect(span.className).not.toContain("rounded-ui");
+      expect(span.getAttribute("aria-label")).toBeTruthy();
+      expect(span.getAttribute("title")).toBeTruthy();
+    });
   });
 
   describe("Avatar", () => {
