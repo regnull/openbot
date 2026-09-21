@@ -94,3 +94,7 @@ def test_system_prompt_explains_single_handoff_and_stale_triggers():
                             older_count=0, tool_names=[])
     assert "only the first @handle in your reply wakes a bot" in p
     assert "arrived before your last reply" in p
+    # A hint ("check whether that reply already covers it") did not stop a model from redoing a
+    # seven-minute review; the marker now comes with a rule and an exit.
+    assert "Before using any tool, compare it with your last reply" in p
+    assert "answer with one short sentence saying so and stop; do not redo or re-verify the work" in p

@@ -124,6 +124,22 @@ The whole system is one loop: post, route, enqueue, pick, run, reply, post.
 - A **human** message with no mention goes to the thread's default bot, falling back to
   `@chief_of_staff`. A message with no mention in a thread that has exactly one bot goes to that bot.
 - A **bot** message with no mention wakes nobody. This is how a bot ends a conversation.
+- A **bot** message hands off only when the bot has nothing else waiting in the thread. If the
+  sender still has `queued` `message` items in that thread (mail that arrived while it was
+  working), its mentions are **held**: the reply is posted, the target added as a participant, and
+  `Message.mentions` recorded as usual, but no target is woken. `Message.metadata.held_handoff`
+  lists the handles, a system notice (`metadata.kind = "handoff_held"`, mentioning both the sender
+  and the held targets so their scoped views include it) says so, and the activity log gets
+  `message.handoff_held`. Without this the engineer opened a PR, mentioned @reviewer, then ran two
+  queued clarifications as a second task and mentioned @reviewer again: two review requests for one
+  PR, each reviewed. Human messages are never held.
+
+  The hold is not left to the model to remember: `BotActor._release_held_handoffs`
+  (`runtime/actors.py`) delivers it, unmodified, once the sender's queue for that thread is empty
+  (checked after every run of that bot settles). If a later reply from the same sender already
+  produced a real `InboxItem` for the held target, the hold is superseded and nothing is delivered;
+  when the sender holds the same target more than once before either is delivered, only the latest
+  hold is considered. Delivery adds the activity event `inbox.hold_released`.
 - A message from the **system** (`sender=None`) wakes nobody. Restart and failure notices use this.
 - Mentioned bots that are not yet participants are added to the thread.
 
@@ -364,7 +380,10 @@ These hold in the code today unless marked, and the target architecture keeps al
 5. All queued `message` items for one thread at pick time join the same run.
 6. A thread is parked for a bot while that bot has a `waiting_human` run in it.
 7. A run reads thread state only at `_prepare`; it writes thread state only by posting messages.
-8. A bot's reply wakes only the bots it mentions. An unmentioned bot reply ends the exchange.
+8. A bot's reply wakes only the bots it mentions, and only if the bot has no queued mail left in
+   that thread; otherwise the hand-off is held and delivered automatically once that mail is
+   handled, superseded only if a later reply reaches the same target for real. An unmentioned bot
+   reply ends the exchange.
 9. A message from the system wakes nobody.
 10. Memory is bot-scoped and must contain no thread-scoped facts. *(Instructed, not mechanically enforced: G6.)*
 11. Bot-to-bot hops are bounded by `MAX_BOT_HOPS` and reset by any human message.
