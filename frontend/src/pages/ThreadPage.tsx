@@ -172,8 +172,7 @@ export default function ThreadPage() {
       <div className="border-t border-line pt-3">
         {notice && <p className="mb-1.5 text-xs text-warn">{notice}</p>}
         <ErrorText error={send.error} />
-        <Composer handles={handles} autoFocus={!id} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />
-      </div>
+        <Composer handles={handles} autoFocus={detail.data.messages.length === 0} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />      </div>
     </div>
   );
 }

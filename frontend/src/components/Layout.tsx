@@ -140,8 +140,8 @@ export default function Layout() {
         {!collapsed && (
           <>
             <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
-              <img src="/logo-icon.svg" alt="" className="h-8 w-8 rounded-[6px]" aria-hidden="true" />
-              <span className="text-sm font-semibold tracking-tight">OpenBot</span>
+              <img src="/logo-icon.svg" alt="" className="h-10 w-10 rounded-[8px]" aria-hidden="true" />
+              <span className="text-base font-semibold tracking-tight">OpenBot</span>
             </div>
             <div className="scrollbar-subtle flex-1 overflow-y-auto px-2 py-3">
               <nav className="space-y-0.5" aria-label="Main">
@@ -209,7 +209,7 @@ export default function Layout() {
         {collapsed && (
           <>
             <div className="flex h-12 shrink-0 items-center justify-center border-b border-line">
-              <img src="/logo-icon.svg" alt="OpenBot" className="h-8 w-8 rounded-[6px]" />
+              <img src="/logo-icon.svg" alt="OpenBot" className="h-10 w-10 rounded-[8px]" />
             </div>
             <nav className="flex flex-1 flex-col items-center gap-1 py-3" aria-label="Main">
               {NAV.map(({ to, label, Icon, end }) => (
