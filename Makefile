@@ -1,4 +1,4 @@
-.PHONY: dev backend frontend test smoke build run lint setup reset_db sync_bots
+.PHONY: dev backend frontend electron electron-package test smoke build run lint setup reset_db sync_bots
 
 setup:          ## install backend and frontend dependencies, create .env from the template
 	cd backend && uv sync
@@ -13,6 +13,12 @@ backend:        ## backend API with auto-reload, from the repo root so ./tools, 
 
 frontend:       ## Vite dev server, proxies /api to the backend
 	cd frontend && pnpm dev
+
+electron:       ## Electron desktop window (start the backend separately with `make backend`)
+	cd frontend && pnpm electron
+
+electron-package: ## Build a distributable Electron package (requires platform tooling)
+	cd frontend && pnpm electron:package
 
 test:           ## run backend and frontend test suites (live provider smoke tests excluded)
 	cd backend && uv run pytest -q

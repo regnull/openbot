@@ -1,0 +1,15 @@
+appId: com.openbot.desktop
+productName: OpenBot
+# The backend remains a separately managed local service. The packaged UI uses
+# the same API and can also target a remote instance with OPENBOT_URL.
+directories:
+  output: frontend/release
+files:
+  - electron/**/*
+  - dist/**/*
+mac:
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage
