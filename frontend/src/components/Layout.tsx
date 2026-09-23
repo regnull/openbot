@@ -65,6 +65,7 @@ const NAV = [
   { to: "/threads", label: "Threads", Icon: ThreadsIcon, end: true },
   { to: "/bots", label: "Bots", Icon: BotsIcon, end: true },
   { to: "/settings", label: "Settings", Icon: SettingsIcon, end: false },
+  { to: "/scheduled", label: "Scheduled", Icon: ThreadsIcon, end: true },
 ] as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ export default function Layout() {
 
   useBusEvents(null, (e) => {
     if (e.event === "inbox.updated") qc.invalidateQueries({ queryKey: ["inbox"] });
+    if (e.event === "scheduled.updated") qc.invalidateQueries({ queryKey: ["scheduled"] });
     if (e.event === "message.created" || e.event === "thread.updated") {
       qc.invalidateQueries({ queryKey: ["threads"] });
     }

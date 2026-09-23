@@ -39,6 +39,7 @@ from openbot.runtime.prompt import build_history, build_system_prompt
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.tools.builtin.core import CORE_TOOLS
+from openbot.tools.builtin.scheduling import SCHEDULING_TOOLS
 from openbot.tools.builtin.workspace import thread_workspace_root
 from openbot.tools.context import RunContext
 
@@ -310,7 +311,7 @@ class Runner:
 
     def _build_agent(self, bot: Actor, system_prompt: str):
         p = bot.bot
-        tools = [*self.s.registry.resolve(list(p.tool_names)), *CORE_TOOLS, *memory.memory_tools(bot.id, self.s.store),
+        tools = [*self.s.registry.resolve(list(p.tool_names)), *CORE_TOOLS, *SCHEDULING_TOOLS, *memory.memory_tools(bot.id, self.s.store),
                  *builtin_tools(p, self.s.settings)]
         model = self.s.model_factory(bot)
         return create_agent(model, tools=tools, system_prompt=system_prompt, middleware=self.build_middleware(bot, model),

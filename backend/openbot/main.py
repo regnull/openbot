@@ -17,7 +17,18 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from openbot.api import activity as activity_api
-from openbot.api import actors, bots, events, inbox, messages, providers, runs, threads, tools
+from openbot.api import (
+    actors,
+    bots,
+    events,
+    inbox,
+    messages,
+    providers,
+    runs,
+    scheduled,
+    threads,
+    tools,
+)
 from openbot.api import mcp as mcp_api
 from openbot.api import settings as settings_api
 from openbot.api import setup as setup_api
@@ -35,6 +46,7 @@ from openbot.runtime.memory import MemoryReflector
 from openbot.runtime.persistence import open_langgraph_backends
 from openbot.runtime.providers import chat_model, embeddings
 from openbot.runtime.runner import Runner
+from openbot.runtime.scheduler import Scheduler, recover_processing
 from openbot.runtime.secrets import SecretBox, resolve_secret_key
 from openbot.seed import ensure_human_actor, seed_demo_bots
 from openbot.services import Services
@@ -68,6 +80,7 @@ async def build_services(settings: Settings) -> Services:
     services.runner = Runner(services)
     services.http_client = httpx.AsyncClient(timeout=15)
     services.actors = ActorSystem(services, settings.max_concurrent_runs)
+    services.scheduler = Scheduler(services)
     services._owned_resources = [engine, stack, services.http_client]
     Path(settings.workspace_root).mkdir(parents=True, exist_ok=True)
     _log_startup(settings, services)
@@ -109,6 +122,9 @@ async def start_background(services: Services) -> None:
     await activity.prune(services, services.settings.activity_log_retention_days)
     if services.actors is not None:
         await services.actors.start()
+    if services.scheduler is not None:
+        await recover_processing(services)
+        await services.scheduler.start()
     # Start the Telegram delivery listener if a bot token is configured.
     if services.settings.telegram_bot_token:
         from openbot.channels.telegram import TelegramDeliveryListener, TelegramLongPoller
@@ -133,6 +149,8 @@ async def stop_background(services: Services) -> None:
     listener = services._telegram_listener
     if listener is not None:
         await listener.stop()
+    if services.scheduler is not None:
+        await services.scheduler.stop()
     if services.actors is not None:
         await services.actors.stop()
     if services.mcp is not None:
@@ -268,7 +286,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
     for r in (actors.router, bots.router, threads.router, messages.router, inbox.router, runs.router, tools.router,
               providers.router, events.router, settings_api.router, mcp_api.router, setup_api.router,
-              workspace_api.router, activity_api.router):
+              workspace_api.router, activity_api.router, scheduled.router):
         api.include_router(r)
     app.include_router(public)
     app.include_router(api)

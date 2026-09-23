@@ -31,3 +31,4 @@ class Services:
     _telegram_listener: Any = None  # TelegramDeliveryListener (started in start_background)
     _telegram_poller: Any = None  # TelegramLongPoller (started in start_background for long-polling mode)
     _seed_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    scheduler: Any = None
