@@ -1,5 +1,5 @@
 from openbot.runtime.router import parse_mentions, resolve_targets
-from tests.factories import bot_actor, external_actor, human_actor
+from tests.factories import bot_actor, cron_actor, external_actor, human_actor
 
 
 def mk(handle, enabled=True):
@@ -12,7 +12,9 @@ YOU = human_actor()
 YOU.id = "id-you"
 CI = external_actor("ci")
 CI.id = "id-ci"
-ACTORS = {a.handle: a for a in [mk("eng"), mk("rev"), mk("qa"), mk("off", enabled=False), YOU, CI]}
+CRON = cron_actor()
+CRON.id = "id-cron"
+ACTORS = {a.handle: a for a in [mk("eng"), mk("rev"), mk("qa"), mk("off", enabled=False), YOU, CI, CRON]}
 
 
 def test_parse_mentions():
@@ -51,6 +53,21 @@ def test_explicit_mentions_take_precedence_over_default_bot():
     t = resolve_targets(sender=YOU, mentioned_handles=["qa"], to_handles=[], actors_by_handle=ACTORS,
                         thread_bot_ids=["id-qa", "id-eng"], default_bot_id="id-eng")
     assert [b.handle for b in t] == ["qa"]
+
+
+def test_cron_self_addressed_reminder_wakes_the_only_bot():
+    """A self-scheduled reminder is delivered by @cron, not by the bot that scheduled it, precisely so
+    it can still wake that bot: a 'bot' sender excludes itself from candidacy (see
+    test_bot_mentions_unknown_default_is_sender), but cron is not a bot."""
+    t = resolve_targets(sender=CRON, mentioned_handles=[], to_handles=[], actors_by_handle=ACTORS,
+                        thread_bot_ids=["id-qa"], default_bot_id="id-qa")
+    assert [b.handle for b in t] == ["qa"]
+
+
+def test_cron_reminder_routes_to_configured_default_bot():
+    t = resolve_targets(sender=CRON, mentioned_handles=[], to_handles=[], actors_by_handle=ACTORS,
+                        thread_bot_ids=["id-qa", "id-eng"], default_bot_id="id-eng")
+    assert [b.handle for b in t] == ["eng"]
 
 
 def test_multi_bot_thread_without_configured_default_requires_mention():

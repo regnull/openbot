@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 
 HOP_LIMIT_NOTICE = "Bot-to-bot hop limit reached; a human message resets it."
 HUMAN_HANDLE = "you"
+CRON_HANDLE = "cron"
 DEFAULT_BOT_HANDLE = "chief_of_staff"
 # Format for auto-generated thread titles when no title is provided:
 # "YYYY-MM-DD HH:MM" in local time.
@@ -64,6 +65,13 @@ async def human_actor(session: AsyncSession) -> Actor:
     actor = await actor_by_handle(session, HUMAN_HANDLE)
     if actor is None:
         raise LookupError("human actor @you does not exist")
+    return actor
+
+
+async def cron_actor(session: AsyncSession) -> Actor:
+    actor = await actor_by_handle(session, CRON_HANDLE)
+    if actor is None:
+        raise LookupError("cron actor @cron does not exist")
     return actor
 
 

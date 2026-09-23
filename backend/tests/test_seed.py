@@ -2,7 +2,7 @@ from sqlalchemy import select
 
 from openbot.db.models import Actor
 from openbot.runtime.providers import effective_bot_profile
-from openbot.seed import DEMO_BOTS, seed_demo_bots
+from openbot.seed import DEMO_BOTS, ensure_cron_actor, seed_demo_bots
 
 
 async def test_seed_once(services):
@@ -31,6 +31,15 @@ async def test_seed_uses_configured_bot_model(services):
         bots = {a.handle: a for a in (await s.execute(select(Actor).where(Actor.kind == "bot"))).scalars()}
     assert bots["chief_of_staff"].bot.provider == "auto"
     assert effective_bot_profile(bots["chief_of_staff"].bot, services.settings) == ("openrouter", "google/gemini-2.0-flash-001")
+
+
+async def test_ensure_cron_actor_idempotent(services):
+    # The `services` fixture already seeds it; a second call must not create a duplicate handle.
+    actor = await ensure_cron_actor(services)
+    assert actor.kind == "system" and actor.handle == "cron"
+    async with services.session_factory() as s:
+        rows = (await s.execute(select(Actor).where(Actor.handle == "cron"))).scalars().all()
+        assert [r.id for r in rows] == [actor.id]
 
 
 def test_chief_of_staff_delegates_in_the_same_thread():

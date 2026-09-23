@@ -1,4 +1,4 @@
-export type ActorKind = "bot" | "human" | "external";
+export type ActorKind = "bot" | "human" | "external" | "system";
 export interface Actor { id: string; kind: ActorKind; handle: string; name: string; description: string; enabled: boolean; webhook_url: string | null; created_at: string; updated_at: string; }
 export interface Bot { id: string; handle: string; name: string; description: string; icon: string; enabled: boolean; active: boolean; instructions: string; provider: string; model: string; model_settings: Record<string, unknown>; tool_names: string[]; approval_tools: string[]; memory_enabled: boolean; created_at: string; updated_at: string; }
 export type BotInput = Omit<Bot, "id" | "created_at" | "updated_at" | "active">;

@@ -39,7 +39,9 @@ def resolve_targets(*, sender: Actor | None, mentioned_handles: list[str], to_ha
         default = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
         ordered = [a for a in default if a.enabled and a.id != sender.id]
     if not ordered and not (to_handles or mentioned_handles):
-        if sender.kind == "human" and default_bot_id is not None:
+        # Non-bot senders (a human, or cron delivering a self-scheduled reminder) never self-loop, so
+        # they get the same default-bot fallback a bot gets when addressing someone else.
+        if sender.kind != "bot" and default_bot_id is not None:
             ordered = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
         elif len(thread_bot_ids) == 1:
             ordered = [a for a in actors_by_handle.values() if a.id == thread_bot_ids[0] and a.kind == "bot"]

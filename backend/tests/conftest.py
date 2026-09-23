@@ -11,7 +11,7 @@ from openbot.config import Settings
 from openbot.db.session import create_all, make_engine, make_session_factory
 from openbot.main import create_app
 from openbot.runtime.bus import EventBus
-from openbot.seed import ensure_human_actor
+from openbot.seed import ensure_cron_actor, ensure_human_actor
 from openbot.services import Services
 from openbot.tools.registry import build_registry
 from tests.fakes import ScriptedChatModel
@@ -136,6 +136,7 @@ async def build_test_services(settings: Settings, scripts: dict | None = None) -
     except ImportError:
         pass
     await ensure_human_actor(services)
+    await ensure_cron_actor(services)
     return services
 
 
