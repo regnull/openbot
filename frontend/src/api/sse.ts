@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { BASE, getApiKey } from "./client";
 import type { BusEvent } from "./types";
 
-const EVENTS = ["message.created", "run.updated", "run.event", "inbox.updated", "bots.updated", "waiters.updated", "thread.updated"];
+const EVENTS = ["message.created", "run.updated", "run.event", "inbox.updated", "bots.updated", "waiters.updated", "thread.updated", "scheduled.updated"];
 
 /**
  * Open one bus subscription. Returns the unsubscribe function.

@@ -150,6 +150,24 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
 
+class ScheduledMessage(Base):
+    """Durable one-shot message waiting for the scheduler."""
+    __tablename__ = "scheduled_messages"
+    __table_args__ = (Index("ix_scheduled_status_due", "status", "due_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False)
+    sender_actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), nullable=False)
+    to_handles: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class InboxItem(Base):
     __tablename__ = "inbox_items"
     __table_args__ = (Index("ix_inbox_actor_status_created", "actor_id", "status", "created_at"),)

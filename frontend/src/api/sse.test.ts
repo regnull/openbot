@@ -51,6 +51,12 @@ describe("subscribeBusEvents", () => {
     expect(onEvent).toHaveBeenCalledWith({ event: "bots.updated", data: { id: "b1", active: true } });
   });
 
+  it("subscribes to scheduled-message updates", () => {
+    const { es, onEvent } = subscribe();
+    es.emit("scheduled.updated", { event: "scheduled.updated", data: { id: "job-1", status: "delivered" } });
+    expect(onEvent).toHaveBeenCalledWith({ event: "scheduled.updated", data: { id: "job-1", status: "delivered" } });
+  });
+
   it("closes the stream on unsubscribe", () => {
     const { es, stop } = subscribe();
     stop();

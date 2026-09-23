@@ -5,6 +5,7 @@ import { Api } from "../api/client";
 import { useBusEvents } from "../api/sse";
 import { shouldRefreshBots } from "../lib/botActivity";
 import { isThreadActive, recentThreads, threadLabel } from "../lib/recentThreads";
+import { refreshScheduledMessages } from "../lib/scheduledEvents";
 import BotActivityIndicator from "./BotActivityIndicator";
 import BotIcon from "./BotIcon";
 import ThemeToggle from "./ThemeToggle";
@@ -65,6 +66,7 @@ const NAV = [
   { to: "/threads", label: "Threads", Icon: ThreadsIcon, end: true },
   { to: "/bots", label: "Bots", Icon: BotsIcon, end: true },
   { to: "/settings", label: "Settings", Icon: SettingsIcon, end: false },
+  { to: "/scheduled", label: "Scheduled", Icon: ThreadsIcon, end: true },
 ] as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -76,6 +78,7 @@ export default function Layout() {
 
   useBusEvents(null, (e) => {
     if (e.event === "inbox.updated") qc.invalidateQueries({ queryKey: ["inbox"] });
+    refreshScheduledMessages(e, () => qc.invalidateQueries({ queryKey: ["scheduled"] }));
     if (e.event === "message.created" || e.event === "thread.updated") {
       qc.invalidateQueries({ queryKey: ["threads"] });
     }
@@ -84,6 +87,8 @@ export default function Layout() {
     qc.invalidateQueries({ queryKey: ["inbox"] });
     qc.invalidateQueries({ queryKey: ["threads"] });
     qc.invalidateQueries({ queryKey: ["bots"] });
+    // SSE does not replay events missed while disconnected; refresh schedules too.
+    refreshScheduledMessages({ event: "scheduled.updated" }, () => qc.invalidateQueries({ queryKey: ["scheduled"] }));
   });
 
   const unread = inbox.data?.length ?? 0;

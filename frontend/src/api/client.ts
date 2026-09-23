@@ -1,6 +1,8 @@
 import type { Actor, AppSetting, Bot, DirectoryListing, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
+export interface ScheduledMessage { id: string; thread_id: string; content: string; due_at: string; status: string; attempts: number; last_error?: string | null; result_message_id?: string | null; to_handles: string[]; }
+
 export interface AttachmentIn { url: string; name?: string; }
 import { ApiError, backendUnavailableEvent, isBackendUnavailable } from "./errors";
 
@@ -19,13 +21,16 @@ export const BASE = desktopApiBase
   ? `${desktopApiBase.replace(/\/$/, "")}/api/v1`
   : "/api/v1";
 const KEY = "openbot_api_key";
+const ACTOR = "openbot_actor_handle";
 export const getApiKey = (): string => { try { return localStorage.getItem(KEY) ?? ""; } catch { return ""; } };
+export const getActorHandle = (): string => { try { return localStorage.getItem(ACTOR) ?? "you"; } catch { return "you"; } };
 export const setApiKey = (k: string) => { if (k) localStorage.setItem(KEY, k); else localStorage.removeItem(KEY); window.dispatchEvent(new Event("openbot:api-key-changed")); };
 
 async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const key = getApiKey();
   if (key) headers["X-API-Key"] = key;
+  if (path === "/scheduled" || path.startsWith("/scheduled/")) headers["X-OpenBot-Actor"] = getActorHandle();
   let body: BodyInit | undefined;
   if (init.json !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(init.json); }
   let r: Response;
@@ -88,5 +93,8 @@ export const Api = {
   getSettings: () => api<AppSetting[]>("/settings"),
   patchSettings: (updates: Record<string, unknown>) => api<AppSetting[]>("/settings", { method: "PATCH", json: updates }),
   resetSetting: (key: string) => api<AppSetting[]>(`/settings/${key}`, { method: "DELETE" }),
+  listScheduled: () => api<ScheduledMessage[]>("/scheduled"),
+  createScheduled: (body: { thread_id: string; content: string; due_at: string; to: string[] }) => api<ScheduledMessage>("/scheduled", { method: "POST", json: body }),
+  cancelScheduled: (id: string) => api<ScheduledMessage>(`/scheduled/${id}/cancel`, { method: "POST" }),
   getProviders: () => api<ProvidersOut>("/providers"),
 };
