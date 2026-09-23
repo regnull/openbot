@@ -5,6 +5,7 @@ import { Api } from "../api/client";
 import { useBusEvents } from "../api/sse";
 import { shouldRefreshBots } from "../lib/botActivity";
 import { isThreadActive, recentThreads, threadLabel } from "../lib/recentThreads";
+import { refreshScheduledMessages } from "../lib/scheduledEvents";
 import BotActivityIndicator from "./BotActivityIndicator";
 import BotIcon from "./BotIcon";
 import ThemeToggle from "./ThemeToggle";
@@ -77,7 +78,7 @@ export default function Layout() {
 
   useBusEvents(null, (e) => {
     if (e.event === "inbox.updated") qc.invalidateQueries({ queryKey: ["inbox"] });
-    if (e.event === "scheduled.updated") qc.invalidateQueries({ queryKey: ["scheduled"] });
+    refreshScheduledMessages(e, () => qc.invalidateQueries({ queryKey: ["scheduled"] }));
     if (e.event === "message.created" || e.event === "thread.updated") {
       qc.invalidateQueries({ queryKey: ["threads"] });
     }
