@@ -98,6 +98,22 @@ async def test_create_with_icon_and_active_status(client, services):
     assert fetched["active"] is True
 
 
+async def test_idle_bot_is_not_active_for_stale_or_terminal_runs(client, services):
+    """Activity is based only on canonical live run statuses, not queued history."""
+    bot = (await client.post("/api/v1/bots", json={**BOT, "handle": "qa"})).json()
+    thread = (await client.post("/api/v1/threads", json={"title": "qa", "handles": ["qa"]})).json()
+    async with services.session_factory() as session:
+        for status in ("queued", "completed", "failed", "cancelled"):
+            session.add(Run(actor_id=bot["id"], thread_id=thread["id"], status=status))
+        await session.commit()
+    assert (await client.get(f"/api/v1/bots/{bot['id']}" )).json()["active"] is False
+
+    async with services.session_factory() as session:
+        session.add(Run(actor_id=bot["id"], thread_id=thread["id"], status="running"))
+        await session.commit()
+    assert (await client.get(f"/api/v1/bots/{bot['id']}" )).json()["active"] is True
+
+
 async def test_waiting_human_counts_as_active(client, services):
     bot = (await client.post("/api/v1/bots", json=BOT)).json()
     thread = (await client.post("/api/v1/threads", json={"title": "t", "handles": ["eng"]})).json()
