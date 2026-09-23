@@ -54,15 +54,17 @@ const STYLE_PROPS = [
   "text-transform",
   "word-spacing",
   "text-indent",
+  "text-align",
+  "direction",
+  "unicode-bidi",
   "line-height",
+  "word-break",
+  "overflow-wrap",
+  "tab-size",
   "padding-top",
   "padding-right",
   "padding-bottom",
   "padding-left",
-  "border-top-width",
-  "border-right-width",
-  "border-bottom-width",
-  "border-left-width",
   "box-sizing",
 ];
 
@@ -111,6 +113,15 @@ export function getCaretMetrics(
   }
 
   const isTextarea = el instanceof HTMLTextAreaElement;
+  const borderTop = parseFloat(computed.borderTopWidth) || 0;
+  const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
+  const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
+
+  // Keep the mirror borderless: clientWidth is already the target's padding-box
+  // width, so a border-box mirror needs no border-width adjustment. Adding
+  // target border widths without copying their styles would not create borders
+  // and would leave the mirror's inner layout too wide.
+  m.style.boxSizing = "border-box";
   m.style.width = isTextarea ? `${el.clientWidth}px` : "";
   m.style.whiteSpace = isTextarea ? "pre-wrap" : "pre";
   m.style.wordWrap = isTextarea ? "break-word" : "normal";
@@ -134,10 +145,6 @@ export function getCaretMetrics(
 
   const contentX = markerRect.left - mirrorRect.left;
   const contentY = markerRect.top - mirrorRect.top;
-
-  const borderTop = parseFloat(computed.borderTopWidth) || 0;
-  const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
-  const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
 
   const left = elRect.left + borderLeft + contentX - el.scrollLeft;
   const align: CaretMetrics["align"] = isTextarea
