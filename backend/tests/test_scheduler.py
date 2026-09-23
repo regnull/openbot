@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -118,3 +119,53 @@ async def test_future_jobs_remain_pending(services):
     await Scheduler(services).run_due()
     job = await _get(services, job_id)
     assert job.status == "pending" and job.attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_delivery_is_idempotent_after_message_commit(services, monkeypatch):
+    job_id = await _job(services, status="processing")
+    async with services.session_factory() as session:
+        job = await session.get(ScheduledMessage, job_id)
+        message = Message(thread_id=job.thread_id, sender_kind="human", sender_name="you",
+                          content=job.content, meta={"scheduled_message_id": job.id})
+        session.add(message)
+        await session.commit()
+    deliver = AsyncMock()
+    monkeypatch.setattr("openbot.runtime.scheduler.post_message", deliver)
+    await Scheduler(services)._deliver(job_id)
+    job = await _get(services, job_id)
+    assert job.status == "delivered" and job.result_message_id == message.id
+    deliver.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delivery_state_transitions_publish_sse_updates(services, monkeypatch):
+    await _job(services)
+    published = []
+    async def publish(event, thread_id, payload):
+        published.append((event, thread_id, payload))
+    monkeypatch.setattr(services.bus, "publish", publish)
+    result = Message(id="result", thread_id="unused", sender_kind="human", sender_name="you", content="check CI")
+    async def deliver(*args, **kwargs):
+        return SimpleNamespace(message=result)
+    monkeypatch.setattr("openbot.runtime.scheduler.post_message", deliver)
+    await Scheduler(services).run_due()
+    assert published[-1][0] == "scheduled.updated"
+    assert published[-1][2]["status"] == "delivered"
+
+
+@pytest.mark.asyncio
+async def test_retry_and_terminal_failure_publish_sse_updates(services, monkeypatch):
+    await _job(services)
+    published = []
+    async def publish(event, thread_id, payload):
+        published.append(payload)
+    monkeypatch.setattr(services.bus, "publish", publish)
+    async def fail(*args, **kwargs):
+        raise RuntimeError("provider unavailable")
+    monkeypatch.setattr("openbot.runtime.scheduler.post_message", fail)
+    worker = Scheduler(services)
+    await worker.run_due()
+    await worker.run_due()
+    await worker.run_due()
+    assert [p["status"] for p in published] == ["pending", "pending", "failed"]

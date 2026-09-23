@@ -5,7 +5,7 @@ import logging
 
 from sqlalchemy import select, update
 
-from openbot.db.models import Actor, ScheduledMessage, utcnow
+from openbot.db.models import Actor, Message, ScheduledMessage, utcnow
 from openbot.runtime.delivery import post_message
 
 log = logging.getLogger(__name__)
@@ -36,8 +36,6 @@ class Scheduler:
             await asyncio.sleep(1)
 
     async def run_due(self):
-        # The conditional UPDATE is the lease: concurrent workers can select the same id,
-        # but only one can move it out of pending and deliver it.
         async with self.services.session_factory() as session:
             ids = (await session.execute(select(ScheduledMessage.id).where(
                 ScheduledMessage.status == "pending", ScheduledMessage.due_at <= utcnow()
@@ -62,6 +60,20 @@ class Scheduler:
             if not job or job.status != "processing":
                 return
             try:
+                # post_message commits independently. If the process dies after that
+                # commit but before recording the job, do not post a duplicate.
+                messages = (await session.execute(
+                    select(Message).where(Message.thread_id == job.thread_id)
+                    .order_by(Message.created_at.desc())
+                )).scalars().all()
+                existing = next((m for m in messages
+                                 if (m.meta or {}).get("scheduled_message_id") == job.id), None)
+                if existing is not None:
+                    job.status, job.result_message_id = "delivered", existing.id
+                    job.last_error = None
+                    await session.commit()
+                    await self._publish(job)
+                    return
                 sender = await session.get(Actor, job.sender_actor_id)
                 result = await post_message(
                     self.services, session, thread_id=job.thread_id, sender=sender,
@@ -71,11 +83,24 @@ class Scheduler:
                 job.status, job.result_message_id = "delivered", result.message.id
                 job.last_error = None
                 await session.commit()
-            except (LookupError, ValueError, RuntimeError, OSError) as exc:
+                await self._publish(job)
+            except Exception as exc:  # noqa: BLE001 - delivery providers may raise arbitrary errors
                 job.last_error = str(exc)
                 job.status = "pending" if job.attempts < 3 else "failed"
                 await session.commit()
+                await self._publish(job)
                 log.warning("scheduled message %s failed (attempt %s): %s", job.id, job.attempts, exc)
+
+    async def _publish(self, job: ScheduledMessage) -> None:
+        """Publish after persistence; event failure must not change job state."""
+        try:
+            await self.services.bus.publish(
+                "scheduled.updated", job.thread_id,
+                {"id": job.id, "status": job.status, "attempts": job.attempts,
+                 "result_message_id": job.result_message_id, "last_error": job.last_error},
+            )
+        except Exception:
+            log.exception("could not publish scheduled update for %s", job.id)
 
 
 async def recover_processing(services):
