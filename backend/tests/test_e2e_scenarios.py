@@ -12,6 +12,7 @@ from tests.fakes import ScriptedChatModel, ai, call
 
 BOT = {"handle": "eng", "name": "Engineer", "provider": "openai", "model": "m"}
 REVIEWER = {"handle": "rev", "name": "Reviewer", "provider": "openai", "model": "m"}
+QA = {"handle": "qa", "name": "QA", "provider": "openai", "model": "m"}
 
 
 async def runs_for(client, thread_id):
@@ -211,3 +212,140 @@ async def test_two_threads_process_concurrently(client, services):
     assert dA["active"] is False and dB["active"] is False
     assert [r["status"] for r in await runs_for(client, tA["id"])] == ["completed"]
     assert [r["status"] for r in await runs_for(client, tB["id"])] == ["completed"]
+
+
+async def poll_until(check, timeout=3.0, interval=0.02):
+    """Poll an async `check()` until it returns something truthy; raises if it never does."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        if (result := await check()):
+            return result
+        await asyncio.sleep(interval)
+    raise AssertionError("condition not met within timeout")
+
+
+def statuses(runs):
+    return [r["status"] for r in runs]
+
+
+# 6. The same bot serializes its own backlog across two threads, without blocking a third thread on a
+#    different bot ---------------------------------------------------------------------------------
+
+async def test_same_bot_across_two_threads_does_not_block_a_third_bots_thread(client, services):
+    """eng has one worker: mail queued for it in two different threads is handled one thread at a
+    time, never two eng runs at once. That backlog must not stall rev, which has its own worker and
+    its own thread, and should complete independently while eng is still working through its own."""
+    await client.post("/api/v1/bots", json=BOT)
+    await client.post("/api/v1/bots", json=REVIEWER)
+    base_factory = services.model_factory
+    slow = {"eng": Slow([ai("Handled."), ai("Handled.")], delay=0.4), "rev": Slow([ai("Reviewed.")], delay=0.2)}
+    services.model_factory = lambda actor: ScriptedChatModel(messages=slow[actor.handle]) if actor.handle in slow else base_factory(actor)
+
+    tA = (await client.post("/api/v1/threads", json={"handles": ["eng"]})).json()
+    tB = (await client.post("/api/v1/threads", json={"handles": ["eng"]})).json()
+    tC = (await client.post("/api/v1/threads", json={"handles": ["rev"]})).json()
+
+    await asyncio.gather(
+        client.post(f"/api/v1/threads/{tA['id']}/messages", json={"content": "@eng go"}),
+        client.post(f"/api/v1/threads/{tB['id']}/messages", json={"content": "@eng go"}),
+        client.post(f"/api/v1/threads/{tC['id']}/messages", json={"content": "@rev go"}),
+    )
+
+    async def eng_and_rev_running_together():
+        ra, rb, rc = await asyncio.gather(*(runs_for(client, t["id"]) for t in (tA, tB, tC)))
+        eng_running = sum("running" in statuses(rs) for rs in (ra, rb))
+        return eng_running == 1 and "running" in statuses(rc)
+
+    await poll_until(eng_and_rev_running_together)      # rev's thread progressed while eng was still busy
+    await services.actors.wait_idle(timeout=10)
+
+    dA, dB, dC = await thread_detail(client, tA["id"]), await thread_detail(client, tB["id"]), await thread_detail(client, tC["id"])
+    assert [m["content"] for m in dA["messages"]] == ["@eng go", "Handled."]
+    assert [m["content"] for m in dB["messages"]] == ["@eng go", "Handled."]
+    assert [m["content"] for m in dC["messages"]] == ["@rev go", "Reviewed."]
+    assert not any(d["active"] for d in (dA, dB, dC))
+    # eng never ran the two threads at once: two separate completed runs, one per thread.
+    eng_runs = await asyncio.gather(runs_for(client, tA["id"]), runs_for(client, tB["id"]))
+    assert all(statuses(rs) == ["completed"] for rs in eng_runs)
+    assert statuses(await runs_for(client, tC["id"])) == ["completed"]
+
+
+# 7. The concurrency cap is enforced across threads, not just within one ----------------------------
+
+async def test_concurrency_cap_is_enforced_across_three_threads(client, services):
+    """max_concurrent_runs caps how many runs are live platform-wide at once, regardless of which
+    thread or bot they belong to: with the cap set to 2, three threads on three different bots produce
+    at most two simultaneous "running" runs, and the third has no run row at all until a slot frees up
+    (a queued bot creates its run only once it actually gets to work -- see run.created bookkeeping)."""
+    from openbot.runtime.actors import ActorSystem
+
+    await client.post("/api/v1/bots", json=BOT)
+    await client.post("/api/v1/bots", json=REVIEWER)
+    await client.post("/api/v1/bots", json=QA)
+    await services.actors.stop()
+    services.settings.max_concurrent_runs = 2
+    services.actors = ActorSystem(services, 2)
+    await services.actors.start()
+
+    base_factory = services.model_factory
+    slow = {"eng": Slow([ai("eng done.")], delay=0.4), "rev": Slow([ai("rev done.")], delay=0.4),
+           "qa": Slow([ai("qa done.")], delay=0.4)}
+    services.model_factory = lambda actor: ScriptedChatModel(messages=slow[actor.handle]) if actor.handle in slow else base_factory(actor)
+
+    threads = {h: (await client.post("/api/v1/threads", json={"handles": [h]})).json() for h in ("eng", "rev", "qa")}
+    await asyncio.gather(*(client.post(f"/api/v1/threads/{t['id']}/messages", json={"content": f"@{h} go"})
+                          for h, t in threads.items()))
+
+    async def exactly_two_running_one_still_queued():
+        by_handle = {h: await runs_for(client, t["id"]) for h, t in threads.items()}
+        running = [h for h, rs in by_handle.items() if "running" in statuses(rs)]
+        waiting = [h for h, rs in by_handle.items() if rs == []]      # no run row yet: still queued for a slot
+        return len(running) == 2 and len(waiting) == 1
+
+    await poll_until(exactly_two_running_one_still_queued)
+    await services.actors.wait_idle(timeout=10)
+
+    for h, t in threads.items():
+        d = await thread_detail(client, t["id"])
+        assert [m["content"] for m in d["messages"]] == [f"@{h} go", f"{h} done."]
+        assert d["active"] is False
+        assert statuses(await runs_for(client, t["id"])) == ["completed"]
+
+
+# 8. Cancelling one thread's run does not disturb a run concurrently in flight in another thread -----
+
+async def test_cancelling_one_threads_run_leaves_a_concurrent_thread_unaffected(client, services):
+    await client.post("/api/v1/bots", json=BOT)
+    await client.post("/api/v1/bots", json=REVIEWER)
+    base_factory = services.model_factory
+    slow = {"eng": Slow([ai("finished (should never be seen)")], delay=1.0),
+           "rev": Slow([ai("Reviewed, all good.")], delay=0.2)}
+    services.model_factory = lambda actor: ScriptedChatModel(messages=slow[actor.handle]) if actor.handle in slow else base_factory(actor)
+
+    tA = (await client.post("/api/v1/threads", json={"handles": ["eng"]})).json()
+    tB = (await client.post("/api/v1/threads", json={"handles": ["rev"]})).json()
+    await asyncio.gather(
+        client.post(f"/api/v1/threads/{tA['id']}/messages", json={"content": "@eng go"}),
+        client.post(f"/api/v1/threads/{tB['id']}/messages", json={"content": "@rev go"}),
+    )
+
+    async def eng_running():
+        rs = await runs_for(client, tA["id"])
+        return next((r for r in rs if r["status"] == "running"), None)
+
+    run = await poll_until(eng_running)
+    # A live run is cancelled cooperatively (the worker's task is signalled, not awaited here), so the
+    # response may still read "running"; wait_idle below is what confirms it actually stopped.
+    cancel = await client.post(f"/api/v1/runs/{run['id']}/cancel")
+    assert cancel.status_code == 200, cancel.text
+
+    await services.actors.wait_idle(timeout=10)
+
+    dA, dB = await thread_detail(client, tA["id"]), await thread_detail(client, tB["id"])
+    # cancelled before eng ever replied; a system notice explains the interruption instead.
+    assert [m["content"] for m in dA["messages"]] == ["@eng go", "@eng run was cancelled."]
+    assert statuses(await runs_for(client, tA["id"])) == ["cancelled"]
+    assert [m["content"] for m in dB["messages"]] == ["@rev go", "Reviewed, all good."]
+    assert statuses(await runs_for(client, tB["id"])) == ["completed"]
+    assert dA["active"] is False and dB["active"] is False
