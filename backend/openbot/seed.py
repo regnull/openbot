@@ -12,6 +12,7 @@ from openbot.runtime.providers import default_provider
 log = logging.getLogger(__name__)
 
 HUMAN_HANDLE = "you"
+CRON_HANDLE = "cron"
 
 
 async def ensure_human_actor(services) -> Actor:
@@ -19,6 +20,20 @@ async def ensure_human_actor(services) -> Actor:
         actor = (await session.execute(select(Actor).where(Actor.handle == HUMAN_HANDLE))).scalar_one_or_none()
         if actor is None:
             actor = Actor(kind="human", handle=HUMAN_HANDLE, name="You", description="The operator of this OpenBot instance.")
+            session.add(actor)
+            await session.commit()
+        return actor
+
+
+async def ensure_cron_actor(services) -> Actor:
+    """A real actor, not a hidden implementation detail: scheduled messages are delivered under this
+    identity (kind="system") so they're addressable and routable like anything else in the thread,
+    instead of impersonating whichever bot happened to schedule them."""
+    async with services.session_factory() as session:
+        actor = (await session.execute(select(Actor).where(Actor.handle == CRON_HANDLE))).scalar_one_or_none()
+        if actor is None:
+            actor = Actor(kind="system", handle=CRON_HANDLE, name="Cron",
+                          description="Delivers scheduled messages on behalf of whoever scheduled them.")
             session.add(actor)
             await session.commit()
         return actor

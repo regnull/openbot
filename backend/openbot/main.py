@@ -48,7 +48,7 @@ from openbot.runtime.providers import chat_model, embeddings
 from openbot.runtime.runner import Runner
 from openbot.runtime.scheduler import Scheduler, recover_processing
 from openbot.runtime.secrets import SecretBox, resolve_secret_key
-from openbot.seed import ensure_human_actor, seed_demo_bots
+from openbot.seed import ensure_cron_actor, ensure_human_actor, seed_demo_bots
 from openbot.services import Services
 from openbot.tools.registry import build_registry
 
@@ -112,6 +112,7 @@ async def start_background(services: Services) -> None:
     if not services.env_defaults:                      # services built by hand (tests) skip build_services
         await app_settings.apply_stored_overrides(services)
     await ensure_human_actor(services)
+    await ensure_cron_actor(services)
     if services.settings.seed_demo_bots:
         await seed_demo_bots(services)
     if services.mcp is None and services.registry is not None:

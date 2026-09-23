@@ -449,7 +449,7 @@ class ActorSystem:
         if w is None:
             async with self.s.session_factory() as session:
                 actor = await session.get(Actor, actor_id)
-            if actor is None or actor.kind == "human" or not self._started:
+            if actor is None or actor.kind in ("human", "system") or not self._started:
                 return
             # Re-check after the await: a concurrent notify() for the same actor reaches here too, and
             # a second worker would mean two concurrent runs for one bot plus a task stop() never sees.

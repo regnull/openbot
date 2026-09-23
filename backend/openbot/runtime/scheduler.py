@@ -5,8 +5,8 @@ import logging
 
 from sqlalchemy import select, update
 
-from openbot.db.models import Actor, Message, ScheduledMessage, utcnow
-from openbot.runtime.delivery import post_message
+from openbot.db.models import Message, ScheduledMessage, utcnow
+from openbot.runtime.delivery import cron_actor, post_message
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +74,11 @@ class Scheduler:
                     await session.commit()
                     await self._publish(job)
                     return
-                sender = await session.get(Actor, job.sender_actor_id)
+                # Delivered by @cron, not by whoever scheduled it: the requester's own turn ended long
+                # ago, so posting under its identity would make a bot appear to speak without a live run
+                # backing it -- and, for a self-addressed reminder, would make it the target of its own
+                # message, which resolve_targets refuses to wake (see router.resolve_targets).
+                sender = await cron_actor(session)
                 result = await post_message(
                     self.services, session, thread_id=job.thread_id, sender=sender,
                     content=job.content, to_handles=job.to_handles,

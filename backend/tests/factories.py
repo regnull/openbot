@@ -11,6 +11,10 @@ def human_actor(handle: str = "you", name: str = "You") -> Actor:
     return Actor(kind="human", handle=handle, name=name)
 
 
+def cron_actor(handle: str = "cron", name: str = "Cron") -> Actor:
+    return Actor(kind="system", handle=handle, name=name)
+
+
 def external_actor(handle: str, name: str | None = None, webhook_url: str | None = None,
                    webhook_secret: str | None = None) -> Actor:
     return Actor(kind="external", handle=handle, name=name or handle,

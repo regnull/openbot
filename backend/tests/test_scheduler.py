@@ -4,8 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import select
 
-from openbot.db.models import Actor, Message, ScheduledMessage, utcnow
+from openbot.db.models import Actor, InboxItem, Message, ScheduledMessage, utcnow
 from openbot.runtime.delivery import create_thread, human_actor
 from openbot.runtime.scheduler import Scheduler, recover_processing
 
@@ -169,3 +170,34 @@ async def test_retry_and_terminal_failure_publish_sse_updates(services, monkeypa
     await worker.run_due()
     await worker.run_due()
     assert [p["status"] for p in published] == ["pending", "pending", "failed"]
+
+
+@pytest.mark.asyncio
+async def test_self_addressed_reminder_wakes_the_scheduling_bot(services):
+    """A bot scheduling a reminder for itself (no `to`) used to be delivered under the bot's own
+    identity, and resolve_targets refuses to let a bot wake itself -- so the reminder was posted and
+    then silently went nowhere. Delivering as @cron instead lets it reach the only bot in the thread."""
+    async with services.session_factory() as session:
+        you = await human_actor(session)
+        eng = Actor(handle="eng", name="Engineer", kind="bot", enabled=True)
+        session.add(eng)
+        await session.flush()
+        thread = await create_thread(services, session, title="reminders", handles=["eng"], created_by=you,
+                                     default_bot_handle="eng")
+        job = ScheduledMessage(thread_id=thread.id, sender_actor_id=eng.id, to_handles=[],
+                               content="follow up on the deploy", due_at=utcnow() - timedelta(seconds=1))
+        session.add(job)
+        await session.commit()
+        job_id, eng_id = job.id, eng.id
+
+    await Scheduler(services).run_due()
+
+    async with services.session_factory() as session:
+        job = await session.get(ScheduledMessage, job_id)
+        assert job.status == "delivered"
+        message = await session.get(Message, job.result_message_id)
+        assert message.sender_kind == "system" and message.sender_name == "Cron"
+        woken = (await session.execute(select(InboxItem).where(
+            InboxItem.actor_id == eng_id, InboxItem.message_id == message.id
+        ))).scalar_one_or_none()
+        assert woken is not None
