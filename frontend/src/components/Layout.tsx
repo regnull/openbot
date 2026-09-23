@@ -87,6 +87,8 @@ export default function Layout() {
     qc.invalidateQueries({ queryKey: ["inbox"] });
     qc.invalidateQueries({ queryKey: ["threads"] });
     qc.invalidateQueries({ queryKey: ["bots"] });
+    // SSE does not replay events missed while disconnected; refresh schedules too.
+    refreshScheduledMessages({ event: "scheduled.updated" }, () => qc.invalidateQueries({ queryKey: ["scheduled"] }));
   });
 
   const unread = inbox.data?.length ?? 0;

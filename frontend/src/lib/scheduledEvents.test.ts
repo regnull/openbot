@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { refreshScheduledMessages } from "./scheduledEvents";
+import { refreshScheduledMessages, refreshScheduledQueue } from "./scheduledEvents";
 
 describe("refreshScheduledMessages", () => {
   it("invalidates the scheduled queue for SSE updates", () => {
@@ -12,5 +12,11 @@ describe("refreshScheduledMessages", () => {
     const invalidate = vi.fn();
     refreshScheduledMessages({ event: "message.created" }, invalidate);
     expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the queue after SSE reconnect", () => {
+    const invalidate = vi.fn();
+    refreshScheduledQueue(invalidate);
+    expect(invalidate).toHaveBeenCalledOnce();
   });
 });
