@@ -1,4 +1,4 @@
-.PHONY: dev backend frontend electron electron-package test smoke build run lint setup reset_db sync_bots
+.PHONY: dev backend frontend app electron electron-package test smoke build run lint setup reset_db sync_bots
 
 setup:          ## install backend and frontend dependencies, create .env from the template
 	cd backend && uv sync
@@ -16,6 +16,8 @@ frontend:       ## Vite dev server, proxies /api to the backend
 
 electron:       ## Electron desktop window (start the backend separately with `make backend`)
 	cd frontend && pnpm electron
+
+app: electron     ## launch the OpenBot desktop application
 
 electron-package: ## Build a distributable Electron package (requires platform tooling)
 	cd frontend && pnpm electron:package

@@ -60,7 +60,7 @@ app remains unchanged. Start the backend and Vite server, then launch Electron i
 ```bash
 make backend       # terminal 1
 make frontend      # terminal 2
-make electron      # terminal 3
+make app            # terminal 3 (alias of make electron)
 ```
 
 For a production desktop package, run `make electron-package`. electron-builder emits a platform-native
