@@ -14,13 +14,13 @@ function isApprovedExternalUrl(rawUrl) {
     url.searchParams.has("state");
 }
 
-function contentSecurityPolicy(configuredOrigin) {
+function contentSecurityPolicy(configuredOrigin, apiOrigin = configuredOrigin) {
   return [
     `default-src 'self' ${configuredOrigin}`,
     "img-src 'self' data: blob:",
     "style-src 'self' 'unsafe-inline'",
     "script-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ${configuredOrigin}`,
+    `connect-src 'self' ${configuredOrigin} ${apiOrigin}`,
   ].join("; ");
 }
 
