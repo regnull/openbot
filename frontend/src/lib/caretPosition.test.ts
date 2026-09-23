@@ -85,9 +85,13 @@ describe("getCaretMetrics", () => {
     getCaretMetrics(el);
     const mirror = document.body.querySelector<HTMLDivElement>('div[aria-hidden="true"]');
     expect(mirror).not.toBeNull();
-    // The mirror is border-box; adding borders to clientWidth preserves the
-    // target's inner (padding-box) width, so wrapping breaks identically.
-    expect(mirror!.style.width).toBe("220px");
+    // The mirror is intentionally borderless and border-box sized. clientWidth
+    // is already the target's padding-box width, so its effective inner width
+    // must remain exactly 215px rather than becoming wider due to target borders.
+    expect(mirror!.style.width).toBe("215px");
+    expect(mirror!.style.borderLeftWidth).toBe("");
+    expect(mirror!.style.borderRightWidth).toBe("");
+    expect(parseFloat(mirror!.style.width) - parseFloat(mirror!.style.borderLeftWidth || "0") - parseFloat(mirror!.style.borderRightWidth || "0")).toBe(215);
     expect(mirror!.style.overflowWrap).toBe("anywhere");
     expect(mirror!.style.wordBreak).toBe("break-word");
   });

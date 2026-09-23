@@ -65,10 +65,6 @@ const STYLE_PROPS = [
   "padding-right",
   "padding-bottom",
   "padding-left",
-  "border-top-width",
-  "border-right-width",
-  "border-bottom-width",
-  "border-left-width",
   "box-sizing",
 ];
 
@@ -118,15 +114,15 @@ export function getCaretMetrics(
 
   const isTextarea = el instanceof HTMLTextAreaElement;
   const borderTop = parseFloat(computed.borderTopWidth) || 0;
-  const borderRight = parseFloat(computed.borderRightWidth) || 0;
   const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
   const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
 
-  // clientWidth is the target's padding-box width. The mirror uses border-box
-  // sizing, so add the cloned horizontal borders to preserve the same inner
-  // width. Otherwise wrapped text can break at a different character.
+  // Keep the mirror borderless: clientWidth is already the target's padding-box
+  // width, so a border-box mirror needs no border-width adjustment. Adding
+  // target border widths without copying their styles would not create borders
+  // and would leave the mirror's inner layout too wide.
   m.style.boxSizing = "border-box";
-  m.style.width = isTextarea ? `${el.clientWidth + borderLeft + borderRight}px` : "";
+  m.style.width = isTextarea ? `${el.clientWidth}px` : "";
   m.style.whiteSpace = isTextarea ? "pre-wrap" : "pre";
   m.style.wordWrap = isTextarea ? "break-word" : "normal";
 
