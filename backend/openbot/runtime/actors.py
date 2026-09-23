@@ -169,7 +169,6 @@ class BotActor(_Worker):
                                   parked_thread_ids=sorted(parked))
             await session.commit()
             await s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
-            await s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": True})
             # The items are "processing" now: this thread no longer waits for this bot, and the
             # thread window should say so the moment the run starts, not when it finishes.
             await publish_waiters(s, session, run.thread_id)
