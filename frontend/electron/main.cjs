@@ -4,12 +4,15 @@ const { contentSecurityPolicy, isApprovedExternalUrl } = require("./security.cjs
 
 const isDevelopment = !app.isPackaged;
 const defaultUrl = isDevelopment
-  ? "http://127.0.0.1:5173"
+  ? "http://localhost:5173"
   : `file://${path.join(__dirname, "..", "dist", "index.html")}`;
 const appUrl = process.env.OPENBOT_URL || defaultUrl;
 const configuredOrigin = new URL(appUrl).origin;
+// Matches preload.cjs's apiBase default: relies on OPENBOT_URL (not the
+// already-defaulted appUrl) so the CSP's connect-src stays in sync with
+// where the renderer actually fetches the API from.
 const apiOrigin = process.env.OPENBOT_API_URL ||
-  (appUrl.startsWith("http") ? configuredOrigin : "http://127.0.0.1:8000");
+  (process.env.OPENBOT_URL?.startsWith("http") ? configuredOrigin : "http://127.0.0.1:8000");
 
 function sameOrigin(rawUrl) {
   try { return new URL(rawUrl).origin === configuredOrigin; } catch { return false; }
