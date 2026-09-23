@@ -52,6 +52,23 @@ OpenAI or Ollama, or none). Both are stored encrypted in OpenBot's database and 
 Settings; nothing goes into `.env`. When the wizard completes, OpenBot seeds the human actor `@you`
 and four demo bots: `chief_of_staff`, `engineer`, `reviewer`, `qa`.
 
+### Desktop app (Electron)
+
+The Electron desktop app is an optional shell around the same frontend and HTTP/SSE API; the browser
+app remains unchanged. Start the backend and Vite server, then launch Electron in another terminal:
+
+```bash
+make backend       # terminal 1
+make frontend      # terminal 2
+make electron      # terminal 3
+```
+
+For a production desktop package, run `make electron-package`. electron-builder emits a platform-native
+installer under `frontend/release/` (run it on the target platform). Packaged builds expect a local API
+on port 8000; set `OPENBOT_URL` to an HTTPS OpenBot deployment to use another instance. The renderer
+has no Node integration and communicates through the same API as the browser; the preload bridge is
+intentionally minimal.
+
 The Vite dev server proxies `/api` to the backend, so no CORS setup is needed in development.
 
 For a single-process, production-style run that serves the built frontend from the backend on

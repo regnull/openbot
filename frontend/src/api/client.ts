@@ -6,7 +6,18 @@ import { ApiError, backendUnavailableEvent, isBackendUnavailable } from "./error
 
 export { ApiError } from "./errors";
 
-export const BASE = "/api/v1";
+declare global {
+  interface Window {
+    openbotDesktop?: { isElectron: boolean; apiBase?: string };
+  }
+}
+
+// Packaged Electron renders from file://, so relative URLs cannot reach the API.
+// Browser/Vite retains the existing relative base and proxy behavior.
+const desktopApiBase = typeof window !== "undefined" ? window.openbotDesktop?.apiBase : undefined;
+export const BASE = desktopApiBase
+  ? `${desktopApiBase.replace(/\/$/, "")}/api/v1`
+  : "/api/v1";
 const KEY = "openbot_api_key";
 export const getApiKey = (): string => { try { return localStorage.getItem(KEY) ?? ""; } catch { return ""; } };
 export const setApiKey = (k: string) => { if (k) localStorage.setItem(KEY, k); else localStorage.removeItem(KEY); window.dispatchEvent(new Event("openbot:api-key-changed")); };
