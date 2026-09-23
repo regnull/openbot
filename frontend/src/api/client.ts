@@ -14,8 +14,9 @@ declare global {
 
 // Packaged Electron renders from file://, so relative URLs cannot reach the API.
 // Browser/Vite retains the existing relative base and proxy behavior.
-export const BASE = window.openbotDesktop?.apiBase
-  ? `${window.openbotDesktop.apiBase.replace(/\/$/, "")}/api/v1`
+const desktopApiBase = typeof window !== "undefined" ? window.openbotDesktop?.apiBase : undefined;
+export const BASE = desktopApiBase
+  ? `${desktopApiBase.replace(/\/$/, "")}/api/v1`
   : "/api/v1";
 const KEY = "openbot_api_key";
 export const getApiKey = (): string => { try { return localStorage.getItem(KEY) ?? ""; } catch { return ""; } };
