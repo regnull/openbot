@@ -1,5 +1,6 @@
-const { app, BrowserWindow, session } = require("electron");
+const { app, BrowserWindow, session, shell } = require("electron");
 const path = require("node:path");
+const { contentSecurityPolicy, isApprovedExternalUrl } = require("./security.cjs");
 
 const isDevelopment = !app.isPackaged;
 const defaultUrl = isDevelopment
@@ -7,52 +8,43 @@ const defaultUrl = isDevelopment
   : `file://${path.join(__dirname, "..", "dist", "index.html")}`;
 const appUrl = process.env.OPENBOT_URL || defaultUrl;
 const configuredOrigin = new URL(appUrl).origin;
+const apiOrigin = process.env.OPENBOT_API_URL ||
+  (appUrl.startsWith("http") ? configuredOrigin : "http://127.0.0.1:8000");
+
+function sameOrigin(rawUrl) {
+  try { return new URL(rawUrl).origin === configuredOrigin; } catch { return false; }
+}
+function openApprovedExternal(rawUrl) {
+  if (isApprovedExternalUrl(rawUrl)) { void shell.openExternal(rawUrl); return true; }
+  return false;
+}
 
 function createWindow() {
   const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1440, height: 900, minWidth: 900, minHeight: 600,
     backgroundColor: "#111827",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-
-  // Keep navigation inside the configured OpenBot origin. External links are
-  // deliberately left to the user's browser rather than granting the renderer
-  // access to Electron or arbitrary origins.
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (new URL(url).origin === configuredOrigin) return { action: "allow" };
+    if (sameOrigin(url)) return { action: "allow" };
+    openApprovedExternal(url);
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", (event, url) => {
-    if (new URL(url).origin !== configuredOrigin) event.preventDefault();
-  });
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        "Content-Security-Policy": [
-          "default-src 'self' ${configuredOrigin}; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ${configuredOrigin}",
-        ],
-      },
-    });
+    if (sameOrigin(url)) return;
+    event.preventDefault();
+    openApprovedExternal(url);
   });
   window.loadURL(appUrl);
 }
 
 app.whenReady().then(() => {
-  createWindow();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [contentSecurityPolicy(configuredOrigin)] } });
   });
+  createWindow();
+  app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
+app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+module.exports = { createWindow, sameOrigin, openApprovedExternal, apiOrigin };
