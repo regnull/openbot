@@ -70,6 +70,28 @@ describe("getCaretMetrics", () => {
     expect(m!.align.y).toBe(117);
   });
 
+  it("matches the textarea padding-box width and wrapping styles in the mirror", () => {
+    const el = make("textarea", "a long wrapped line", 10);
+    Object.assign(el.style, {
+      width: "220px",
+      borderLeftWidth: "2px",
+      borderRightWidth: "3px",
+      boxSizing: "border-box",
+      overflowWrap: "anywhere",
+      wordBreak: "break-word",
+    });
+    Object.defineProperty(el, "clientWidth", { configurable: true, value: 215 });
+
+    getCaretMetrics(el);
+    const mirror = document.body.querySelector<HTMLDivElement>('div[aria-hidden="true"]');
+    expect(mirror).not.toBeNull();
+    // The mirror is border-box; adding borders to clientWidth preserves the
+    // target's inner (padding-box) width, so wrapping breaks identically.
+    expect(mirror!.style.width).toBe("220px");
+    expect(mirror!.style.overflowWrap).toBe("anywhere");
+    expect(mirror!.style.wordBreak).toBe("break-word");
+  });
+
   it("marks the caret sentinel as a zero-size, vertical-align: text-bottom inline-block, not a zero-width character -- the same alignment mechanism the .caret class itself uses, and zero layout width so it can never shift wrapping", () => {
     // getCaretMetrics clears the mirror's children (including the marker) before returning, so
     // the marker has to be captured as it's created, not queried from the DOM afterward.
