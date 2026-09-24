@@ -73,8 +73,8 @@ const NAV = [
 export default function Layout() {
   const qc = useQueryClient();
   const inbox = useQuery({ queryKey: ["inbox"], queryFn: Api.listInbox });
-  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
-  const threads = useQuery({ queryKey: ["threads"], queryFn: Api.listThreads });
+  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots, refetchInterval: 10_000 });
+  const threads = useQuery({ queryKey: ["threads"], queryFn: Api.listThreads, refetchInterval: 10_000 });
 
   useBusEvents(null, (e) => {
     if (e.event === "inbox.updated") qc.invalidateQueries({ queryKey: ["inbox"] });

@@ -12,8 +12,8 @@ import DirectoryPicker from "../components/DirectoryPicker";
 export default function ThreadsPage() {
   const qc = useQueryClient();
   const nav = useNavigate();
-  const threads = useQuery({ queryKey: ["threads"], queryFn: Api.listThreads });
-  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
+  const threads = useQuery({ queryKey: ["threads"], queryFn: Api.listThreads, refetchInterval: 10_000 });
+  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots, refetchInterval: 10_000 });
   const [title, setTitle] = useState("");
   const [handles, setHandles] = useState<string[]>([]);
   const [defaultBot, setDefaultBot] = useState("chief_of_staff");
