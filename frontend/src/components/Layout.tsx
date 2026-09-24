@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Api } from "../api/client";
 import { useBusEvents } from "../api/sse";
-import { shouldRefreshBots } from "../lib/botActivity";
+import { botActivityQueryKeys, shouldRefreshBots } from "../lib/botActivity";
 import { isThreadActive, recentThreads, threadLabel } from "../lib/recentThreads";
 import { refreshScheduledMessages } from "../lib/scheduledEvents";
 import BotActivityIndicator from "./BotActivityIndicator";
@@ -86,7 +86,7 @@ export default function Layout() {
     // refetch authoritative state instead of applying an event boolean:
     // another concurrent run may still be live after this one finishes.
     if (shouldRefreshBots(e)) {
-      qc.invalidateQueries({ queryKey: ["bots"] });
+      for (const queryKey of botActivityQueryKeys) qc.invalidateQueries({ queryKey });
       qc.invalidateQueries({ queryKey: ["threads"] });
     }
   }, () => {

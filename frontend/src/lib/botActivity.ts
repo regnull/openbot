@@ -1,5 +1,7 @@
 import type { Bot, BusEvent } from "../api/types";
 
+export const botActivityQueryKeys = [["bots"], ["bot"]] as const;
+
 export function activeBotIds(bots: Bot[] | undefined): Set<string> {
   return new Set((bots ?? []).filter((bot) => bot.active).map((bot) => bot.id));
 }

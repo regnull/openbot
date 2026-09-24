@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Bot } from "../api/types";
-import { activeBotIds, botActivityLabel, shouldRefreshBots } from "./botActivity";
+import { activeBotIds, botActivityLabel, botActivityQueryKeys, shouldRefreshBots } from "./botActivity";
 
 const bot = (id: string, active: boolean): Bot => ({
   id,
@@ -35,5 +35,9 @@ describe("bot activity helpers", () => {
     expect(shouldRefreshBots({ event: "bots.updated", thread_id: null, data: {} })).toBe(true);
     expect(shouldRefreshBots({ event: "run.updated", thread_id: "t", data: { status: "running" } })).toBe(true);
     expect(shouldRefreshBots({ event: "message.created", thread_id: "t", data: {} })).toBe(false);
+  });
+
+  it("refreshes bot list and bot detail queries", () => {
+    expect(botActivityQueryKeys).toEqual([["bots"], ["bot"]]);
   });
 });
