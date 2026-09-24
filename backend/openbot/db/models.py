@@ -19,6 +19,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from openbot.bot_icons import DEFAULT_BOT_ICON
 
+# "Active" is a live/paused run occupying a bot right now, for busy indicators; "open" adds "queued"
+# for callers (e.g. purge) that must also catch a run before a worker has picked it up.
 ACTIVE_RUN_STATUSES = ("running", "waiting_human")
 OPEN_RUN_STATUSES = ("queued", "running", "waiting_human")
 
@@ -150,7 +152,7 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
 
-class ScheduledMessage(Base):
+class ScheduledMessage(TimestampMixin, Base):
     """Durable one-shot message waiting for the scheduler."""
     __tablename__ = "scheduled_messages"
     __table_args__ = (Index("ix_scheduled_status_due", "status", "due_at"),)
@@ -164,8 +166,6 @@ class ScheduledMessage(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class InboxItem(Base):

@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -22,6 +20,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAu
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from openbot.db.models import McpCredential, utcnow
+from openbot.runtime.secrets import load_or_create_key
 
 log = logging.getLogger(__name__)
 
@@ -32,21 +31,6 @@ class AuthorizationRequired(RuntimeError):
     """The server wants the operator to authorize, but nobody is there to open a browser (boot, a
     reconnect, or a bot's tool call). Fail fast so the caller can report needs_auth or a tool error
     instead of waiting on a callback that cannot arrive."""
-
-
-def load_or_create_key(explicit: str | None, key_file: Path) -> str:
-    """The Fernet key for credentials at rest: `MCP_TOKEN_KEY` if set, else a key generated once into
-    `key_file` with owner-only permissions."""
-    if explicit:
-        return explicit
-    if key_file.is_file():
-        return key_file.read_text(encoding="utf-8").strip()
-    key = Fernet.generate_key().decode()
-    key_file.parent.mkdir(parents=True, exist_ok=True)
-    key_file.write_text(key, encoding="utf-8")
-    os.chmod(key_file, 0o600)
-    log.info("generated MCP credential key at %s", key_file)
-    return key
 
 
 class DbTokenStorage:

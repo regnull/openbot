@@ -17,6 +17,21 @@ from cryptography.fernet import Fernet, InvalidToken
 log = logging.getLogger(__name__)
 
 
+def load_or_create_key(explicit: str | None, key_file: Path) -> str:
+    """The Fernet key at `key_file`: `explicit` if given, else the file's contents, else a key
+    generated once into the file with owner-only permissions."""
+    if explicit:
+        return explicit
+    if key_file.is_file():
+        return key_file.read_text(encoding="utf-8").strip()
+    key = Fernet.generate_key().decode()
+    key_file.parent.mkdir(parents=True, exist_ok=True)
+    key_file.write_text(key, encoding="utf-8")
+    os.chmod(key_file, 0o600)
+    log.info("generated the secret key at %s", key_file)
+    return key
+
+
 def resolve_secret_key(settings) -> str:
     explicit = settings.secret_key or getattr(settings, "mcp_token_key", None)
     if explicit:
@@ -26,12 +41,7 @@ def resolve_secret_key(settings) -> str:
     for path in (new_file, legacy_file):
         if str(path) and path.is_file():
             return path.read_text(encoding="utf-8").strip()
-    key = Fernet.generate_key().decode()
-    new_file.parent.mkdir(parents=True, exist_ok=True)
-    new_file.write_text(key, encoding="utf-8")
-    os.chmod(new_file, 0o600)
-    log.info("generated the secret key at %s", new_file)
-    return key
+    return load_or_create_key(None, new_file)
 
 
 class SecretBox:
