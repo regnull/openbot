@@ -50,5 +50,25 @@ class ClientBoundaryCheckerTests(unittest.TestCase):
         self.assertEqual(len(violations), 6)
 
 
+    def test_static_import_forms_are_rejected(self):
+        text = """\
+        import fs from "fs";
+        import * as path from "node:path";
+        import { createHash } from "crypto";
+        import "worker_threads";
+        """
+        violations = checker.violations_for_text(text, "components/Widget.tsx")
+        self.assertEqual(len(violations), 4)
+        self.assertTrue(all("Node/server runtime imports" in item for item in violations))
+
+    def test_client_imports_remain_allowed(self):
+        text = """\
+        import React from "react";
+        import * as api from "./api";
+        import { useState } from "react";
+        """
+        self.assertEqual(checker.violations_for_text(text, "components/Widget.tsx"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

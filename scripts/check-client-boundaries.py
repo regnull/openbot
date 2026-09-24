@@ -22,8 +22,8 @@ MODULE_SPECIFIER = rf'''["']\s*(?:node:)?(?:{NODE_MODULES})\s*["']'''
 RULES = (
     (
         re.compile(
-            rf"(?:\bfrom\s*|\bimport\s*\(\s*|\brequire(?:\.resolve)?\s*\(\s*|^\s*import\s+)"
-            rf"{MODULE_SPECIFIER}"
+            rf"(?:\bfrom\s*|\bimport\s*\(\s*|\brequire(?:\.resolve)?\s*\(\s*|"
+            rf"\bimport\s+(?:(?:[^;\"'\\n]+?)\s+from\s+)?){MODULE_SPECIFIER}"
         ),
         "Node/server runtime imports",
     ),
