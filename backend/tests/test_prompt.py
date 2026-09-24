@@ -52,6 +52,22 @@ def test_system_prompt_contents():
             "use its plain name without @.") in p
     # There is no tool for starting a separate thread; hand-offs must stay in the current one.
     assert "There is no way to start a separate thread" in p
+    # Every reply must hand off explicitly, even bot-to-bot, unless the thread lead is done or needs
+    # the human; an unsure bot defers to the thread lead rather than guessing or dropping the ball.
+    assert "End every reply with a handoff" in p and "Never hand off to yourself" in p
+    assert "thread lead (@chief_of_staff)" in p
+    # Scheduling a follow-up message keeps the thread from being considered finished.
+    assert "schedule_message" in p and "active for as long as it has a message scheduled" in p
+    # Third-party comments/notes must be signed so the handle doesn't tag an unrelated user there.
+    assert "OpenBot - `@eng`" in p
+
+
+def test_system_prompt_lead_note_omitted_without_a_default_bot():
+    bot = bot_actor("eng", name="Engineer", description="Builds", instructions="Be terse.")
+    bot.id = "e"
+    p = build_system_prompt(bot=bot, all_bots=[bot], participants=["You"], memories=[],
+                            workspace_root="/w", older_count=0, tool_names=[])
+    assert "hand off to the thread lead instead of guessing" in p and "thread lead (@" not in p
 
 
 def test_history_marks_the_messages_that_triggered_this_run():
