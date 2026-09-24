@@ -19,6 +19,18 @@ describe("Electron security policy", () => {
     expect(csp).toContain("connect-src 'self' https://openbot.example.test");
   });
 
+  it("restricts packaged file navigation to the app document", () => {
+    const appUrl = "file:///Applications/OpenBot.app/Contents/Resources/app.asar/frontend/dist/index.html";
+    expect(security.sameOriginOrPackagedPath(`${appUrl}#/inbox?x=1`, appUrl)).toBe(true);
+    expect(security.sameOriginOrPackagedPath("file:///etc/passwd", appUrl)).toBe(false);
+    expect(security.sameOriginOrPackagedPath("file:///Applications/OpenBot.app/Contents/Resources/app.asar/frontend/dist/other.html", appUrl)).toBe(false);
+  });
+
+  it("preserves origin comparison for HTTP deployments", () => {
+    expect(security.sameOriginOrPackagedPath("https://openbot.example.test/inbox", "https://openbot.example.test")).toBe(true);
+    expect(security.sameOriginOrPackagedPath("https://evil.example.test", "https://openbot.example.test")).toBe(false);
+  });
+
   it("approves OAuth authorization and LangSmith URLs only", () => {
     expect(security.isApprovedExternalUrl("https://login.example.test/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp.test&response_type=code&state=s")).toBe(true);
     expect(security.isApprovedExternalUrl("https://smith.langchain.com/o/-/projects/p/-/r/run")).toBe(true);

@@ -1,17 +1,45 @@
 appId: com.openbot.desktop
 productName: OpenBot
-# The backend remains a separately managed local service. The packaged UI uses
-# the same API and can also target a remote instance with OPENBOT_URL.
+copyright: "Copyright © OpenBot"
 directories:
-  output: frontend/release
+  output: release
 files:
   - electron/**/*
   - dist/**/*
-# Relative to frontend/ (the project dir). electron-builder generates the
-# platform .icns/.ico from this PNG; main.cjs uses it for the window icon.
+extraResources:
+  - from: ../backend
+    to: backend
+    # uv creates .venv with an absolute shebang back to the machine that ran `uv sync`, so a
+    # bundled .venv is not relocatable: on any other machine it points at a path that doesn't
+    # exist. Ship the source, pyproject.toml, and uv.lock instead, and let electron-backend.sh's
+    # `uv run` build a venv rooted in the *installed* app on first launch.
+    filter:
+      - "**/*"
+      - "!.venv"
+      - "!.venv/**"
+      - "!**/__pycache__/**"
+      - "!.pytest_cache/**"
+      - "!.ruff_cache/**"
+      - "!.mypy_cache/**"
+      - "!logs/**"
+      - "!openbot.db*"
+      - "!openbot.langgraph.db*"
+  - from: ../scripts/electron-backend.sh
+    to: backend/electron-backend.sh
+  - from: ../tools
+    to: tools
 icon: electron/assets/icon.png
 mac:
-  target: dmg
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  extendInfo:
+    CFBundleDisplayName: OpenBot
+    CFBundleName: OpenBot
+    LSApplicationCategoryType: public.app-category.developer-tools
 win:
   target: nsis
 linux:
