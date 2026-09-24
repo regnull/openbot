@@ -11,13 +11,14 @@ const defaultUrl = isDevelopment ? "http://localhost:5173" : `file://${path.join
 const appUrl = process.env.OPENBOT_URL || defaultUrl;
 const configuredOrigin = new URL(appUrl).origin;
 const apiOrigin = resolveApiOrigin();
+const usesExternalBackend = Boolean(process.env.OPENBOT_URL || process.env.OPENBOT_API_URL);
 let backendProcess;
 let quitRequested = false;
 
 function sameOrigin(rawUrl) { return sameOriginOrPackagedPath(rawUrl, appUrl); }
 function openApprovedExternal(rawUrl) { if (isApprovedExternalUrl(rawUrl)) { void shell.openExternal(rawUrl); return true; } return false; }
 function startBackend() {
-  if (isDevelopment || process.env.OPENBOT_URL) return;
+  if (isDevelopment || usesExternalBackend) return;
   const script = path.join(process.resourcesPath, "backend", "electron-backend.sh");
   backendProcess = spawn("/bin/sh", [script], { detached: true, env: { ...process.env, OPENBOT_RESOURCES: process.resourcesPath, OPENBOT_USER_DATA: app.getPath("userData"), OPENBOT_BACKEND_PORT: backendPort }, stdio: "ignore" });
   backendProcess.unref();
@@ -29,7 +30,7 @@ function stopBackend() {
   backendProcess = undefined;
 }
 async function waitForBackend() {
-  if (isDevelopment || process.env.OPENBOT_URL) return;
+  if (isDevelopment || usesExternalBackend) return;
   const healthUrl = `${apiOrigin}/api/v1/health`;
   for (let attempt = 0; attempt < 100; attempt += 1) {
     try { if ((await fetch(healthUrl)).ok) return; } catch { /* backend is still starting */ }
