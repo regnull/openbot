@@ -113,3 +113,16 @@ def test_system_prompt_explains_single_handoff_and_stale_triggers():
     # seven-minute review; the marker now comes with a rule and an exit.
     assert "Before using any tool, compare it with your last reply" in p
     assert "answer with one short sentence saying so and stop; do not redo or re-verify the work" in p
+
+
+def test_system_prompt_injects_lead_context_only_for_lead():
+    lead = bot_actor("chief_of_staff", name="Chief")
+    lead.id = "lead"
+    delegate = bot_actor("eng", name="Engineer")
+    delegate.id = "eng"
+    lead_prompt = build_system_prompt(bot=lead, all_bots=[lead, delegate], participants=["You"], memories=[], workspace_root="/w", older_count=0, tool_names=[], default_bot_handle="chief_of_staff")
+    delegate_prompt = build_system_prompt(bot=delegate, all_bots=[lead, delegate], participants=["You"], memories=[], workspace_root="/w", older_count=0, tool_names=[], default_bot_handle="chief_of_staff")
+    context = "thread lead for this thread is @chief_of_staff. If you are not sure about the handoff, do a handoff to the thread lead"
+    instructions = "you are the lead for this thread. When human talks to you, follow this process"
+    assert context in lead_prompt and instructions in lead_prompt
+    assert context in delegate_prompt and instructions not in delegate_prompt
