@@ -7,6 +7,9 @@ directories:
 files:
   - electron/**/*
   - dist/**/*
+# Relative to frontend/ (the project dir). electron-builder generates the
+# platform .icns/.ico from this PNG; main.cjs uses it for the window icon.
+icon: electron/assets/icon.png
 mac:
   target: dmg
 win:

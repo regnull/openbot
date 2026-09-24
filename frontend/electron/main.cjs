@@ -1,6 +1,7 @@
 const { app, BrowserWindow, session, shell } = require("electron");
 const path = require("node:path");
 const { contentSecurityPolicy, isApprovedExternalUrl } = require("./security.cjs");
+const { appIconPath } = require("./icon.cjs");
 
 const isDevelopment = !app.isPackaged;
 const defaultUrl = isDevelopment
@@ -26,6 +27,7 @@ function createWindow() {
   const window = new BrowserWindow({
     width: 1440, height: 900, minWidth: 900, minHeight: 600,
     backgroundColor: "#111827",
+    icon: appIconPath,
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -42,6 +44,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // macOS ignores BrowserWindow.icon; packaged builds get the .icns from
+  // electron-builder, so only the unpackaged dock needs setting.
+  if (isDevelopment && process.platform === "darwin") app.dock?.setIcon(appIconPath);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [contentSecurityPolicy(configuredOrigin, apiOrigin)] } });
   });
