@@ -82,7 +82,13 @@ export default function Layout() {
     if (e.event === "message.created" || e.event === "thread.updated") {
       qc.invalidateQueries({ queryKey: ["threads"] });
     }
-    if (shouldRefreshBots(e)) qc.invalidateQueries({ queryKey: ["bots"] });
+    // Run transitions affect both representations of live activity. Always
+    // refetch authoritative state instead of applying an event boolean:
+    // another concurrent run may still be live after this one finishes.
+    if (shouldRefreshBots(e)) {
+      qc.invalidateQueries({ queryKey: ["bots"] });
+      qc.invalidateQueries({ queryKey: ["threads"] });
+    }
   }, () => {
     qc.invalidateQueries({ queryKey: ["inbox"] });
     qc.invalidateQueries({ queryKey: ["threads"] });
