@@ -4,6 +4,7 @@ DEFAULT_BOT_ICON = "robot"
 BOT_ICON_KEYS: tuple[str, ...] = (
     # Faces & characters
     "robot",
+    "person",
     "alien",
     "ghost",
     "skull",

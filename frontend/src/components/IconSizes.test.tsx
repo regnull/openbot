@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import BotIcon from "./BotIcon";
 import Avatar from "./Avatar";
+import { botIconFor } from "../lib/botIcons";
 
 function render(el: React.ReactNode): HTMLElement {
   const container = document.createElement("div");
@@ -42,13 +43,20 @@ describe("icon sizes — ~30% bump", () => {
   });
 
   describe("Avatar", () => {
-    it.each(["human", "user"])("renders a labeled user icon for %s participants instead of initials", (kind) => {
+    it.each(["human", "user"])("renders the shared person glyph for %s participants instead of initials", (kind) => {
       const { firstChild } = render(<Avatar name="You" kind={kind} />);
       const avatar = firstChild as HTMLElement;
       expect(avatar.getAttribute("aria-label")).toBe("You");
       expect(avatar.getAttribute("title")).toBe("You");
-      expect(avatar.querySelector("svg")).toBeTruthy();
+      expect(avatar.textContent).toBe(botIconFor("person").glyph);
       expect(avatar.textContent).not.toContain("YO");
+    });
+
+    it("renders the shared gear glyph for system participants instead of initials", () => {
+      const { firstChild } = render(<Avatar name="System" kind="system" />);
+      const avatar = firstChild as HTMLElement;
+      expect(avatar.textContent).toBe(botIconFor("gear").glyph);
+      expect(avatar.textContent).not.toContain("SY");
     });
 
     it("renders at 48×48 (h-12 w-12) by default (+20% from h-10)", () => {

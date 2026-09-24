@@ -4,6 +4,7 @@ export const DEFAULT_BOT_ICON = "robot";
 export const BOT_ICONS: BotIconOption[] = [
   // Faces & characters
   { key: "robot", label: "Robot", glyph: "🤖" },
+  { key: "person", label: "Person", glyph: "🧑" },
   { key: "alien", label: "Alien", glyph: "👽" },
   { key: "ghost", label: "Ghost", glyph: "👻" },
   { key: "skull", label: "Skull", glyph: "💀" },
