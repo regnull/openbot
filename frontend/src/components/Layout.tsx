@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Api } from "../api/client";
 import { useBusEvents } from "../api/sse";
-import { botActivityQueryKeys, shouldRefreshBots } from "../lib/botActivity";
+import { refreshBotActivity, shouldRefreshBots } from "../lib/botActivity";
 import { isThreadActive, recentThreads, threadLabel } from "../lib/recentThreads";
 import { refreshScheduledMessages } from "../lib/scheduledEvents";
 import BotActivityIndicator from "./BotActivityIndicator";
@@ -86,13 +86,13 @@ export default function Layout() {
     // refetch authoritative state instead of applying an event boolean:
     // another concurrent run may still be live after this one finishes.
     if (shouldRefreshBots(e)) {
-      for (const queryKey of botActivityQueryKeys) qc.invalidateQueries({ queryKey });
+      refreshBotActivity((queryKey) => qc.invalidateQueries({ queryKey }));
       qc.invalidateQueries({ queryKey: ["threads"] });
     }
   }, () => {
     qc.invalidateQueries({ queryKey: ["inbox"] });
     qc.invalidateQueries({ queryKey: ["threads"] });
-    qc.invalidateQueries({ queryKey: ["bots"] });
+    refreshBotActivity((queryKey) => qc.invalidateQueries({ queryKey }));
     // SSE does not replay events missed while disconnected; refresh schedules too.
     refreshScheduledMessages({ event: "scheduled.updated" }, () => qc.invalidateQueries({ queryKey: ["scheduled"] }));
   });
