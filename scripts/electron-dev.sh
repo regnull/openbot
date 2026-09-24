@@ -57,15 +57,16 @@ os.execvp(sys.argv[1], sys.argv[1:])
 PY
 }
 
-# Use the same root-relative commands as the Makefile targets. OPENBOT_API_URL is
-# passed to Electron/preload so packaged-style absolute API requests use 8001,
-# while the browser/Vite proxy remains pointed at make run's port 8000.
+# Use the same root-relative commands as the Makefile targets. OPENBOT_API_URL is passed to
+# Electron/preload so packaged-style absolute API requests use this dedicated backend, and
+# VITE_BACKEND_PORT points Vite's own dev proxy (relative /api/* fetches from the loaded page)
+# at the same port, so both request paths reach the one backend actually running here.
 echo "Starting Electron backend on ${BACKEND_URL}"
 run_in_process_group uv run --project backend uvicorn openbot.main:app --reload --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
-run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" bash -c '
+run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_PORT="$ELECTRON_BACKEND_PORT" bash -c '
   cd frontend
   pnpm dev --host localhost --port "$FRONTEND_PORT"
 ' &
