@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, shell } = require("electron");
+const { app, BrowserWindow, session, shell, dialog } = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { contentSecurityPolicy, isApprovedExternalUrl, sameOriginOrPackagedPath } = require("./security.cjs");
@@ -32,7 +32,11 @@ function stopBackend() {
 async function waitForBackend() {
   if (isDevelopment || usesExternalBackend) return;
   const healthUrl = `${apiOrigin}/api/v1/health`;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  // No .venv ships in the bundle, so the very first launch on a machine has uv build one from
+  // scratch -- fetching a matching Python interpreter and every dependency -- before the backend
+  // can even start listening. That can take well past the ~20s a warm start needs, so budget for
+  // a cold one too; later launches reuse that venv and come up in a second or two.
+  for (let attempt = 0; attempt < 450; attempt += 1) {
     try { if ((await fetch(healthUrl)).ok) return; } catch { /* backend is still starting */ }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
@@ -48,7 +52,17 @@ app.whenReady().then(async () => {
   if (isDevelopment && process.platform === "darwin") app.dock?.setIcon(appIconPath);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": [contentSecurityPolicy(configuredOrigin, apiOrigin)] } }));
   startBackend();
-  try { await waitForBackend(); createWindow(); } catch (error) { console.error(error); app.quit(); }
+  try {
+    await waitForBackend();
+    createWindow();
+  } catch (error) {
+    console.error(error);
+    // Without this, a backend that never comes up (missing uv, a build failure, ...) just made
+    // the app quit with no window and nothing visible -- indistinguishable from it not launching
+    // at all. Show the operator what actually happened before giving up.
+    dialog.showErrorBox("OpenBot backend failed to start", error instanceof Error ? error.message : String(error));
+    app.quit();
+  }
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on("before-quit", () => { if (!quitRequested) { quitRequested = true; stopBackend(); } });
