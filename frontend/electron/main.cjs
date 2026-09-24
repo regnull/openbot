@@ -3,13 +3,14 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { contentSecurityPolicy, isApprovedExternalUrl } = require("./security.cjs");
 const { appIconPath } = require("./icon.cjs");
+const { resolveApiOrigin } = require("./origin.cjs");
 
 const isDevelopment = !app.isPackaged;
 const backendPort = process.env.OPENBOT_BACKEND_PORT || "8000";
 const defaultUrl = isDevelopment ? "http://localhost:5173" : `file://${path.join(__dirname, "..", "dist", "index.html")}`;
 const appUrl = process.env.OPENBOT_URL || defaultUrl;
 const configuredOrigin = new URL(appUrl).origin;
-const apiOrigin = process.env.OPENBOT_API_URL || (process.env.OPENBOT_URL?.startsWith("http") ? configuredOrigin : `http://127.0.0.1:${backendPort}`);
+const apiOrigin = resolveApiOrigin();
 let backendProcess;
 let quitRequested = false;
 
