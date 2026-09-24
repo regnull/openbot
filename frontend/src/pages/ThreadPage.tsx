@@ -21,8 +21,8 @@ export default function ThreadPage() {
   // from a cache hit younger than staleTime. The per-thread SSE subscription is closed while
   // the page is unmounted and events are never replayed, so messages that arrived in between
   // are otherwise invisible until an unrelated refetch — only post-return events would show.
-  const detail = useQuery({ queryKey: ["thread", id], queryFn: () => Api.getThread(id), refetchOnMount: "always" });
-  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
+  const detail = useQuery({ queryKey: ["thread", id], queryFn: () => Api.getThread(id), refetchOnMount: "always", refetchInterval: 10_000 });
+  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots, refetchInterval: 10_000 });
   const usage = useQuery({ queryKey: ["thread-usage", id], queryFn: () => Api.getThreadUsage(id) });
   const [state, setState] = useState<ThreadState>(emptyThreadState(id));
   const [notice, setNotice] = useState<string | null>(null);

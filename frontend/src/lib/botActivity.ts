@@ -1,5 +1,12 @@
 import type { Bot, BusEvent } from "../api/types";
 
+export const botActivityQueryKeys = [["bots"], ["bot"]] as const;
+
+/** Refresh every bot activity representation after an SSE reconnect. */
+export function refreshBotActivity(invalidate: (queryKey: readonly unknown[]) => void): void {
+  for (const queryKey of botActivityQueryKeys) invalidate(queryKey);
+}
+
 export function activeBotIds(bots: Bot[] | undefined): Set<string> {
   return new Set((bots ?? []).filter((bot) => bot.active).map((bot) => bot.id));
 }

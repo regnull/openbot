@@ -7,7 +7,7 @@ import { Badge, Card, EmptyState, ErrorText, PageTitle, Spinner } from "../compo
 import { PlusIcon } from "../components/icons";
 
 export default function BotsPage() {
-  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots });
+  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots, refetchInterval: 10_000 });
   return (
     <div className="space-y-5">
       <PageTitle actions={

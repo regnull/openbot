@@ -25,7 +25,7 @@ export default function BotPage() {
   const { id = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const tab: Tab = (TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as Tab) : "inbox";
-  const bot = useQuery({ queryKey: ["bot", id], queryFn: () => Api.getBot(id) });
+  const bot = useQuery({ queryKey: ["bot", id], queryFn: () => Api.getBot(id), refetchInterval: 10_000 });
   const qc = useQueryClient();
   const purge = useMutation({
     mutationFn: () => Api.purgeBot(id),
