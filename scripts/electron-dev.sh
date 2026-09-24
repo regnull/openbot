@@ -9,26 +9,45 @@ FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}"
 
 backend_pid=""
 frontend_pid=""
+kill_process_group() {
+  local pid="$1"
+  [[ -z "$pid" ]] && return 0
+
+  # uvicorn --reload and Vite each create children. Kill the process group so
+  # those children do not outlive the launcher, then escalate if necessary.
+  kill -TERM -- "-${pid}" 2>/dev/null || true
+  for _ in {1..20}; do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  kill -KILL -- "-${pid}" 2>/dev/null || true
+}
+
 cleanup() {
   trap - EXIT INT TERM
-  [[ -n "$frontend_pid" ]] && kill "$frontend_pid" 2>/dev/null || true
-  [[ -n "$backend_pid" ]] && kill "$backend_pid" 2>/dev/null || true
+  kill_process_group "$frontend_pid"
+  kill_process_group "$backend_pid"
   wait "$frontend_pid" "$backend_pid" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+
+if ! command -v setsid >/dev/null 2>&1; then
+  echo "The Electron launcher requires setsid to manage child processes." >&2
+  exit 1
+fi
 
 # Use the same root-relative commands as the Makefile targets. OPENBOT_API_URL is
 # passed to Electron/preload so packaged-style absolute API requests use 8001,
 # while the browser/Vite proxy remains pointed at make run's port 8000.
 echo "Starting Electron backend on ${BACKEND_URL}"
-uv run --project backend uvicorn openbot.main:app --reload --port "$ELECTRON_BACKEND_PORT" &
+setsid uv run --project backend uvicorn openbot.main:app --reload --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
-(
+setsid env FRONTEND_PORT="$FRONTEND_PORT" bash -c '
   cd frontend
   pnpm dev --host 127.0.0.1 --port "$FRONTEND_PORT"
-) &
+' &
 frontend_pid=$!
 
 wait_for_url() {
@@ -41,7 +60,7 @@ wait_for_url() {
   return 1
 }
 
-wait_for_url "${BACKEND_URL}/health"
+wait_for_url "${BACKEND_URL}/api/v1/health"
 wait_for_url "${FRONTEND_URL}"
 
 echo "Launching Electron (API: ${BACKEND_URL})"
