@@ -428,7 +428,17 @@ class Runner:
             if interrupt is not None:
                 log.info("run %s waiting_human after %.1fs (%s): %s", run.id, time.monotonic() - started, usage_line, _preview(interrupt))
                 run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id, usage=usage)
-                await deliver_question(self.s, run, interrupt)
+                delivered = await deliver_question(self.s, run, interrupt)
+                if not delivered:
+                    # deliver_question only addresses human/external participants. A thread with none
+                    # (e.g. a bot-to-bot delegation nobody added the human to) would otherwise leave this
+                    # run "waiting_human" forever -- unresumable, and showing the bot as busy everywhere.
+                    err = "ask_human has no human or external participant in this thread to ask"
+                    log.warning("run %s waiting_human but undeliverable: %s", run.id, err)
+                    await self._set_status(run.id, "failed", error=err)
+                    await self._record(run, await self._next_seq(run.id), "error", {"error": err})
+                    await self._system_message(thread.id, f"@{bot.handle} tried to ask a question, but {err}.")
+                    await self._drop_checkpoint(run.id)
                 return
             if final_text.strip():
                 async with self.s.session_factory() as session:

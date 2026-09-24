@@ -106,6 +106,32 @@ async def test_ask_human_and_resume(settings):
     assert "yes" in ev[3].payload["content"]
 
 
+async def test_ask_human_with_no_human_in_thread_fails_the_run(settings):
+    # A bot-to-bot delegation thread with nobody to ask (see router.py's bot handoffs) must not leave
+    # the run "waiting_human" forever -- deliver_question only addresses human/external participants,
+    # so with none the question can never be answered and the bot would show as busy indefinitely.
+    services = await build_test_services(settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")])]})
+    services.actors = None
+    services.runner = Runner(services)
+    async with services.session_factory() as s:
+        eng = bot_actor("eng", description="builds")
+        s.add(eng)
+        await s.commit()
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=None, include_human=False)
+        run = Run(actor_id=eng.id, thread_id=t.id)
+        s.add(run)
+        await s.flush()
+        await s.commit()
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert run.status == "failed" and "no human or external participant" in run.error
+    msgs = await messages(services, t.id)
+    assert msgs[-1].sender_kind == "system" and "tried to ask a question" in msgs[-1].content
+    async with services.session_factory() as s:
+        qs = (await s.execute(select(InboxItem).where(InboxItem.kind == "question"))).scalars().all()
+    assert qs == []
+
+
 async def test_tool_approval(settings):
     services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command="echo hi")]), ai("done")]},
                                        tool_names=["run_shell"], approval_tools=["run_shell"])
