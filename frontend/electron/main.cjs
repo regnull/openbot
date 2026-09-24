@@ -53,6 +53,10 @@ app.whenReady().then(() => {
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
-app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+// Standard macOS apps stay running (in the dock) after their last window closes. The dev
+// launcher (scripts/electron-dev.sh) blocks on this process and only tears down its backend
+// and Vite server once it exits, so in development we quit on every platform -- otherwise
+// closing the window on macOS leaves the dev backend and Vite server running forever.
+app.on("window-all-closed", () => { if (process.platform !== "darwin" || isDevelopment) app.quit(); });
 
 module.exports = { createWindow, sameOrigin, openApprovedExternal, apiOrigin };

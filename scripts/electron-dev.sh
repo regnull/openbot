@@ -35,16 +35,20 @@ trap cleanup EXIT INT TERM
 # Use Python's os.setsid fallback there so the launcher remains portable while
 # retaining a dedicated process group for uvicorn/Vite and their children.
 run_in_process_group() {
+  # exec (rather than run-and-wait) so this backgrounded function's own subshell PID -- what
+  # the caller captures as $! -- becomes setsid's PID, which setsid then turns into the new
+  # group's PGID. Without exec, $! would name this subshell instead: it shares the launcher's
+  # own process group, so `kill -TERM -- "-$pid"` in kill_process_group would target an empty
+  # group and silently leave uvicorn/Vite running.
   if command -v setsid >/dev/null 2>&1; then
-    setsid "$@"
-    return
+    exec setsid "$@"
   fi
 
   if ! command -v python3 >/dev/null 2>&1; then
     echo "The Electron launcher requires setsid or python3 to manage child processes." >&2
     return 1
   fi
-  python3 - "$@" <<'PY'
+  exec python3 - "$@" <<'PY'
 import os
 import sys
 
