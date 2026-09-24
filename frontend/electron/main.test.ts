@@ -2,17 +2,25 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// main.cjs requires "electron", which only exists inside the Electron runtime, so it can't be
-// imported directly in a Vitest run -- assert on its source the same way icon.test.ts does.
 const mainSource = readFileSync(path.join(__dirname, "main.cjs"), "utf8");
+const builderSource = readFileSync(path.join(__dirname, "../../electron-builder.yml"), "utf8");
 
-describe("Electron dev launcher quit behavior", () => {
-  it("quits on window-all-closed in development, even on macOS", () => {
-    // scripts/electron-dev.sh blocks on this process and only tears down its backend and Vite
-    // server once it exits. Standard macOS apps stay running after their last window closes, which
-    // would leave that backend/Vite server orphaned forever if this ever regressed.
-    expect(mainSource).toMatch(
-      /app\.on\("window-all-closed",\s*\(\)\s*=>\s*\{\s*if\s*\(process\.platform !== "darwin" \|\| isDevelopment\)\s*app\.quit\(\);\s*\}\);/,
-    );
+describe("Electron packaged startup", () => {
+  it("uses the branded macOS bundle and ships backend resources", () => {
+    expect(builderSource).toContain("productName: OpenBot");
+    expect(builderSource).toContain("target:");
+    expect(builderSource).toContain("- dmg");
+    expect(builderSource).toContain("- zip");
+    expect(builderSource).toContain("to: backend");
+  });
+
+  it("waits for backend health and terminates its process group", () => {
+    expect(mainSource).toContain("/api/v1/health");
+    expect(mainSource).toContain("process.kill(-backendProcess.pid, \"SIGTERM\")");
+    expect(mainSource).toContain("await waitForBackend();");
+  });
+
+  it("quits on window-all-closed in development, including macOS", () => {
+    expect(mainSource).toMatch(/app\.on\("window-all-closed",\s*\(\)\s*=>\s*\{\s*if \(process\.platform !== "darwin" \|\| isDevelopment\) app\.quit\(\);/);
   });
 });

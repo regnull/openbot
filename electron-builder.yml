@@ -1,17 +1,30 @@
 appId: com.openbot.desktop
 productName: OpenBot
-# The backend remains a separately managed local service. The packaged UI uses
-# the same API and can also target a remote instance with OPENBOT_URL.
+copyright: "Copyright © OpenBot"
 directories:
-  output: frontend/release
+  output: release
 files:
   - electron/**/*
   - dist/**/*
-# Relative to frontend/ (the project dir). electron-builder generates the
-# platform .icns/.ico from this PNG; main.cjs uses it for the window icon.
+extraResources:
+  - from: ../backend
+    to: backend
+  - from: ../scripts/electron-backend.sh
+    to: backend/electron-backend.sh
+  - from: ../tools
+    to: tools
 icon: electron/assets/icon.png
 mac:
-  target: dmg
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  extendInfo:
+    CFBundleDisplayName: OpenBot
+    CFBundleName: OpenBot
+    LSApplicationCategoryType: public.app-category.developer-tools
 win:
   target: nsis
 linux:
