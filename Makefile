@@ -37,7 +37,7 @@ sync_bots:      ## update the demo bots' instructions/tools/limits from the seed
 	uv run --project backend python -m openbot.seed
 
 lint:           ## lint backend (ruff), frontend (oxlint), and enforce the renderer/backend boundary
-	cd backend && uv run ruff check .	
+	cd backend && uv run ruff check .
 	cd frontend && pnpm lint
 	python3 scripts/check-client-boundaries.py
 
