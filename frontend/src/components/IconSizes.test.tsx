@@ -59,6 +59,16 @@ describe("icon sizes — ~30% bump", () => {
       expect(span.className).toContain("text-base");
     });
 
+    it("shares the bot/external tile background so a participant row reads as one family", () => {
+      // A human avatar used to invert to a bright bg-fg tile, which stood out sharply against a
+      // row of dark bot tiles (e.g. the overlapping avatar stack on ThreadsPage). It should stand
+      // apart by border and glyph color only, not by breaking the shared dark background.
+      for (const kind of ["human", "bot", "external"]) {
+        const { firstChild } = render(<Avatar name="Alice" kind={kind} />);
+        expect((firstChild as HTMLElement).className).toContain("bg-sunken");
+      }
+    });
+
     it("renders at 40×40 (h-10 w-10) in small mode (+25% from h-8)", () => {
       const { firstChild } = render(<Avatar name="Alice" kind="bot" small />);
       const span = firstChild as HTMLElement;
