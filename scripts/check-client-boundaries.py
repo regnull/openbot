@@ -13,20 +13,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "frontend" / "src"
 TRANSPORT_MODULES = {"api/client.ts", "api/sse.ts"}
-NODE_MODULES = "fs|path|child_process|net|tls|sqlite3|better-sqlite3"
+NODE_MODULES = (
+    "assert|buffer|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|"
+    "perf_hooks|process|readline|stream|tls|url|util|v8|vm|worker_threads|zlib|"
+    "sqlite3|better-sqlite3"
+)
+MODULE_SPECIFIER = rf'''["']\s*(?:node:)?(?:{NODE_MODULES})\s*["']'''
 RULES = (
     (
         re.compile(
-            rf"(?:from\s*|import\s*\(|require(?:\.resolve)?\s*\(|^\s*import\s+)"
-            rf"[\"'](?:node:)?(?:{NODE_MODULES})[\"']"
+            rf"(?:\bfrom\s*|\bimport\s*\(\s*|\brequire(?:\.resolve)?\s*\(\s*|^\s*import\s+)"
+            rf"{MODULE_SPECIFIER}"
         ),
         "Node/server runtime imports",
     ),
     (re.compile(r"\b(?:indexedDB|IDBDatabase)\b"), "client-side persistence"),
 )
 TRANSPORT_RULES = (
-    (re.compile(r"\bfetch\s*\("), "direct HTTP transport (use the API client)"),
-    (re.compile(r"\b(?:XMLHttpRequest|WebSocket|EventSource)\s*\("), "direct integration transport (use the API/SSE layer)"),
+    (
+        re.compile(r"\b(?:(?:window|globalThis|global)\s*\.\s*)?fetch\s*\("),
+        "direct HTTP transport (use the API client)",
+    ),
+    (
+        re.compile(
+            r"\b(?:(?:window|globalThis|global)\s*\.\s*)?"
+            r"(?:XMLHttpRequest|WebSocket|EventSource)\s*\("
+        ),
+        "direct integration transport (use the API/SSE layer)",
+    ),
 )
 
 
@@ -53,7 +67,9 @@ def violations_for_text(text: str, relative_path: str) -> list[str]:
 def main() -> int:
     violations: list[str] = []
     for path in sorted(ROOT.rglob("*")):
-        if path.suffix not in {".ts", ".tsx", ".js", ".jsx"} or path.name.endswith((".test.ts", ".test.tsx")):
+        if path.suffix not in {".ts", ".tsx", ".js", ".jsx"} or path.name.endswith(
+            (".test.ts", ".test.tsx", ".test.js", ".test.jsx")
+        ):
             continue
         violations.extend(violations_for_text(path.read_text(encoding="utf-8"), str(path.relative_to(ROOT))))
     if violations:

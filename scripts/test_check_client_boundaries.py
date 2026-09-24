@@ -20,20 +20,34 @@ class ClientBoundaryCheckerTests(unittest.TestCase):
             checker.violations_for_text("new EventSource('/events')", "api/sse.ts"), []
         )
 
-    def test_transport_is_rejected_elsewhere(self):
-        violations = checker.violations_for_text("fetch('/api')", "components/Widget.tsx")
-        self.assertEqual(len(violations), 1)
-        self.assertIn("direct HTTP transport", violations[0])
-
-    def test_dynamic_and_resolved_node_imports_are_rejected(self):
+    def test_transport_aliases_are_rejected_elsewhere(self):
         text = """\
-        const fs = import('fs');
-        const nodeFs = import('node:fs');
-        const resolved = require.resolve('path');
+        window.fetch('/api');
+        globalThis.fetch('/api');
+        new window.EventSource('/events');
         """
         violations = checker.violations_for_text(text, "components/Widget.tsx")
         self.assertEqual(len(violations), 3)
+        self.assertTrue(all("transport" in item for item in violations))
+
+    def test_dynamic_and_resolved_node_imports_are_rejected(self):
+        text = """\
+        const fs = import( "fs" );
+        const nodeFs = import( "node:fs" );
+        const resolved = require.resolve( "path" );
+        const crypto = require( "crypto" );
+        const tls = from "node:tls";
+        """
+        violations = checker.violations_for_text(text, "components/Widget.tsx")
+        self.assertEqual(len(violations), 5)
         self.assertTrue(all("Node/server runtime imports" in item for item in violations))
+
+    def test_common_server_modules_are_rejected(self):
+        text = "\n".join(f'import "{module}";' for module in (
+            "crypto", "http", "https", "os", "url", "worker_threads"
+        ))
+        violations = checker.violations_for_text(text, "components/Widget.tsx")
+        self.assertEqual(len(violations), 6)
 
 
 if __name__ == "__main__":
