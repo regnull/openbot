@@ -1,7 +1,7 @@
 const { app, BrowserWindow, session, shell } = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const { contentSecurityPolicy, isApprovedExternalUrl } = require("./security.cjs");
+const { contentSecurityPolicy, isApprovedExternalUrl, sameOriginOrPackagedPath } = require("./security.cjs");
 const { appIconPath } = require("./icon.cjs");
 const { resolveApiOrigin } = require("./origin.cjs");
 
@@ -14,7 +14,7 @@ const apiOrigin = resolveApiOrigin();
 let backendProcess;
 let quitRequested = false;
 
-function sameOrigin(rawUrl) { try { return new URL(rawUrl).origin === configuredOrigin; } catch { return false; } }
+function sameOrigin(rawUrl) { return sameOriginOrPackagedPath(rawUrl, appUrl); }
 function openApprovedExternal(rawUrl) { if (isApprovedExternalUrl(rawUrl)) { void shell.openExternal(rawUrl); return true; } return false; }
 function startBackend() {
   if (isDevelopment || process.env.OPENBOT_URL) return;

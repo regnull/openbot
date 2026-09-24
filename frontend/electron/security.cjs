@@ -14,6 +14,24 @@ function isApprovedExternalUrl(rawUrl) {
     url.searchParams.has("state");
 }
 
+function sameOriginOrPackagedPath(rawUrl, configuredUrl) {
+  try {
+    const candidate = new URL(rawUrl);
+    const configured = new URL(configuredUrl);
+    // file:// has an opaque/null origin, so origin equality alone would allow
+    // navigation to any local file. Restrict it to the packaged entry document;
+    // query strings and hashes remain valid application URL variants.
+    if (configured.protocol === "file:") {
+      return candidate.protocol === "file:" &&
+        candidate.host === configured.host &&
+        candidate.pathname === configured.pathname;
+    }
+    return candidate.origin === configured.origin;
+  } catch {
+    return false;
+  }
+}
+
 function contentSecurityPolicy(configuredOrigin, apiOrigin = configuredOrigin) {
   return [
     `default-src 'self' ${configuredOrigin}`,
@@ -24,4 +42,4 @@ function contentSecurityPolicy(configuredOrigin, apiOrigin = configuredOrigin) {
   ].join("; ");
 }
 
-module.exports = { contentSecurityPolicy, isApprovedExternalUrl };
+module.exports = { contentSecurityPolicy, isApprovedExternalUrl, sameOriginOrPackagedPath };
