@@ -31,20 +31,37 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if ! command -v setsid >/dev/null 2>&1; then
-  echo "The Electron launcher requires setsid to manage child processes." >&2
-  exit 1
-fi
+# Linux provides setsid, but it is not available on a standard macOS install.
+# Use Python's os.setsid fallback there so the launcher remains portable while
+# retaining a dedicated process group for uvicorn/Vite and their children.
+run_in_process_group() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$@"
+    return
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "The Electron launcher requires setsid or python3 to manage child processes." >&2
+    return 1
+  fi
+  python3 - "$@" <<'PY'
+import os
+import sys
+
+os.setsid()
+os.execvp(sys.argv[1], sys.argv[1:])
+PY
+}
 
 # Use the same root-relative commands as the Makefile targets. OPENBOT_API_URL is
 # passed to Electron/preload so packaged-style absolute API requests use 8001,
 # while the browser/Vite proxy remains pointed at make run's port 8000.
 echo "Starting Electron backend on ${BACKEND_URL}"
-setsid uv run --project backend uvicorn openbot.main:app --reload --port "$ELECTRON_BACKEND_PORT" &
+run_in_process_group uv run --project backend uvicorn openbot.main:app --reload --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
-setsid env FRONTEND_PORT="$FRONTEND_PORT" bash -c '
+run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" bash -c '
   cd frontend
   pnpm dev --host 127.0.0.1 --port "$FRONTEND_PORT"
 ' &
