@@ -40,6 +40,7 @@ const detail = (id: string, messages: Message[], hasMore = false): ThreadDetail 
 const m1 = msg("m1", "first reply", "2026-01-01T00:00:01Z", "r1");
 const m2 = msg("m2", "reply posted while away", "2026-01-01T00:00:02Z");
 const m3 = msg("m3", "live after return", "2026-01-01T00:00:03Z");
+const toolCall = { id: "e-tool", run_id: "r1", seq: 0, type: "tool_call", payload: { name: "shell", args: { command: "echo preserved" }, id: "call-1" }, created_at: "2026-01-01T00:00:01Z" } as const;
 
 describe("ThreadPage window re-entry", () => {
   let root: Root;
@@ -142,6 +143,22 @@ describe("ThreadPage window re-entry", () => {
     expect(text().split("live after return")).toHaveLength(2);
     const order = [text().indexOf("first reply"), text().indexOf("reply posted while away"), text().indexOf("live after return")];
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("preserves active tool output when switching away and back", async () => {
+    await mount("/threads/t1");
+    await until(() => text().includes("first reply"), "initial history");
+
+    await act(async () => {
+      sse.onEvent?.({ event: "run.event", thread_id: "t1", data: toolCall });
+    });
+    await until(() => text().includes("echo preserved"), "tool output");
+
+    await go("/other");
+    await until(() => text().includes("other window"), "switched away");
+    await go("/threads/t1");
+    await until(() => text().includes("echo preserved"), "tool output after return");
+    expect(text().split("echo preserved")).toHaveLength(2);
   });
 
   it("restores history when switching directly between two thread windows", async () => {

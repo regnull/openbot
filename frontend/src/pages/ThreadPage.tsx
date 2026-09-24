@@ -24,7 +24,10 @@ export default function ThreadPage() {
   const detail = useQuery({ queryKey: ["thread", id], queryFn: () => Api.getThread(id), refetchOnMount: "always", refetchInterval: 10_000 });
   const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots, refetchInterval: 10_000 });
   const usage = useQuery({ queryKey: ["thread-usage", id], queryFn: () => Api.getThreadUsage(id) });
-  const [state, setState] = useState<ThreadState>(emptyThreadState(id));
+  // Keep the live per-thread transcript in the query cache so unmounting while navigating does
+  // not discard tool calls and streaming output that arrived over SSE. The thread detail query
+  // only contains persisted messages/open runs, not the in-progress run event transcript.
+  const [state, setState] = useState<ThreadState>(() => qc.getQueryData<ThreadState>(["thread-state", id]) ?? emptyThreadState(id));
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -44,7 +47,17 @@ export default function ThreadPage() {
     const el = scrollContainer.current;
     if (el) shouldStickToBottom.current = isNearBottom(el);
   }, []);
-  useEffect(() => { setState(emptyThreadState(id)); setHasMore(false); shouldStickToBottom.current = true; }, [id]);
+  useEffect(() => {
+    const cached = qc.getQueryData<ThreadState>(["thread-state", id]);
+    setState(cached ?? emptyThreadState(id));
+    setHasMore(false);
+    shouldStickToBottom.current = true;
+  }, [id, qc]);
+  useEffect(() => {
+    // During a route change, state still belongs to the previous id until the reset effect runs.
+    // Never overwrite the destination thread's snapshot with that stale state.
+    if (state.threadId === id) qc.setQueryData(["thread-state", id], state);
+  }, [id, qc, state]);
   // Navigating from one thread window straight to another reuses this component instance, so the
   // query observer just swaps keys — that is not a mount and refetchOnMount does not fire. The
   // previous thread's cached snapshot would be re-rendered as-is, hiding everything that arrived
@@ -56,7 +69,12 @@ export default function ThreadPage() {
     prevId.current = id;
     qc.invalidateQueries({ queryKey: ["thread", id] });
   }, [id, qc]);
-  useEffect(() => { if (detail.data) { setState((s) => hydrate(s, detail.data)); setHasMore(detail.data.has_more); } }, [id, detail.data]);
+  useEffect(() => {
+    if (detail.data) {
+      setState((s) => hydrate(s, detail.data));
+      setHasMore(detail.data.has_more);
+    }
+  }, [id, detail.data]);
   // Ack on open and whenever new messages land, so the inbox badge stays honest.
   useEffect(() => { Api.ackThread(id).then(() => qc.invalidateQueries({ queryKey: ["inbox"] })).catch(() => {}); }, [id, qc, state.messages.length]);
   // Events published while the SSE socket was down are not replayed, so a reconnect leaves the
