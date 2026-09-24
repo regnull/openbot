@@ -14,15 +14,11 @@ backend:        ## backend API with auto-reload, from the repo root so ./tools, 
 frontend:       ## Vite dev server, proxies /api to the backend
 	cd frontend && pnpm dev
 
-electron:       ## Electron desktop window against an already-running Vite dev server (start it with `make frontend`, and the backend with `make backend`)
-	cd frontend && pnpm electron
+electron:       ## launch Electron with a Vite frontend and dedicated backend on :8001 (override ELECTRON_BACKEND_PORT)
+	./scripts/electron-dev.sh
 
-app:            ## launch the OpenBot desktop application (auto-starts the Vite dev server; start the backend separately with `make backend`)
-	@cd frontend && \
-	( pnpm dev >/dev/null 2>&1 & echo $$! >.vite.pid ) && \
-	trap 'kill $$(cat .vite.pid) 2>/dev/null; rm -f .vite.pid' EXIT && \
-	until curl -s -o /dev/null http://localhost:5173; do sleep 0.2; done && \
-	pnpm electron
+app:            ## alias for `make electron`; starts the Electron frontend and backend together
+	$(MAKE) electron
 
 electron-package: ## Build a distributable Electron package (requires platform tooling)
 	cd frontend && pnpm electron:package
