@@ -4,8 +4,8 @@ set -Eeuo pipefail
 
 ELECTRON_BACKEND_PORT="${ELECTRON_BACKEND_PORT:-8001}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
-BACKEND_URL="http://127.0.0.1:${ELECTRON_BACKEND_PORT}"
-FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}"
+BACKEND_URL="http://localhost:${ELECTRON_BACKEND_PORT}"
+FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
 
 backend_pid=""
 frontend_pid=""
@@ -63,7 +63,7 @@ backend_pid=$!
 echo "Starting Vite frontend on ${FRONTEND_URL}"
 run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" bash -c '
   cd frontend
-  pnpm dev --host 127.0.0.1 --port "$FRONTEND_PORT"
+  pnpm dev --host localhost --port "$FRONTEND_PORT"
 ' &
 frontend_pid=$!
 

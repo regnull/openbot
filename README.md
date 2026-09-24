@@ -74,7 +74,13 @@ on port 8000; set `OPENBOT_URL` to an HTTPS OpenBot deployment to use another in
 has no Node integration and communicates through the same API as the browser; the preload bridge is
 intentionally minimal.
 
-The Vite dev server proxies `/api` to the backend, so no CORS setup is needed in development.
+The browser app talks to the backend through Vite's `/api` proxy, so no CORS setup is needed there.
+The Electron desktop app is different: its preload makes direct, absolute requests to
+`OPENBOT_API_URL` (bypassing the proxy) so packaged builds work without one, which means the
+renderer's origin must be in `CORS_ORIGINS`. `make app` binds Vite to `localhost` (matching the
+default `CORS_ORIGINS=http://localhost:5173`) rather than `127.0.0.1` for exactly this reason —
+binding to `127.0.0.1` instead makes every API request fail CORS and the app report the backend as
+unavailable.
 
 For a single-process, production-style run that serves the built frontend from the backend on
 port 8000:
