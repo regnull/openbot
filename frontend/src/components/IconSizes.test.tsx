@@ -42,6 +42,14 @@ describe("icon sizes — ~30% bump", () => {
   });
 
   describe("Avatar", () => {
+    it("renders a labeled user icon for the human participant instead of initials", () => {
+      const { firstChild } = render(<Avatar name="You" kind="human" />);
+      const avatar = firstChild as HTMLElement;
+      expect(avatar.getAttribute("aria-label")).toBe("You");
+      expect(avatar.querySelector("svg")).toBeTruthy();
+      expect(avatar.textContent).not.toContain("YO");
+    });
+
     it("renders at 48×48 (h-12 w-12) by default (+20% from h-10)", () => {
       const { firstChild } = render(<Avatar name="Alice" kind="bot" />);
       const span = firstChild as HTMLElement;
