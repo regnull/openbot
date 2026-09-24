@@ -6,8 +6,11 @@ import { UserIcon } from "./icons";
  * chosen glyph on a sunken tile; system lines get a dashed outline so they read as machine output.
  */
 export default function Avatar({ name, kind, small, icon }: { name: string; kind: string; small?: boolean; icon?: string | null | undefined }) {
+  // Message payloads call the current participant "user", while participant records use "human".
+  // Treat both as the same person so the avatar stays consistent in every view.
+  const isHuman = kind === "human" || kind === "user";
   const cls =
-    kind === "human" ? "border-fg bg-fg text-canvas"
+    isHuman ? "border-fg bg-fg text-canvas"
     : kind === "external" ? "border-line bg-sunken text-muted"
     : kind === "system" ? "border-dashed border-line-strong bg-transparent text-muted"
     : "border-line bg-sunken text-accent-strong";
@@ -15,7 +18,7 @@ export default function Avatar({ name, kind, small, icon }: { name: string; kind
   const glyph = icon ? botIconFor(icon).glyph : null;
   return (
     <span title={name} aria-label={name} className={`inline-flex ${dims} shrink-0 items-center justify-center rounded-ui border font-medium leading-none ${cls} ${glyph ? (small ? "text-base" : "text-lg") : ""}`}>
-      {kind === "human" ? <UserIcon className={small ? "h-5 w-5" : "h-6 w-6"} /> : glyph ?? name.slice(0, 2).toUpperCase()}
+      {isHuman ? <UserIcon className={small ? "h-5 w-5" : "h-6 w-6"} /> : glyph ?? name.slice(0, 2).toUpperCase()}
     </span>
   );
 }
