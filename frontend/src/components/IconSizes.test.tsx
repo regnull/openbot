@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import BotIcon from "./BotIcon";
 import Avatar from "./Avatar";
+import { botIconFor } from "../lib/botIcons";
 
 function render(el: React.ReactNode): HTMLElement {
   const container = document.createElement("div");
@@ -42,13 +43,20 @@ describe("icon sizes — ~30% bump", () => {
   });
 
   describe("Avatar", () => {
-    it.each(["human", "user"])("renders a labeled user icon for %s participants instead of initials", (kind) => {
+    it.each(["human", "user"])("renders the shared person glyph for %s participants instead of initials", (kind) => {
       const { firstChild } = render(<Avatar name="You" kind={kind} />);
       const avatar = firstChild as HTMLElement;
       expect(avatar.getAttribute("aria-label")).toBe("You");
       expect(avatar.getAttribute("title")).toBe("You");
-      expect(avatar.querySelector("svg")).toBeTruthy();
+      expect(avatar.textContent).toBe(botIconFor("person").glyph);
       expect(avatar.textContent).not.toContain("YO");
+    });
+
+    it("renders the shared gear glyph for system participants instead of initials", () => {
+      const { firstChild } = render(<Avatar name="System" kind="system" />);
+      const avatar = firstChild as HTMLElement;
+      expect(avatar.textContent).toBe(botIconFor("gear").glyph);
+      expect(avatar.textContent).not.toContain("SY");
     });
 
     it("renders at 48×48 (h-12 w-12) by default (+20% from h-10)", () => {
@@ -57,6 +65,16 @@ describe("icon sizes — ~30% bump", () => {
       expect(span.className).toContain("h-12");
       expect(span.className).toContain("w-12");
       expect(span.className).toContain("text-base");
+    });
+
+    it("shares the bot/external tile background so a participant row reads as one family", () => {
+      // A human avatar used to invert to a bright bg-fg tile, which stood out sharply against a
+      // row of dark bot tiles (e.g. the overlapping avatar stack on ThreadsPage). It should stand
+      // apart by border and glyph color only, not by breaking the shared dark background.
+      for (const kind of ["human", "bot", "external"]) {
+        const { firstChild } = render(<Avatar name="Alice" kind={kind} />);
+        expect((firstChild as HTMLElement).className).toContain("bg-sunken");
+      }
     });
 
     it("renders at 40×40 (h-10 w-10) in small mode (+25% from h-8)", () => {
