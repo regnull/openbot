@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from openbot.api.deps import get_services
 from openbot.channels.telegram import (
     deliver_to_telegram,
     parse_telegram_update,
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/channels/telegram", tags=["telegram"])
 
 
 @router.post("/webhook")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request, services: Services = Depends(get_services)):
     """Handle incoming Telegram webhook updates.
 
     Flow:
@@ -36,10 +37,6 @@ async def telegram_webhook(request: Request):
         4. For regular messages: post to the thread and return 200. The bot response
            is generated asynchronously and delivered by TelegramDeliveryListener.
     """
-    services: Services = request.app.state.services
-    if services is None:
-        raise HTTPException(500, "Services not initialized")
-
     # --- Secret-token validation (Telegram sends the raw token, not HMAC) ---
     body = await request.body()
     secret = services.settings.telegram_webhook_secret
@@ -72,18 +69,14 @@ async def telegram_webhook(request: Request):
 
 
 @router.post("/webhook/test")
-async def telegram_webhook_test(request: Request):
+async def telegram_webhook_test():
     """Test endpoint to verify webhook is working."""
     return {"status": "ok", "message": "Telegram webhook is active"}
 
 
 @router.get("/status")
-async def telegram_status(request: Request):
+async def telegram_status(services: Services = Depends(get_services)):
     """Get Telegram channel status."""
-    services: Services = request.app.state.services
-    if services is None:
-        raise HTTPException(500, "Services not initialized")
-
     return {
         "configured": services.settings.telegram_bot_token is not None,
         "transport": services.settings.telegram_transport,

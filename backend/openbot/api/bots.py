@@ -36,13 +36,9 @@ router = APIRouter(prefix="/bots", tags=["bots"])
 ACTOR_FIELDS = ("handle", "name", "description", "enabled")
 
 
-def _known_tool(services: Services, name: str) -> bool:
-    return known_tool(services, name)
-
-
 def _validate_tools(services: Services, tool_names: list[str], approval_tools: list[str]) -> None:
     if tool_names:
-        unknown = [t for t in tool_names if not _known_tool(services, t)]
+        unknown = [t for t in tool_names if not known_tool(services, t)]
         if unknown:
             raise HTTPException(422, f"unknown tools: {unknown}")
     extra = [t for t in approval_tools if t not in tool_names]
