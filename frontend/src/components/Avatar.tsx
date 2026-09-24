@@ -1,4 +1,5 @@
 import { botIconFor } from "../lib/botIcons";
+import { UserIcon } from "./icons";
 
 /**
  * Who said it. People are the inverted square (ink on paper, paper on ink); bots carry their
@@ -13,8 +14,8 @@ export default function Avatar({ name, kind, small, icon }: { name: string; kind
   const dims = small ? "h-10 w-10 text-sm" : "h-12 w-12 text-base";
   const glyph = icon ? botIconFor(icon).glyph : null;
   return (
-    <span title={name} className={`inline-flex ${dims} shrink-0 items-center justify-center rounded-ui border font-medium leading-none ${cls} ${glyph ? (small ? "text-base" : "text-lg") : ""}`}>
-      {glyph ?? name.slice(0, 2).toUpperCase()}
+    <span title={name} aria-label={name} className={`inline-flex ${dims} shrink-0 items-center justify-center rounded-ui border font-medium leading-none ${cls} ${glyph ? (small ? "text-base" : "text-lg") : ""}`}>
+      {kind === "human" ? <UserIcon className={small ? "h-5 w-5" : "h-6 w-6"} /> : glyph ?? name.slice(0, 2).toUpperCase()}
     </span>
   );
 }
