@@ -211,6 +211,40 @@ def test_bot_no_mentions_default_bot_still_receives():
     assert [b.handle for b in t] == ["chief_of_staff"]
 
 
+def test_human_mentions_unknown_handle_falls_back_to_default_bot():
+    """Human message with an unresolvable-looking mention ("thread lead is @bot", meant as prose, not an
+    address) still reaches the default bot instead of silently going nowhere."""
+    t = resolve_targets(
+        sender=YOU,
+        mentioned_handles=["bot"],  # not a real actor
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-cos"],
+        default_bot_id="id-cos",
+    )
+    assert [b.handle for b in t] == ["chief_of_staff"]
+
+
+def test_human_mentions_unknown_handle_falls_back_to_sole_bot_without_default():
+    t = resolve_targets(sender=YOU, mentioned_handles=["bot"], to_handles=[], actors_by_handle=ACTORS,
+                        thread_bot_ids=["id-qa"])
+    assert [b.handle for b in t] == ["qa"]
+
+
+def test_human_mentions_real_non_bot_actor_does_not_fall_back():
+    """Naming a real actor who just isn't a bot (a human, an external actor) is a deliberate address, not
+    noise, so it must not be silently rerouted to the default bot."""
+    t = resolve_targets(
+        sender=YOU,
+        mentioned_handles=["ci"],  # a real, enabled, non-bot actor
+        to_handles=[],
+        actors_by_handle=ACTORS_WITH_COS,
+        thread_bot_ids=["id-cos"],
+        default_bot_id="id-cos",
+    )
+    assert t == []
+
+
 def test_existing_bot_to_bot_handoff_unchanged():
     """When a bot mentions a valid bot, the existing behavior is preserved."""
     t = resolve_targets(

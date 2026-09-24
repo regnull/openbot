@@ -9,7 +9,7 @@ dev:            ## run backend (8000) and frontend dev server (5173) together
 	@$(MAKE) -j2 backend frontend
 
 backend:        ## backend API with auto-reload, from the repo root so ./tools, ./workspace, .env resolve
-	uv run --project backend uvicorn openbot.main:app --reload --port 8000
+	uv run --project backend uvicorn openbot.main:app --reload --reload-dir backend/openbot --reload-dir tools --port 8000
 
 frontend:       ## Vite dev server, proxies /api to the backend
 	cd frontend && pnpm dev
