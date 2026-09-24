@@ -55,13 +55,18 @@ and four demo bots: `chief_of_staff`, `engineer`, `reviewer`, `qa`.
 ### Desktop app (Electron)
 
 The Electron desktop app is an optional shell around the same frontend and HTTP/SSE API; the browser
-app remains unchanged. Start the backend and Vite server, then launch Electron in another terminal:
+app remains unchanged. Launch the complete development desktop app with:
 
 ```bash
-make backend       # terminal 1
-make frontend      # terminal 2
-make app            # terminal 3 (alias of make electron)
+make app            # starts the backend, Vite, and Electron together
 ```
+
+The desktop launcher runs its backend on port **8001** (override with
+`ELECTRON_BACKEND_PORT`) so it can run alongside `make run`, whose production-style backend
+continues to use port **8000**. It passes the selected backend URL to Electron so API and SSE
+requests use the dedicated port. `make electron` is an equivalent launcher command. To run the
+individual processes manually, use `make backend`, `make frontend`, and then `cd frontend &&
+pnpm electron`; that manual workflow continues to use port 8000.
 
 For a production desktop package, run `make electron-package`. electron-builder emits a platform-native
 installer under `frontend/release/` (run it on the target platform). Packaged builds expect a local API
