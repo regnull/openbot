@@ -74,6 +74,20 @@ async def test_default_bot_routes_unmentioned_human_messages(services):
         assert res.unaddressed is False
 
 
+async def test_default_bot_routes_message_with_unresolvable_looking_mention(services):
+    """A message written as instructions for the bot ("thread lead is @bot") happens to contain text
+    that parses as a mention of a nonexistent handle. It must still reach the default bot instead of
+    silently reaching nobody (see router.resolve_targets)."""
+    chief, _eng = await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you)
+        res = await post_message(services, s, thread_id=t.id, sender=you,
+                                 content='thread lead for this thread is @bot. Do the thing.')
+        assert [a.id for a in res.addressed] == [chief.id]
+        assert res.unaddressed is False
+
+
 async def test_changed_default_and_explicit_mention_precedence(services):
     chief, eng, rev = await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"), bot_actor("rev"))
     async with services.session_factory() as s:

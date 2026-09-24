@@ -38,7 +38,13 @@ def resolve_targets(*, sender: Actor | None, mentioned_handles: list[str], to_ha
     if not ordered and sender is not None and sender.kind == "bot" and default_bot_id is not None:
         default = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
         ordered = [a for a in default if a.enabled and a.id != sender.id]
-    if not ordered and not (to_handles or mentioned_handles):
+    # Text that merely looks like a mention but names no real actor ("thread lead is @bot", written as
+    # an example rather than an address) does not count as "the sender addressed someone": without this,
+    # such a message resolved to no target and was silently dropped instead of falling back like an
+    # unmentioned message would. A mention of a real, non-bot actor (@you, an external actor) is left
+    # alone here: that is a deliberate address, not noise, so it must not be rerouted to a bot instead.
+    addressed_a_real_actor = bool(to_handles) or any(h in actors_by_handle for h in mentioned_handles)
+    if not ordered and not addressed_a_real_actor:
         # Non-bot senders (a human, or cron delivering a self-scheduled reminder) never self-loop, so
         # they get the same default-bot fallback a bot gets when addressing someone else.
         if sender.kind != "bot" and default_bot_id is not None:

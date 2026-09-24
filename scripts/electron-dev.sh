@@ -62,7 +62,11 @@ PY
 # VITE_BACKEND_PORT points Vite's own dev proxy (relative /api/* fetches from the loaded page)
 # at the same port, so both request paths reach the one backend actually running here.
 echo "Starting Electron backend on ${BACKEND_URL}"
-run_in_process_group uv run --project backend uvicorn openbot.main:app --reload --port "$ELECTRON_BACKEND_PORT" &
+# --reload-dir scopes the file watcher to actual source: without it, uvicorn watches this whole
+# repo root recursively -- .venv, node_modules, and every git worktree checked out under it -- which
+# can exceed 100k files and has wedged the reload watcher outright during unrelated git activity
+# elsewhere in the tree.
+run_in_process_group uv run --project backend uvicorn openbot.main:app --reload --reload-dir backend/openbot --reload-dir tools --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
