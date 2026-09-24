@@ -36,9 +36,10 @@ reset_db:       ## delete the local SQLite databases (app + LangGraph state); mi
 sync_bots:      ## update the demo bots' instructions/tools/limits from the seed definitions (no threads or memories touched), from the repo root
 	uv run --project backend python -m openbot.seed
 
-lint:           ## lint backend (ruff) and frontend (oxlint)
-	cd backend && uv run ruff check .
+lint:           ## lint backend (ruff), frontend (oxlint), and enforce the renderer/backend boundary
+	cd backend && uv run ruff check .	
 	cd frontend && pnpm lint
+	python3 scripts/check-client-boundaries.py
 
 build:          ## build the frontend for production serving by the backend
 	cd frontend && pnpm build
