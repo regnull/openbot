@@ -42,10 +42,11 @@ describe("icon sizes — ~30% bump", () => {
   });
 
   describe("Avatar", () => {
-    it("renders a labeled user icon for the human participant instead of initials", () => {
-      const { firstChild } = render(<Avatar name="You" kind="human" />);
+    it.each(["human", "user"])("renders a labeled user icon for %s participants instead of initials", (kind) => {
+      const { firstChild } = render(<Avatar name="You" kind={kind} />);
       const avatar = firstChild as HTMLElement;
       expect(avatar.getAttribute("aria-label")).toBe("You");
+      expect(avatar.getAttribute("title")).toBe("You");
       expect(avatar.querySelector("svg")).toBeTruthy();
       expect(avatar.textContent).not.toContain("YO");
     });
