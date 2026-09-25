@@ -2,6 +2,18 @@
 # Launch the Electron development app with its own backend and Vite server.
 set -Eeuo pipefail
 
+# Resolve every repository-relative command and path from this script, rather than the caller's
+# working directory. This keeps `make electron` usable from an arbitrary directory.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd -- "$REPO_ROOT"
+
+# This deterministic probe is used by regression tests without starting child services.
+if [[ "${ELECTRON_DEV_PRINT_PATHS:-}" == "1" ]]; then
+  printf 'REPO_ROOT=%s\n' "$REPO_ROOT"
+  exit 0
+fi
+
 ELECTRON_BACKEND_PORT="${ELECTRON_BACKEND_PORT:-8001}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 BACKEND_URL="http://localhost:${ELECTRON_BACKEND_PORT}"

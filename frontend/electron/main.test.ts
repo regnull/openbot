@@ -1,10 +1,23 @@
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const mainSource = readFileSync(path.join(__dirname, "main.cjs"), "utf8");
 const builderSource = readFileSync(path.join(__dirname, "../../electron-builder.yml"), "utf8");
 const backendScriptSource = readFileSync(path.join(__dirname, "../../scripts/electron-backend.sh"), "utf8");
+const devScriptPath = path.join(__dirname, "../../scripts/electron-dev.sh");
+
+describe("Electron launcher paths", () => {
+  it("resolves the repository from the script location when launched elsewhere", () => {
+    const output = execFileSync("bash", [devScriptPath], {
+      cwd: "/tmp",
+      env: { ...process.env, ELECTRON_DEV_PRINT_PATHS: "1" },
+      encoding: "utf8",
+    });
+    expect(output).toContain(`REPO_ROOT=${path.resolve(__dirname, "../..")}`);
+  });
+});
 
 describe("Electron packaged startup", () => {
   it("uses the branded macOS bundle and ships backend resources", () => {
