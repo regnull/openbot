@@ -17,6 +17,9 @@ fi
 ELECTRON_BACKEND_PORT="${ELECTRON_BACKEND_PORT:-8001}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 DETAILS_FLAG="--exclude-llm-call-details"
+if [[ "${OPENBOT_INCLUDE_LLM_CALL_DETAILS:-false}" == "true" ]]; then
+  DETAILS_FLAG="--include-llm-call-details"
+fi
 if [[ "${1:-}" == "--include-llm-call-details" ]]; then
   DETAILS_FLAG="--include-llm-call-details"
   shift
@@ -34,6 +37,7 @@ elif [[ -n "${1:-}" ]]; then
 fi
 [[ -z "${1:-}" ]] || { echo "unexpected Electron launcher argument: $1" >&2; exit 2; }
 if [[ "${ELECTRON_DEV_PRINT_ARGS:-}" == "1" ]]; then
+  printf 'DETAILS_FLAG=%s\n' "$DETAILS_FLAG"
   printf 'ROOT_ARGS='
   if ((${#ROOT_ARGS[@]})); then
     printf '%s|' "${ROOT_ARGS[@]}"

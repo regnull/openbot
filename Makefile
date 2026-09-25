@@ -21,7 +21,7 @@ electron:       ## launch Electron with a Vite frontend and dedicated backend on
 	./scripts/electron-dev.sh $(ELECTRON_DETAIL_ARGS) $(ELECTRON_ROOT_ARGS)
 
 app:            ## alias for `make electron`; starts the Electron frontend and backend together
-	$(MAKE) electron
+	$(MAKE) electron ELECTRON_DETAIL_ARGS="$(ELECTRON_DETAIL_ARGS)"
 
 electron-package: ## Build a distributable Electron package (requires platform tooling)
 	cd frontend && pnpm electron:package

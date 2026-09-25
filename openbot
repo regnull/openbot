@@ -7,11 +7,12 @@ OPENBOT_REPOSITORY="${OPENBOT_REPOSITORY:-$(cd -- "$(dirname -- "${BASH_SOURCE[0
 
 usage() {
   cat >&2 <<'EOF'
-Usage: openbot [--root DIRECTORY] [--db-root DIRECTORY]
+Usage: openbot [--root DIRECTORY] [--db-root DIRECTORY] [--include-llm-call-details]
 
 Start OpenBot with DIRECTORY as the workspace root and DIRECTORY/.openbot/openbot.db
 as the SQLite database. DIRECTORY defaults to the current working directory; the database
-root defaults to ~/.openbot.
+root defaults to ~/.openbot. Detailed per-model-call token data is omitted by default;
+use --include-llm-call-details to opt in.
 EOF
 }
 
@@ -44,6 +45,7 @@ canonical_directory() {
 workspace_input="$(pwd -P)"
 db_input=""
 db_root_explicit=false
+include_llm_call_details=false
 while (($#)); do
   case "$1" in
     --root|--db-root)
@@ -57,6 +59,10 @@ while (($#)); do
         db_input="$1"
         db_root_explicit=true
       fi
+      shift
+      ;;
+    --include-llm-call-details)
+      include_llm_call_details=true
       shift
       ;;
     -h|--help)
@@ -88,5 +94,6 @@ repository_root="$(canonical_directory "$(expand_path "$OPENBOT_REPOSITORY")")"
 # variables provide the caller-specific paths without reimplementing backend initialization here.
 export WORKSPACE_ROOT="$workspace_root"
 export DATABASE_URL="sqlite+aiosqlite:///$db_root/openbot.db"
+export OPENBOT_INCLUDE_LLM_CALL_DETAILS="$include_llm_call_details"
 
 exec make -C "$repository_root" app ROOT_DIRECTORY="$workspace_root"

@@ -30,7 +30,7 @@ def test_cli_detail_flags_override_environment(monkeypatch):
     assert os.environ["OPENBOT_INCLUDE_LLM_CALL_DETAILS"] == "false"
 
 
-def test_llm_call_details_default_is_enabled(monkeypatch):
+def test_llm_call_details_default_is_enabled_for_browser_and_make_run(monkeypatch):
     monkeypatch.delenv("OPENBOT_INCLUDE_LLM_CALL_DETAILS", raising=False)
     settings = Settings(_env_file=None)
     assert settings.include_llm_call_details is True
@@ -59,6 +59,7 @@ def test_unset_frontend_dist_also_uses_default(monkeypatch):
 
 
 def test_database_url_defaults_to_openbot_directory(monkeypatch):
+    monkeypatch.delenv("OPENBOT_ROOT_DIRECTORY", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     settings = Settings(_env_file=None)
     assert settings.database_url == "sqlite+aiosqlite:///./.openbot/openbot.db"
