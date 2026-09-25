@@ -91,6 +91,25 @@ def test_root_directory_preserves_explicit_workspace_and_database(monkeypatch, t
     assert settings.database_url == f"sqlite+aiosqlite:///{database}"
 
 
+def test_root_directory_preserves_explicit_workspace_equal_to_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENBOT_ROOT_DIRECTORY", str(tmp_path))
+    monkeypatch.setenv("WORKSPACE_ROOT", "./workspace")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.workspace_root == Path("workspace")
+    assert settings.database_url == f"sqlite+aiosqlite:///{tmp_path / '.openbot' / 'openbot.db'}"
+
+
+def test_root_directory_preserves_explicit_database_equal_to_default(monkeypatch, tmp_path):
+    default_database = "sqlite+aiosqlite:///./.openbot/openbot.db"
+    monkeypatch.setenv("OPENBOT_ROOT_DIRECTORY", str(tmp_path))
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    monkeypatch.setenv("DATABASE_URL", default_database)
+    settings = Settings(_env_file=None)
+    assert settings.workspace_root == tmp_path
+    assert settings.database_url == default_database
+
+
 def test_without_root_directory_defaults_are_unchanged(monkeypatch):
     monkeypatch.delenv("OPENBOT_ROOT_DIRECTORY", raising=False)
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)

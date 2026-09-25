@@ -1,7 +1,7 @@
 .PHONY: dev backend frontend app electron electron-package test smoke build run lint setup reset_db sync_bots --include-llm-call-details
 
 ELECTRON_DETAIL_ARGS := $(if $(filter --include-llm-call-details,$(MAKECMDGOALS)),--include-llm-call-details,)
-ELECTRON_ROOT_ARGS := $(if $(ROOT_DIRECTORY),--root-directory $(ROOT_DIRECTORY),)
+ELECTRON_ROOT_ARGS := $(if $(ROOT_DIRECTORY),--root-directory "$(ROOT_DIRECTORY)",)
 
 setup:          ## install backend and frontend dependencies, create .env from the template
 	cd backend && uv sync

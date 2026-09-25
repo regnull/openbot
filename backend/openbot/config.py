@@ -95,9 +95,9 @@ class Settings(BaseSettings):
         if self.root_directory is None:
             return self
         root = Path(self.root_directory)
-        if self.workspace_root == Path("./workspace"):
+        if "workspace_root" not in self.model_fields_set:
             self.workspace_root = root
-        if self.database_url == "sqlite+aiosqlite:///./.openbot/openbot.db":
+        if "database_url" not in self.model_fields_set:
             self.database_url = f"sqlite+aiosqlite:///{root / '.openbot' / 'openbot.db'}"
         return self
 

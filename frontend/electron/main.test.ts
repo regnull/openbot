@@ -33,7 +33,15 @@ describe("Electron launcher detail controls", () => {
       cwd: path.resolve(__dirname, "../.."),
       encoding: "utf8",
     });
-    expect(output).toContain("./scripts/electron-dev.sh  --root-directory /tmp/openbot-root");
+    expect(output).toContain('./scripts/electron-dev.sh  --root-directory "/tmp/openbot-root"');
+  });
+
+  it("preserves root-directory argument boundaries when the path contains spaces", () => {
+    const output = execFileSync("make", ["-n", "electron", "ROOT_DIRECTORY=/tmp/openbot root"], {
+      cwd: path.resolve(__dirname, "../.."),
+      encoding: "utf8",
+    });
+    expect(output).toContain('./scripts/electron-dev.sh  --root-directory "/tmp/openbot root"');
   });
 });
 
