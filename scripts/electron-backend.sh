@@ -4,9 +4,13 @@ set -Eeuo pipefail
 PROJECT_ROOT="${OPENBOT_RESOURCES:?OPENBOT_RESOURCES is required}"
 PORT="${OPENBOT_BACKEND_PORT:-8000}"
 cd "$PROJECT_ROOT"
-mkdir -p "${OPENBOT_USER_DATA:?OPENBOT_USER_DATA is required}/workspace" "${OPENBOT_USER_DATA}/logs"
-export DATABASE_URL="${DATABASE_URL:-sqlite+aiosqlite:///${OPENBOT_USER_DATA}/openbot.db}"
-export WORKSPACE_ROOT="${WORKSPACE_ROOT:-${OPENBOT_USER_DATA}/workspace}"
+if [[ -n "${OPENBOT_ROOT_DIRECTORY:-}" ]]; then
+  mkdir -p "$OPENBOT_ROOT_DIRECTORY/.openbot" "$OPENBOT_ROOT_DIRECTORY"
+else
+  mkdir -p "${OPENBOT_USER_DATA:?OPENBOT_USER_DATA is required}/workspace" "${OPENBOT_USER_DATA}/logs"
+  export DATABASE_URL="${DATABASE_URL:-sqlite+aiosqlite:///${OPENBOT_USER_DATA}/openbot.db}"
+  export WORKSPACE_ROOT="${WORKSPACE_ROOT:-${OPENBOT_USER_DATA}/workspace}"
+fi
 export TOOLS_DIR="${TOOLS_DIR:-$PROJECT_ROOT/tools}"
 export LOG_FILE="${LOG_FILE:-${OPENBOT_USER_DATA}/logs/openbot.log}"
 # `uv run --project` otherwise builds .venv inside PROJECT_ROOT, i.e. Contents/Resources of the
@@ -44,4 +48,8 @@ DETAILS_FLAG="--exclude-llm-call-details"
 if [ "${OPENBOT_INCLUDE_LLM_CALL_DETAILS:-false}" = "true" ]; then
   DETAILS_FLAG="--include-llm-call-details"
 fi
-exec "$UV" run --project "$PROJECT_ROOT/backend" python -m openbot.cli "$DETAILS_FLAG" --host 127.0.0.1 --port "$PORT"
+ROOT_ARGS=()
+if [[ -n "${OPENBOT_ROOT_DIRECTORY:-}" ]]; then
+  ROOT_ARGS+=(--root-directory "$OPENBOT_ROOT_DIRECTORY")
+fi
+exec "$UV" run --project "$PROJECT_ROOT/backend" python -m openbot.cli "$DETAILS_FLAG" "${ROOT_ARGS[@]}" --host 127.0.0.1 --port "$PORT"

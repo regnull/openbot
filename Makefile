@@ -1,6 +1,7 @@
 .PHONY: dev backend frontend app electron electron-package test smoke build run lint setup reset_db sync_bots --include-llm-call-details
 
 ELECTRON_DETAIL_ARGS := $(if $(filter --include-llm-call-details,$(MAKECMDGOALS)),--include-llm-call-details,)
+ELECTRON_ROOT_ARGS := $(if $(ROOT_DIRECTORY),--root-directory "$(ROOT_DIRECTORY)",)
 
 setup:          ## install backend and frontend dependencies, create .env from the template
 	cd backend && uv sync
@@ -17,7 +18,7 @@ frontend:       ## Vite dev server, proxies /api to the backend
 	cd frontend && pnpm dev
 
 electron:       ## launch Electron with a Vite frontend and dedicated backend on :8001 (override ELECTRON_BACKEND_PORT)
-	./scripts/electron-dev.sh $(ELECTRON_DETAIL_ARGS)
+	./scripts/electron-dev.sh $(ELECTRON_DETAIL_ARGS) $(ELECTRON_ROOT_ARGS)
 
 app:            ## alias for `make electron`; starts the Electron frontend and backend together
 	$(MAKE) electron

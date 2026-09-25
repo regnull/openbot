@@ -10,6 +10,8 @@ import uvicorn
 def main() -> None:
     args, uvicorn_args = _parse_args()
     _apply_detail_setting(args)
+    if args.root_directory:
+        os.environ["OPENBOT_ROOT_DIRECTORY"] = args.root_directory
     uvicorn.run("openbot.main:app", **_uvicorn_options(uvicorn_args))
 
 
@@ -28,6 +30,7 @@ def _parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list
                          help="include per-model-call token details in activity events")
     details.add_argument("--exclude-llm-call-details", action="store_true",
                          help="omit per-model-call token details from activity events")
+    parser.add_argument("--root-directory", help="root directory for default workspace and database paths")
     return parser.parse_known_args(argv)
 
 

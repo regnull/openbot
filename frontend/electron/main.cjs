@@ -20,7 +20,7 @@ function openApprovedExternal(rawUrl) { if (isApprovedExternalUrl(rawUrl)) { voi
 function startBackend() {
   if (isDevelopment || usesExternalBackend) return;
   const script = path.join(process.resourcesPath, "backend", "electron-backend.sh");
-  backendProcess = spawn("/bin/sh", [script], { detached: true, env: { ...process.env, OPENBOT_RESOURCES: process.resourcesPath, OPENBOT_USER_DATA: app.getPath("userData"), OPENBOT_BACKEND_PORT: backendPort }, stdio: "ignore" });
+  backendProcess = spawn("/bin/sh", [script], { detached: true, env: { ...process.env, OPENBOT_RESOURCES: process.resourcesPath, OPENBOT_USER_DATA: app.getPath("userData"), OPENBOT_BACKEND_PORT: backendPort, OPENBOT_ROOT_DIRECTORY: process.env.OPENBOT_ROOT_DIRECTORY }, stdio: "ignore" });
   backendProcess.unref();
   backendProcess.on("error", (error) => console.error("OpenBot backend failed to start", error));
 }
