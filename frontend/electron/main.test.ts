@@ -50,7 +50,7 @@ describe("Electron launcher detail controls", () => {
       encoding: "utf8",
     });
     expect(output).toContain("./scripts/electron-dev.sh");
-    expect(output).toContain(`--root-directory "${path.resolve(__dirname, "../..")}"`);
+    expect(output).not.toContain("--root-directory");
   });
 
   it("forwards the parsed root flag to the backend during normal startup", () => {
