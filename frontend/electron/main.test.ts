@@ -43,6 +43,21 @@ describe("Electron launcher detail controls", () => {
     });
     expect(output).toContain('./scripts/electron-dev.sh  --root-directory "/tmp/openbot root"');
   });
+
+  it("does not manufacture a dangling root flag when no root is supplied", () => {
+    const output = execFileSync("make", ["-n", "electron"], {
+      cwd: path.resolve(__dirname, "../.."),
+      encoding: "utf8",
+    });
+    expect(output).toContain("./scripts/electron-dev.sh");
+    expect(output).not.toContain("--root-directory");
+  });
+
+  it("forwards the parsed root flag to the backend during normal startup", () => {
+    expect(devScriptSource).toContain('if [[ "${1:-}" == "--root-directory" ]]');
+    expect(devScriptSource).toContain('ROOT_ARGS+=(--root-directory "$2")');
+    expect(devScriptSource).toContain('run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG"');
+  });
 });
 
 describe("Electron file watching", () => {
