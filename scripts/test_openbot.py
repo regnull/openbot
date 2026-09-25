@@ -38,6 +38,7 @@ class OpenBotLauncherTests(unittest.TestCase):
             self.assertIn(f"workspace={Path(tmp).resolve()}", result.stdout)
             self.assertIn(f"database=sqlite+aiosqlite:///{Path(home).resolve() / '.openbot' / 'openbot.db'}", result.stdout)
             self.assertIn("args=-C|", result.stdout)
+            self.assertIn("|app|ROOT_DIRECTORY=", result.stdout)
 
     def test_root_override_preserves_spaces(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
@@ -72,7 +73,8 @@ class OpenBotLauncherTests(unittest.TestCase):
             repository.mkdir()
             result = self.run_launcher(cwd=caller, home=home, repository=repository)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(f"args=-C|{repository.resolve()}|run|", result.stdout)
+            self.assertIn(f"args=-C|{repository.resolve()}|app|", result.stdout)
+            self.assertIn(f"ROOT_DIRECTORY={caller.resolve()}", result.stdout)
             self.assertIn(f"workspace={caller.resolve()}", result.stdout)
 
     def test_repository_location_must_be_a_directory(self):
