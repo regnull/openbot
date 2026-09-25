@@ -77,9 +77,9 @@ fi
 db_root="$(canonical_directory "$db_root")"
 repository_root="$(canonical_directory "$(expand_path "$OPENBOT_REPOSITORY")")"
 
-# `make run` remains the canonical production-style startup path; these environment variables
-# provide the caller-specific paths without reimplementing backend initialization here.
+# `make app` delegates to the established Electron development launcher. These environment
+# variables provide the caller-specific paths without reimplementing backend initialization here.
 export WORKSPACE_ROOT="$workspace_root"
 export DATABASE_URL="sqlite+aiosqlite:///$db_root/openbot.db"
 
-exec make -C "$repository_root" run
+exec make -C "$repository_root" app ROOT_DIRECTORY="$workspace_root"
