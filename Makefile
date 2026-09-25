@@ -45,4 +45,4 @@ build:          ## build the frontend for production serving by the backend
 	cd frontend && pnpm build
 
 run: build      ## production-style single process on :8000 serving the built UI, from the repo root
-	uv run --project backend uvicorn openbot.main:app --port 8000
+	uv run --project backend python -m openbot.cli --port 8000

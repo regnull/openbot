@@ -364,7 +364,8 @@ class Runner:
                         await activity.record(self.s, "run.model_call", level="debug", thread_id=run.thread_id, actor_id=run.actor_id,
                                               run_id=run.id,
                                               summary=f"model replied: {len(m.tool_calls)} tool call(s), {len(_text(m))} chars of text",
-                                              tool_calls=[tc["name"] for tc in m.tool_calls], text_chars=len(_text(m)), usage=inc,
+                                              tool_calls=[tc["name"] for tc in m.tool_calls], text_chars=len(_text(m)),
+                                              usage=inc if self.s.settings.include_llm_call_details else None,
                                               calls_so_far=usage["model_calls"])
                         for tc in m.tool_calls:
                             log.info("run %s tool_call %s(%s)", run.id, tc["name"], _preview(tc["args"]))

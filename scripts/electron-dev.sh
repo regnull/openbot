@@ -16,6 +16,11 @@ fi
 
 ELECTRON_BACKEND_PORT="${ELECTRON_BACKEND_PORT:-8001}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+DETAILS_FLAG="--exclude-llm-call-details"
+if [[ "${1:-}" == "--include-llm-call-details" ]]; then
+  DETAILS_FLAG="--include-llm-call-details"
+  shift
+fi
 BACKEND_URL="http://localhost:${ELECTRON_BACKEND_PORT}"
 FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
 
@@ -78,7 +83,7 @@ echo "Starting Electron backend on ${BACKEND_URL}"
 # repo root recursively -- .venv, node_modules, and every git worktree checked out under it -- which
 # can exceed 100k files and has wedged the reload watcher outright during unrelated git activity
 # elsewhere in the tree.
-run_in_process_group uv run --project backend uvicorn openbot.main:app --reload --reload-dir backend/openbot --reload-dir tools --port "$ELECTRON_BACKEND_PORT" &
+run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG" --reload --reload-dir backend/openbot --reload-dir tools --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"

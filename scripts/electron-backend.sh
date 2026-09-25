@@ -40,4 +40,8 @@ fi
 # No .venv ships in the bundle (see electron-builder.yml): a venv uv builds has an absolute
 # shebang back to wherever it was built, so a pre-built one would work only on the machine that
 # packaged the app. `uv run` here builds one rooted in this actual installed copy instead.
-exec "$UV" run --project "$PROJECT_ROOT/backend" uvicorn openbot.main:app --host 127.0.0.1 --port "$PORT"
+DETAILS_FLAG="--exclude-llm-call-details"
+if [ "${OPENBOT_INCLUDE_LLM_CALL_DETAILS:-false}" = "true" ]; then
+  DETAILS_FLAG="--include-llm-call-details"
+fi
+exec "$UV" run --project "$PROJECT_ROOT/backend" python -m openbot.cli "$DETAILS_FLAG" --host 127.0.0.1 --port "$PORT"
