@@ -473,10 +473,13 @@ class ActorSystem:
         if run is None:
             return False
         for w in self._workers.values():
-            if isinstance(w, BotActor) and w.current_run_id == run_id and w.current_task:
+            if not isinstance(w, BotActor) or w.current_run_id != run_id:
+                continue
+            task = w.current_task
+            if task is not None:
                 await activity.record(self.s, "run.cancel_requested", level="warning", thread_id=run.thread_id,
                                       actor_id=run.actor_id, run_id=run_id, summary="cancelling the live run", live=True)
-                w.current_task.cancel()
+                task.cancel()
                 return True
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
