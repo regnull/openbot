@@ -25,6 +25,32 @@ def test_unset_frontend_dist_also_uses_default(monkeypatch):
     assert settings.frontend_dist == Path("frontend/dist")
 
 
+
+def test_database_url_defaults_to_openbot_directory(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.database_url == "sqlite+aiosqlite:///./.openbot/openbot.db"
+
+
+def test_database_url_override_is_preserved(monkeypatch):
+    override = "sqlite+aiosqlite:////tmp/custom-openbot.db"
+    monkeypatch.setenv("DATABASE_URL", override)
+    settings = Settings(_env_file=None)
+    assert settings.database_url == override
+
+
+
+def test_sqlite_parent_is_created_for_default_and_override(tmp_path):
+    from openbot.db.session import ensure_sqlite_parent
+
+    default_path = tmp_path / ".openbot" / "openbot.db"
+    override_path = tmp_path / "custom" / "openbot.db"
+    ensure_sqlite_parent(f"sqlite+aiosqlite:///{default_path}")
+    ensure_sqlite_parent(f"sqlite+aiosqlite:///{override_path}")
+    assert default_path.parent.is_dir()
+    assert override_path.parent.is_dir()
+
+
 def test_empty_bot_model_env_uses_default_marker(monkeypatch):
     monkeypatch.setenv("BOT_MODEL", "")
     monkeypatch.setenv("OPENROUTER_MODEL", "")
