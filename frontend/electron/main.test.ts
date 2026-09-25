@@ -24,6 +24,17 @@ describe("Electron launcher detail controls", () => {
     });
     expect(output).toContain("./scripts/electron-dev.sh --include-llm-call-details");
   });
+
+  it("forwards a caller-supplied root directory", () => {
+    expect(devScriptSource).toContain('ROOT_ARGS+=(--root-directory "$1")');
+    expect(backendScriptSource).toContain('ROOT_ARGS+=(--root-directory "$OPENBOT_ROOT_DIRECTORY")');
+    expect(mainSource).toContain("OPENBOT_ROOT_DIRECTORY: process.env.OPENBOT_ROOT_DIRECTORY");
+    const output = execFileSync("make", ["-n", "electron", "ROOT_DIRECTORY=/tmp/openbot-root"], {
+      cwd: path.resolve(__dirname, "../.."),
+      encoding: "utf8",
+    });
+    expect(output).toContain("./scripts/electron-dev.sh  --root-directory /tmp/openbot-root");
+  });
 });
 
 describe("Electron file watching", () => {

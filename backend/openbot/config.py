@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Shared regex for validating Telegram Bot API tokens (format: <bot_id>:<token>).
@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "sqlite+aiosqlite:///./.openbot/openbot.db"
+    root_directory: Path | None = Field(default=None, validation_alias="OPENBOT_ROOT_DIRECTORY")
     openbot_api_key: str | None = None
 
     openai_api_key: str | None = None
@@ -87,6 +88,18 @@ class Settings(BaseSettings):
     telegram_webhook_url: str | None = None
     telegram_webhook_secret: str | None = None
     telegram_transport: str = "long_polling"  # "long_polling" or "webhook"
+
+    @model_validator(mode="after")
+    def _apply_root_directory_defaults(self):
+        """Use a caller-supplied root for defaults without overriding explicit settings."""
+        if self.root_directory is None:
+            return self
+        root = Path(self.root_directory)
+        if self.workspace_root == Path("./workspace"):
+            self.workspace_root = root
+        if self.database_url == "sqlite+aiosqlite:///./.openbot/openbot.db":
+            self.database_url = f"sqlite+aiosqlite:///{root / '.openbot' / 'openbot.db'}"
+        return self
 
     @field_validator("cors_origins", "webhook_retry_delays", "openrouter_provider_order", mode="before")
     @classmethod

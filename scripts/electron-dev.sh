@@ -21,6 +21,11 @@ if [[ "${1:-}" == "--include-llm-call-details" ]]; then
   DETAILS_FLAG="--include-llm-call-details"
   shift
 fi
+ROOT_ARGS=()
+if [[ -n "${1:-}" ]]; then
+  ROOT_ARGS+=(--root-directory "$1")
+  shift
+fi
 BACKEND_URL="http://localhost:${ELECTRON_BACKEND_PORT}"
 FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
 
@@ -78,7 +83,7 @@ PY
 # without backend reload or Vite file watching: changes take effect after an app restart,
 # avoiding watcher activity that can freeze the UI while messages are being sent.
 echo "Starting Electron backend on ${BACKEND_URL}"
-run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG" --port "$ELECTRON_BACKEND_PORT" &
+run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG" "${ROOT_ARGS[@]}" --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
