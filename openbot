@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Start OpenBot using the repository's production-style launcher.
+set -Eeuo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: openbot [--root DIRECTORY] [--db-root DIRECTORY]
+
+Start OpenBot with DIRECTORY as the workspace root and DIRECTORY/.openbot/openbot.db
+as the SQLite database. DIRECTORY defaults to the current working directory; the database
+root defaults to ~/.openbot.
+EOF
+}
+
+error() {
+  printf 'openbot: %s\n' "$1" >&2
+  usage
+  exit 2
+}
+
+expand_path() {
+  local value="$1"
+  if [[ "$value" == "~" ]]; then
+    value="$HOME"
+  elif [[ "$value" == "~/"* ]]; then
+    value="$HOME/${value:2}"
+  fi
+  printf '%s' "$value"
+}
+
+canonical_directory() {
+  local value="$1"
+  if [[ ! -d "$value" ]]; then
+    error "directory does not exist or is not a directory: $value"
+  fi
+  if ! (cd -- "$value" && pwd -P); then
+    error "cannot access directory: $value"
+  fi
+}
+
+workspace_input="$(pwd -P)"
+db_input="${HOME:?HOME is not set}/.openbot"
+while (($#)); do
+  case "$1" in
+    --root|--db-root)
+      option="$1"
+      shift
+      (($#)) || error "$option requires a directory"
+      [[ "$1" != -* ]] || error "$option requires a directory, got: $1"
+      if [[ "$option" == "--root" ]]; then
+        workspace_input="$1"
+      else
+        db_input="$1"
+      fi
+      shift
+      ;;
+    -h|--help)
+      usage >&2
+      exit 0
+      ;;
+    *)
+      error "unknown argument: $1"
+      ;;
+  esac
+done
+
+workspace_root="$(canonical_directory "$(expand_path "$workspace_input")")"
+db_root="$(expand_path "$db_input")"
+if [[ ! -e "$db_root" ]]; then
+  if ! mkdir -p -- "$db_root"; then
+    error "cannot create database directory: $db_root"
+  fi
+fi
+db_root="$(canonical_directory "$db_root")"
+
+# `make run` remains the canonical production-style startup path; these environment variables
+# provide the caller-specific paths without reimplementing backend initialization here.
+export WORKSPACE_ROOT="$workspace_root"
+export DATABASE_URL="sqlite+aiosqlite:///$db_root/openbot.db"
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+exec make -C "$script_dir" run
