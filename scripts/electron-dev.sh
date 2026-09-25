@@ -22,9 +22,24 @@ if [[ "${1:-}" == "--include-llm-call-details" ]]; then
   shift
 fi
 ROOT_ARGS=()
-if [[ -n "${1:-}" ]]; then
+if [[ "${1:-}" == "--root-directory" ]]; then
+  [[ -n "${2:-}" ]] || { echo "--root-directory requires a directory" >&2; exit 2; }
+  ROOT_ARGS+=(--root-directory "$2")
+  shift 2
+elif [[ -n "${1:-}" ]]; then
+  # Preserve compatibility with direct callers that pass the root as the first
+  # argument, while accepting the explicit form emitted by `make electron`.
   ROOT_ARGS+=(--root-directory "$1")
   shift
+fi
+[[ -z "${1:-}" ]] || { echo "unexpected Electron launcher argument: $1" >&2; exit 2; }
+if [[ "${ELECTRON_DEV_PRINT_ARGS:-}" == "1" ]]; then
+  printf 'ROOT_ARGS='
+  if ((${#ROOT_ARGS[@]})); then
+    printf '%s|' "${ROOT_ARGS[@]}"
+  fi
+  printf '\n'
+  exit 0
 fi
 BACKEND_URL="http://localhost:${ELECTRON_BACKEND_PORT}"
 FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
