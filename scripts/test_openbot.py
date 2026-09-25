@@ -40,6 +40,41 @@ class OpenBotLauncherTests(unittest.TestCase):
             self.assertIn("args=-C|", result.stdout)
             self.assertIn("|app|ROOT_DIRECTORY=", result.stdout)
 
+    def test_existing_local_database_directory_wins(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            local_db = Path(tmp) / ".openbot"
+            local_db.mkdir()
+            result = self.run_launcher(cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"database=sqlite+aiosqlite:///{local_db.resolve() / 'openbot.db'}", result.stdout)
+            self.assertFalse((Path(home) / ".openbot").exists())
+
+    def test_missing_local_database_directory_falls_back_and_creates_home(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            result = self.run_launcher(cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            home_db = Path(home) / ".openbot"
+            self.assertIn(f"database=sqlite+aiosqlite:///{home_db.resolve() / 'openbot.db'}", result.stdout)
+            self.assertTrue(home_db.is_dir())
+
+    def test_explicit_database_override_wins_over_local_directory(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            (Path(tmp) / ".openbot").mkdir()
+            override = Path(tmp) / "database with spaces"
+            result = self.run_launcher("--db-root", str(override), cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"database=sqlite+aiosqlite:///{override.resolve() / 'openbot.db'}", result.stdout)
+            self.assertNotIn(str(Path(tmp) / ".openbot"), result.stdout)
+
+    def test_root_override_selects_local_database_relative_to_overridden_root(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            root = Path(tmp) / "workspace with spaces"
+            local_db = root / ".openbot"
+            local_db.mkdir(parents=True)
+            result = self.run_launcher("--root", str(root), cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"database=sqlite+aiosqlite:///{local_db.resolve() / 'openbot.db'}", result.stdout)
+
     def test_root_override_preserves_spaces(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
             root = Path(tmp) / "workspace with spaces"

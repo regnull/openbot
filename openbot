@@ -42,7 +42,8 @@ canonical_directory() {
 }
 
 workspace_input="$(pwd -P)"
-db_input="${HOME:?HOME is not set}/.openbot"
+db_input=""
+db_root_explicit=false
 while (($#)); do
   case "$1" in
     --root|--db-root)
@@ -54,6 +55,7 @@ while (($#)); do
         workspace_input="$1"
       else
         db_input="$1"
+        db_root_explicit=true
       fi
       shift
       ;;
@@ -68,6 +70,11 @@ while (($#)); do
 done
 
 workspace_root="$(canonical_directory "$(expand_path "$workspace_input")")"
+if [[ "$db_root_explicit" == false && -d "$workspace_root/.openbot" ]]; then
+  db_input="$workspace_root/.openbot"
+elif [[ "$db_root_explicit" == false ]]; then
+  db_input="${HOME:?HOME is not set}/.openbot"
+fi
 db_root="$(expand_path "$db_input")"
 if [[ ! -e "$db_root" ]]; then
   if ! mkdir -p -- "$db_root"; then
