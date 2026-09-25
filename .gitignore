@@ -5,6 +5,7 @@ __pycache__/
 .ruff_cache/
 *.db
 *.db-*
+.openbot/
 workspace/
 logs/
 node_modules/
