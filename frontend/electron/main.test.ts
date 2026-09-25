@@ -16,6 +16,14 @@ describe("Electron launcher detail controls", () => {
     expect(devScriptSource).toContain('shift');
     expect(devScriptSource).toContain('python -m openbot.cli "$DETAILS_FLAG"');
   });
+
+  it("forwards the documented opt-in through make", () => {
+    const output = execFileSync("make", ["-n", "electron", "--", "--include-llm-call-details"], {
+      cwd: path.resolve(__dirname, "../.."),
+      encoding: "utf8",
+    });
+    expect(output).toContain("./scripts/electron-dev.sh --include-llm-call-details");
+  });
 });
 
 describe("Electron launcher paths", () => {
