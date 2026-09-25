@@ -52,4 +52,4 @@ ROOT_ARGS=()
 if [[ -n "${OPENBOT_ROOT_DIRECTORY:-}" ]]; then
   ROOT_ARGS+=(--root-directory "$OPENBOT_ROOT_DIRECTORY")
 fi
-exec "$UV" run --project "$PROJECT_ROOT/backend" python -m openbot.cli "$DETAILS_FLAG" "${ROOT_ARGS[@]}" --host 127.0.0.1 --port "$PORT"
+exec "$UV" run --project "$PROJECT_ROOT/backend" python -m openbot.cli "$DETAILS_FLAG" ${ROOT_ARGS[@]+"${ROOT_ARGS[@]}"} --host 127.0.0.1 --port "$PORT"

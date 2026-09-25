@@ -83,7 +83,7 @@ PY
 # without backend reload or Vite file watching: changes take effect after an app restart,
 # avoiding watcher activity that can freeze the UI while messages are being sent.
 echo "Starting Electron backend on ${BACKEND_URL}"
-run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG" "${ROOT_ARGS[@]}" --port "$ELECTRON_BACKEND_PORT" &
+run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG" ${ROOT_ARGS[@]+"${ROOT_ARGS[@]}"} --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
