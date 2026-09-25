@@ -10,7 +10,7 @@ SCRIPT = Path(__file__).parents[1] / "openbot"
 
 
 class OpenBotLauncherTests(unittest.TestCase):
-    def run_launcher(self, *args, cwd=None, home=None):
+    def run_launcher(self, *args, cwd=None, home=None, repository=None):
         with tempfile.TemporaryDirectory() as tmp:
             fake_make = Path(tmp) / "make"
             fake_make.write_text(
@@ -25,6 +25,8 @@ class OpenBotLauncherTests(unittest.TestCase):
             env["PATH"] = f"{tmp}{os.pathsep}{env['PATH']}"
             if home is not None:
                 env["HOME"] = str(home)
+            if repository is not None:
+                env["OPENBOT_REPOSITORY"] = str(repository)
             return subprocess.run(
                 [str(SCRIPT), *args], cwd=cwd, env=env, text=True, capture_output=True, check=False
             )
@@ -61,6 +63,24 @@ class OpenBotLauncherTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(f"workspace={root.resolve()}", result.stdout)
             self.assertIn(f"database=sqlite+aiosqlite:///{db.resolve() / 'openbot.db'}", result.stdout)
+
+    def test_repository_location_is_used_from_another_working_directory(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            caller = Path(tmp) / "caller"
+            repository = Path(tmp) / "repository with spaces"
+            caller.mkdir()
+            repository.mkdir()
+            result = self.run_launcher(cwd=caller, home=home, repository=repository)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"args=-C|{repository.resolve()}|run|", result.stdout)
+            self.assertIn(f"workspace={caller.resolve()}", result.stdout)
+
+    def test_repository_location_must_be_a_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repository = Path(tmp) / "missing-repository"
+            result = self.run_launcher(cwd=tmp, repository=repository)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("does not exist", result.stderr)
 
     def test_invalid_usage_is_clear(self):
         result = self.run_launcher("--root")
