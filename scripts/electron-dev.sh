@@ -35,7 +35,9 @@ fi
 [[ -z "${1:-}" ]] || { echo "unexpected Electron launcher argument: $1" >&2; exit 2; }
 if [[ "${ELECTRON_DEV_PRINT_ARGS:-}" == "1" ]]; then
   printf 'ROOT_ARGS='
-  printf '%s|' ${ROOT_ARGS[@]+"${ROOT_ARGS[@]}"}
+  if ((${#ROOT_ARGS[@]})); then
+    printf '%s|' "${ROOT_ARGS[@]}"
+  fi
   printf '\n'
   exit 0
 fi
