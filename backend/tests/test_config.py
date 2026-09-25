@@ -5,9 +5,41 @@ Both bugs were invisible to the rest of the suite because conftest.py's `setting
 These tests instead go through the real env-var / .env parsing path pydantic-settings uses at
 startup, which is exactly where both bugs surfaced.
 """
+import os
 from pathlib import Path
 
+from openbot.cli import _apply_detail_setting, _parse_args
 from openbot.config import Settings
+
+
+def test_cli_defaults_to_environment_behavior(monkeypatch):
+    monkeypatch.delenv("OPENBOT_INCLUDE_LLM_CALL_DETAILS", raising=False)
+    args, uvicorn_args = _parse_args(["--port", "8000"])
+    _apply_detail_setting(args)
+    assert uvicorn_args == ["--port", "8000"]
+    assert "OPENBOT_INCLUDE_LLM_CALL_DETAILS" not in os.environ
+
+
+def test_cli_detail_flags_override_environment(monkeypatch):
+    monkeypatch.setenv("OPENBOT_INCLUDE_LLM_CALL_DETAILS", "false")
+    args, _ = _parse_args(["--include-llm-call-details"])
+    _apply_detail_setting(args)
+    assert os.environ["OPENBOT_INCLUDE_LLM_CALL_DETAILS"] == "true"
+    args, _ = _parse_args(["--exclude-llm-call-details"])
+    _apply_detail_setting(args)
+    assert os.environ["OPENBOT_INCLUDE_LLM_CALL_DETAILS"] == "false"
+
+
+def test_llm_call_details_default_is_enabled(monkeypatch):
+    monkeypatch.delenv("OPENBOT_INCLUDE_LLM_CALL_DETAILS", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.include_llm_call_details is True
+
+
+def test_llm_call_details_env_override(monkeypatch):
+    monkeypatch.setenv("OPENBOT_INCLUDE_LLM_CALL_DETAILS", "false")
+    settings = Settings(_env_file=None)
+    assert settings.include_llm_call_details is False
 
 
 def test_empty_frontend_dist_env_uses_default_not_repo_root(monkeypatch):

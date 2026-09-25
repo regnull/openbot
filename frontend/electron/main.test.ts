@@ -7,6 +7,24 @@ const mainSource = readFileSync(path.join(__dirname, "main.cjs"), "utf8");
 const builderSource = readFileSync(path.join(__dirname, "../../electron-builder.yml"), "utf8");
 const backendScriptSource = readFileSync(path.join(__dirname, "../../scripts/electron-backend.sh"), "utf8");
 const devScriptPath = path.join(__dirname, "../../scripts/electron-dev.sh");
+const devScriptSource = readFileSync(devScriptPath, "utf8");
+
+describe("Electron launcher detail controls", () => {
+  it("defaults development Electron to omit details and forwards the opt-in", () => {
+    expect(devScriptSource).toContain('DETAILS_FLAG="--exclude-llm-call-details"');
+    expect(devScriptSource).toContain('[[ "${1:-}" == "--include-llm-call-details" ]]');
+    expect(devScriptSource).toContain('shift');
+    expect(devScriptSource).toContain('python -m openbot.cli "$DETAILS_FLAG"');
+  });
+
+  it("forwards the documented opt-in through make", () => {
+    const output = execFileSync("make", ["-n", "electron", "--", "--include-llm-call-details"], {
+      cwd: path.resolve(__dirname, "../.."),
+      encoding: "utf8",
+    });
+    expect(output).toContain("./scripts/electron-dev.sh --include-llm-call-details");
+  });
+});
 
 describe("Electron launcher paths", () => {
   it("resolves the repository from the script location when launched elsewhere", () => {
