@@ -30,8 +30,8 @@ kill_process_group() {
   local pid="$1"
   [[ -z "$pid" ]] && return 0
 
-  # uvicorn --reload and Vite each create children. Kill the process group so
-  # those children do not outlive the launcher, then escalate if necessary.
+  # Backend and Vite each create children. Kill the process group so those children do not
+  # outlive the launcher, then escalate if necessary.
   kill -TERM -- "-${pid}" 2>/dev/null || true
   for _ in {1..20}; do
     kill -0 "$pid" 2>/dev/null || return 0
@@ -74,20 +74,15 @@ os.execvp(sys.argv[1], sys.argv[1:])
 PY
 }
 
-# Use the same root-relative commands as the Makefile targets. OPENBOT_API_URL is passed to
-# Electron/preload so packaged-style absolute API requests use this dedicated backend, and
-# VITE_BACKEND_PORT points Vite's own dev proxy (relative /api/* fetches from the loaded page)
-# at the same port, so both request paths reach the one backend actually running here.
+# Use the same root-relative commands as the Makefile targets. Electron intentionally runs
+# without backend reload or Vite file watching: changes take effect after an app restart,
+# avoiding watcher activity that can freeze the UI while messages are being sent.
 echo "Starting Electron backend on ${BACKEND_URL}"
-# --reload-dir scopes the file watcher to actual source: without it, uvicorn watches this whole
-# repo root recursively -- .venv, node_modules, and every git worktree checked out under it -- which
-# can exceed 100k files and has wedged the reload watcher outright during unrelated git activity
-# elsewhere in the tree.
-run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG" --reload --reload-dir backend/openbot --reload-dir tools --port "$ELECTRON_BACKEND_PORT" &
+run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FLAG" --port "$ELECTRON_BACKEND_PORT" &
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
-run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_PORT="$ELECTRON_BACKEND_PORT" bash -c '
+run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_PORT="$ELECTRON_BACKEND_PORT" ELECTRON_DEV="1" bash -c '
   cd frontend
   pnpm dev --host localhost --port "$FRONTEND_PORT"
 ' &

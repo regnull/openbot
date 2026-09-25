@@ -26,6 +26,15 @@ describe("Electron launcher detail controls", () => {
   });
 });
 
+describe("Electron file watching", () => {
+  it("disables backend reload and Vite watching for Electron development", () => {
+    expect(devScriptSource).not.toContain("--reload");
+    expect(devScriptSource).not.toContain("--reload-dir");
+    expect(devScriptSource).toContain('ELECTRON_DEV="1"');
+    expect(readFileSync(path.join(__dirname, "../vite.config.ts"), "utf8")).toContain("watch: null");
+  });
+});
+
 describe("Electron launcher paths", () => {
   it("resolves the repository from the script location when launched elsewhere", () => {
     const output = execFileSync("bash", [devScriptPath], {
