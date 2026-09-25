@@ -4,7 +4,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).parents[1] / "scripts" / "electron-dev.sh"
 
 

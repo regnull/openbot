@@ -1,7 +1,6 @@
 import importlib.util
-from pathlib import Path
 import unittest
-
+from pathlib import Path
 
 SPEC = importlib.util.spec_from_file_location(
     "check_client_boundaries", Path(__file__).with_name("check-client-boundaries.py")
