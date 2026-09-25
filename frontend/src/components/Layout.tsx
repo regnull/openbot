@@ -9,7 +9,8 @@ import { refreshScheduledMessages } from "../lib/scheduledEvents";
 import BotActivityIndicator from "./BotActivityIndicator";
 import BotIcon from "./BotIcon";
 import ThemeToggle from "./ThemeToggle";
-import { BotsIcon, InboxIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SettingsIcon, ThreadsIcon } from "./icons";
+import NewThreadControl from "./NewThreadControl";
+import { BotsIcon, InboxIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, SettingsIcon, ThreadsIcon } from "./icons";
 
 // ── Local-storage helpers ─────────────────────────────────────────────────────
 const LS_WIDTH = "openbot:sidebar-width";
@@ -174,10 +175,7 @@ export default function Layout() {
                 ))}
               </nav>
               <div className="mt-3">
-                <NavLink to="/threads" end className="flex h-9 items-center justify-center gap-1.5 rounded-ui border border-accent bg-accent px-3 text-[13px] font-medium leading-5 text-on-accent transition-colors hover:border-accent-strong hover:bg-accent-strong">
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  New thread
-                </NavLink>
+                <NewThreadControl />
               </div>
               <section className="mt-5" aria-label="Recent threads">
                 <SectionLabel>recent threads</SectionLabel>
@@ -236,9 +234,7 @@ export default function Layout() {
                   {to === "/inbox" && unread > 0 && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" aria-label={`${unread} unread`} />}
                 </NavLink>
               ))}
-              <NavLink to="/threads" end className="mt-2 flex h-9 w-9 items-center justify-center rounded-ui border border-accent bg-accent text-on-accent hover:bg-accent-strong" title="New thread" aria-label="New thread">
-                <PlusIcon className="h-4 w-4" />
-              </NavLink>
+              <NewThreadControl collapsed />
             </nav>
             <div className="flex shrink-0 flex-col items-center gap-1 border-t border-line py-2">
               <ThemeToggle compact />
