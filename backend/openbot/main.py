@@ -36,7 +36,13 @@ from openbot.api import telegram as telegram_api
 from openbot.api import workspace as workspace_api
 from openbot.api.deps import require_api_key
 from openbot.config import Settings, get_settings
-from openbot.db.session import create_all, make_engine, make_session_factory, run_migrations
+from openbot.db.session import (
+    create_all,
+    ensure_sqlite_parent,
+    make_engine,
+    make_session_factory,
+    run_migrations,
+)
 from openbot.logsetup import configure_logging
 from openbot.mcp import build_mcp_manager
 from openbot.runtime import activity, app_settings
@@ -56,6 +62,7 @@ log = logging.getLogger(__name__)
 
 
 async def build_services(settings: Settings) -> Services:
+    ensure_sqlite_parent(settings.database_url)
     if ":memory:" in settings.database_url:
         engine = make_engine(settings.database_url)
         await create_all(engine)

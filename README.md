@@ -313,7 +313,7 @@ opt out for that bot.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `DATABASE_URL` | `sqlite+aiosqlite:///./openbot.db` | Any SQLAlchemy async URL. `postgresql+asyncpg://...` is supported by the same schema and Alembic migrations, but is untested in v1. |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./.openbot/openbot.db` | Any SQLAlchemy async URL. `postgresql+asyncpg://...` is supported by the same schema and Alembic migrations, but is untested in v1. |
 | `SECRET_KEY` | *(unset)* | Fernet key protecting every secret stored in the database (provider keys, MCP headers/env, OAuth tokens). Unset: generated once into `SECRET_KEY_FILE`. `MCP_TOKEN_KEY` is accepted as an older name. |
 | `SECRET_KEY_FILE` | `./secret.key` | Where the generated key lives (owner-only permissions). An existing `mcp_token.key` is picked up. |
 | `OPENBOT_API_KEY` | *(unset)* | When set, every API route except `/health` and the MCP OAuth callback requires header `X-API-Key: <value>`. |

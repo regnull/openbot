@@ -31,7 +31,7 @@ smoke:          ## run the live provider smoke tests -- these call real APIs and
 	cd backend && uv run pytest -m smoke -v
 
 reset_db:       ## delete the local SQLite databases (app + LangGraph state); migrations and demo bots re-run on next start
-	rm -f openbot.db openbot.db-* openbot.langgraph.db openbot.langgraph.db-*
+	rm -f .openbot/openbot.db .openbot/openbot.db-* .openbot/openbot.langgraph.db .openbot/openbot.langgraph.db-*
 
 sync_bots:      ## update the demo bots' instructions/tools/limits from the seed definitions (no threads or memories touched), from the repo root
 	uv run --project backend python -m openbot.seed

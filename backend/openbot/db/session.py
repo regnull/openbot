@@ -52,6 +52,10 @@ def _alembic_config(database_url: str) -> Config:
     return cfg
 
 
+def ensure_sqlite_parent(database_url: str) -> None:
+    if database_url.startswith("sqlite") and ":memory:" not in database_url:
+        Path(database_url.split("///", 1)[1]).parent.mkdir(parents=True, exist_ok=True)
+
 async def run_migrations(database_url: str) -> None:
     await asyncio.to_thread(command.upgrade, _alembic_config(database_url), "head")
 

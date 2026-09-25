@@ -13,7 +13,7 @@ TELEGRAM_TOKEN_RE = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = "sqlite+aiosqlite:///./openbot.db"
+    database_url: str = "sqlite+aiosqlite:///./.openbot/openbot.db"
     openbot_api_key: str | None = None
 
     openai_api_key: str | None = None
