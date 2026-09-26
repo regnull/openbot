@@ -55,53 +55,144 @@ and four demo bots: `chief_of_staff`, `engineer`, `reviewer`, `qa`.
 ### Desktop app (Electron)
 
 The Electron desktop app is an optional shell around the same frontend and HTTP/SSE API; the browser
-app remains unchanged. Launch the complete development desktop app with:
+app remains unchanged. The renderer has no Node integration and talks to the backend over the same
+API as the browser; the preload bridge is intentionally minimal.
+
+#### Developing the desktop app
 
 ```bash
-make app            # starts the backend, Vite, and Electron together
+make app            # starts the backend, Vite, and Electron together (alias: make electron)
 make app -- --include-llm-call-details  # opt in to detailed model-call token data
+make electron ROOT_DIRECTORY=~/src/myproject  # workspace ~/src/myproject, DB in ~/src/myproject/.openbot/
 ```
 
-The repository-root `openbot` launcher accepts the same opt-in flag:
-`./openbot --include-llm-call-details`.
+The development launcher (`scripts/electron-dev.sh`) runs its own backend on port **8001**
+(override with `ELECTRON_BACKEND_PORT`) so it can run alongside `make run` on port **8000**, and
+points Electron at it. It runs without backend reload or Vite file watching, so restart the app to
+pick up changes. The repository-root `openbot` launcher accepts the same
+`--include-llm-call-details` flag. Electron and `./openbot` omit detailed per-LLM-call token data
+by default; `make run` and the browser workflows keep it. The backend CLI itself takes
+`--include-llm-call-details` / `--exclude-llm-call-details`. To run the processes by hand instead,
+use `make backend`, `make frontend`, then `cd frontend && pnpm electron` (port 8000).
 
-The desktop launcher runs its backend on port **8001** (override with
-`ELECTRON_BACKEND_PORT`) so it can run alongside `make run`, whose production-style backend
-continues to use port **8000**. It passes the selected backend URL to Electron so API and SSE
-requests use the dedicated port. `make electron` is an equivalent launcher command. Electron omits detailed per-LLM-call token data by default; pass `make electron -- --include-llm-call-details` to opt in. The backend CLI also supports `--include-llm-call-details` and `--exclude-llm-call-details`; ordinary `make run` and browser workflows retain detailed call data by default. The root `openbot` launcher and Electron launcher default to exclusion and require the explicit include flag for opt-in. To run the
-individual processes manually, use `make backend`, `make frontend`, and then `cd frontend &&
-pnpm electron`; that manual workflow continues to use port 8000.
+#### Building a desktop app locally
 
-For a production desktop release, run `make electron-release`. This builds the renderer first and
-invokes the repository's electron-builder configuration without selecting another operating system:
-electron-builder automatically creates the host-platform artifact under `frontend/release/` (for
-example, a `.dmg`/`.zip` on macOS, an AppImage on Linux, or an NSIS installer on Windows). The existing
-`make electron-package` command remains a compatibility alias. Run packaging on the target operating
-system for a usable native app; local macOS builds are unsigned/not notarized unless signing credentials
-are configured, and the packaged backend requires `uv` on the host. Packaged builds expect a local API
-on port 8000 (override with `OPENBOT_BACKEND_PORT`); set `OPENBOT_URL` to an HTTPS OpenBot
-deployment to use another instance. The renderer has no Node integration and communicates through
-the same API as the browser; the preload bridge is intentionally minimal.
+```bash
+make electron-release   # host-platform build under frontend/release/ (alias: make electron-package)
+```
 
-#### Versions and GitHub releases
+This needs Node 24+ and pnpm 10+. It builds the renderer, then runs electron-builder with the
+repository's `electron-builder.yml`, producing the host platform's artifacts under
+`frontend/release/`: `.dmg`/`.zip` on macOS, an AppImage on Linux. Local builds are versioned
+`<next version>-dev` (see [Versions](#versions)) so they can't be mistaken for a published release.
+They are unsigned and not notarized unless signing credentials are configured.
 
-Versions are `major.minor.build`. `major.minor` lives in the repository-root `VERSION` file and is
-edited by hand; the build number is one past the highest `vX.Y.N` release tag and never resets, so
-bumping `VERSION` from `0.1` to `0.2` after `v0.1.7` makes the next release `0.2.8`. `make
-electron-release` stamps local builds `<next version>-dev`.
+electron-builder can also target another platform from macOS; extra arguments are passed through:
 
-`make github-release` publishes the next version: from a clean, pushed `main` it builds macOS
-(arm64 and x64 `.dmg`/`.zip`) and Linux (x64 AppImage) apps in a temporary `git worktree` of `HEAD`,
-so untracked files such as `backend/secret.key` are never bundled, then creates the GitHub release
-and its `vX.Y.N` tag with `gh` (which must be logged in) and uploads the builds. Artifacts are also
-kept under `frontend/release/vX.Y.N/`. `make github-release DRY_RUN=1` does everything except
-publish, and also works off an unpushed branch. Release builds are unsigned, and Windows is not
-built yet because the packaged backend launcher is a bash script.
+```bash
+cd frontend
+pnpm electron:package --linux          # Linux x64 AppImage
+pnpm electron:package --mac --x64      # Intel Mac build on Apple Silicon
+pnpm electron:package --mac --universal
+```
 
-Neither mode needs CORS. In development the renderer talks to the backend through Vite's `/api`
-proxy. The packaged app serves the built UI from its own `app://openbot` origin and forwards `/api`
-to the bundled backend from the Electron main process (`frontend/electron/scheme.cjs`), so the
-renderer is same-origin with its API there too and the backend stays reachable only from the app.
+Windows builds are not usable yet: the packaged backend launcher (`scripts/electron-backend.sh`) is
+a bash script, so a Windows install would open but its backend would never start.
+
+A local `make electron-release` bundles `backend/` from your working copy, untracked files included,
+so don't hand those builds to other people; use `make github-release`, which builds from a clean
+checkout.
+
+#### Running a packaged app
+
+The packaged app bundles the backend source and runs it with [`uv`](https://docs.astral.sh/uv/),
+which must be installed on the machine (the launcher also checks `~/.local/bin`, `~/.cargo/bin`, and
+Homebrew locations, since apps started from Finder don't inherit your shell `PATH`). The first
+launch builds a Python environment and takes noticeably longer; a status page shows while the
+backend starts or if it becomes unreachable.
+
+By default everything lives in the app's own data directory, not in `~/.openbot` or the repository,
+so a fresh install runs the setup wizard:
+
+| | macOS | Linux |
+|---|---|---|
+| Data directory | `~/Library/Application Support/OpenBot/` | `~/.config/OpenBot/` |
+| Database | `<data>/openbot.db` (+ `openbot.langgraph.db`) | same |
+| Workspace | `<data>/workspace/` | same |
+| Logs | `<data>/logs/openbot.log`, `<data>/logs/backend-launcher.log` | same |
+| Python venv | `<data>/venv/` | same |
+
+To use a different location, set environment variables when launching. Apps opened from Finder or
+the Dock get none of your shell's variables, so launch with `open --env` (quit the app first:
+`open` only focuses an app that is already running):
+
+```bash
+# Workspace = ~/src/myproject, database = ~/src/myproject/.openbot/openbot.db
+open --env OPENBOT_ROOT_DIRECTORY="$HOME/src/myproject" -a OpenBot
+
+# Or place the database and workspace independently (four slashes: absolute path)
+open --env DATABASE_URL="sqlite+aiosqlite:////path/to/openbot.db" \
+     --env WORKSPACE_ROOT=/path/to/workspace -a OpenBot
+
+# Or run the binary directly to keep its output in your terminal
+OPENBOT_ROOT_DIRECTORY=~/src/myproject /Applications/OpenBot.app/Contents/MacOS/OpenBot
+```
+
+`OPENBOT_ROOT_DIRECTORY=$HOME` reuses `~/.openbot/openbot.db`, the database `./openbot` uses by
+default. Logs and the venv stay in the data directory either way. The packaged
+backend listens on port 8000 (override with `OPENBOT_BACKEND_PORT`); set `OPENBOT_URL` to an
+HTTPS OpenBot deployment to use a remote instance instead of the bundled backend.
+
+Neither development nor the packaged app needs CORS. In development the renderer reaches the
+backend through Vite's `/api` proxy. The packaged app serves the built UI from its own
+`app://openbot` origin and forwards `/api` to the bundled backend from the Electron main process
+(`frontend/electron/scheme.cjs`), so the renderer is same-origin with its API there too and the
+backend stays reachable only from the app.
+
+#### Versions
+
+Versions are `major.minor.build`:
+
+- `major.minor` lives in the repository-root `VERSION` file (e.g. `0.1`) and is edited by hand;
+  commit the change before releasing.
+- `build` is automatic: one past the highest `vX.Y.N` release tag, and it never resets. Bumping
+  `VERSION` from `0.1` to `0.2` after `v0.1.7` makes the next release `0.2.8`.
+- `node frontend/scripts/version.cjs` prints the next version. It refuses a `VERSION` that would
+  sort below the latest release.
+
+The version is injected at build time; nothing in `package.json` is rewritten. It shows up in the
+artifact file names, the macOS About box, and `app.getVersion()`.
+
+#### Releasing to GitHub
+
+Prerequisites: [`gh`](https://cli.github.com/) logged in (`gh auth login`) with push access, Node
+24+, pnpm 10+.
+
+```bash
+git checkout main && git pull        # releases are cut from a clean, pushed main
+make github-release DRY_RUN=1        # optional: build everything, publish nothing
+make github-release                  # build and publish vX.Y.N
+```
+
+`make github-release` (`scripts/github-release.sh`):
+
+1. Checks that tracked files are clean, you are on `main`, `HEAD` matches `origin/main`, and the
+   release doesn't already exist. With `DRY_RUN=1` the branch and sync checks only warn, so you can
+   try a release off a feature branch.
+2. Computes the next version from `VERSION` and the latest tags.
+3. Builds from a temporary `git worktree` of `HEAD`, so untracked files such as
+   `backend/secret.key` never end up in a public download.
+4. Builds macOS arm64 and x64 (`OpenBot-X.Y.N-mac-<arch>.dmg`/`.zip`) and Linux x64
+   (`OpenBot-X.Y.N.AppImage`), kept under `frontend/release/vX.Y.N/`.
+5. Creates the GitHub release with generated notes and uploads the builds. GitHub creates the
+   `vX.Y.N` tag at the built commit as part of the release, so a failed build leaves no stray tag.
+
+Release builds are unsigned; the release notes tell testers how to open them (on macOS, right-click
+the app and choose **Open** the first time, or run
+`xattr -dr com.apple.quarantine /Applications/OpenBot.app`; on Linux, `chmod +x` the AppImage).
+Windows is not built yet (see above).
+
+### Production-style run
 
 For a single-process, production-style run that serves the built frontend from the backend on
 port 8000:
