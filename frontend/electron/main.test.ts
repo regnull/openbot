@@ -95,6 +95,31 @@ describe("Electron packaged startup", () => {
     expect(mainSource).toContain("await waitForBackend();");
   });
 
+  it("runs the backend script with bash, since /bin/sh is dash on Debian and Ubuntu", () => {
+    // electron-backend.sh uses [[ ]], arrays and `set -E`; under dash it dies on its first line.
+    expect(backendScriptSource).toMatch(/^#!\/usr\/bin\/env bash/);
+    expect(mainSource).toContain('spawn("/bin/bash", [script]');
+    expect(mainSource).not.toContain('spawn("/bin/sh"');
+  });
+
+  it("keeps the backend's output and names the log in the startup error", () => {
+    expect(mainSource).toContain('stdio: ["ignore", log, log]');
+    expect(mainSource).toContain("See ${backendLogPath} for its output.");
+  });
+
+  it("gives a cold first launch, which builds the venv, a longer budget than a warm one", () => {
+    expect(mainSource).toContain('const coldStart = !fs.existsSync(path.join(userDataDir, "venv"));');
+    expect(mainSource).toContain("coldStart ? 15 * 60_000 : 90_000");
+  });
+
+  it("names the app so its data directory is OpenBot, not the package name", () => {
+    // app.getPath("userData") derives from productName; without it the venv, database and logs
+    // land in ~/.config/frontend (Linux) or Application Support/frontend (macOS).
+    const packageJson = JSON.parse(readFileSync(path.join(__dirname, "../package.json"), "utf8"));
+    expect(packageJson.productName).toBe("OpenBot");
+    expect(builderSource).toContain("productName: OpenBot");
+  });
+
   it("skips bundled backend startup and readiness for explicit API or remote URLs", () => {
     expect(mainSource).toContain("const usesExternalBackend = Boolean(process.env.OPENBOT_URL || process.env.OPENBOT_API_URL);");
     expect(mainSource).toContain("if (isDevelopment || usesExternalBackend) return;");

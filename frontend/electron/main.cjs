@@ -1,4 +1,5 @@
 const { app, BrowserWindow, dialog, net, protocol, session, shell } = require("electron");
+const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { contentSecurityPolicy, isApprovedExternalUrl, isSameOrigin, originOf } = require("./security.cjs");
@@ -23,10 +24,17 @@ let quitRequested = false;
 
 function sameOrigin(rawUrl) { return isSameOrigin(rawUrl, appUrl); }
 function openApprovedExternal(rawUrl) { if (isApprovedExternalUrl(rawUrl)) { void shell.openExternal(rawUrl); return true; } return false; }
+const userDataDir = app.getPath("userData");
+const backendLogPath = path.join(userDataDir, "logs", "backend-launcher.log");
 function startBackend() {
   if (isDevelopment || usesExternalBackend) return;
   const script = path.join(process.resourcesPath, "backend", "electron-backend.sh");
-  backendProcess = spawn("/bin/sh", [script], { detached: true, env: { ...process.env, OPENBOT_RESOURCES: process.resourcesPath, OPENBOT_USER_DATA: app.getPath("userData"), OPENBOT_BACKEND_PORT: backendPort, OPENBOT_ROOT_DIRECTORY: process.env.OPENBOT_ROOT_DIRECTORY }, stdio: "ignore" });
+  // The script is bash (`[[`, arrays, `set -E`), and /bin/sh is dash on Debian and Ubuntu, so
+  // it must be run by bash explicitly. Keep its output: with stdio ignored, a backend that dies
+  // at startup is indistinguishable from one that is slow, and the timeout dialog can point here.
+  fs.mkdirSync(path.dirname(backendLogPath), { recursive: true });
+  const log = fs.openSync(backendLogPath, "a");
+  backendProcess = spawn("/bin/bash", [script], { detached: true, env: { ...process.env, OPENBOT_RESOURCES: process.resourcesPath, OPENBOT_USER_DATA: userDataDir, OPENBOT_BACKEND_PORT: backendPort, OPENBOT_ROOT_DIRECTORY: process.env.OPENBOT_ROOT_DIRECTORY }, stdio: ["ignore", log, log] });
   backendProcess.unref();
   backendProcess.on("error", (error) => console.error("OpenBot backend failed to start", error));
 }
@@ -40,13 +48,17 @@ async function waitForBackend() {
   const healthUrl = `${apiOrigin}/api/v1/health`;
   // No .venv ships in the bundle, so the very first launch on a machine has uv build one from
   // scratch -- fetching a matching Python interpreter and every dependency -- before the backend
-  // can even start listening. That can take well past the ~20s a warm start needs, so budget for
-  // a cold one too; later launches reuse that venv and come up in a second or two.
-  for (let attempt = 0; attempt < 450; attempt += 1) {
+  // can even start listening. A warm start needs a few seconds; a cold one on a slow machine or
+  // connection can take many minutes, so budget by whether the venv already exists.
+  const coldStart = !fs.existsSync(path.join(userDataDir, "venv"));
+  const deadline = Date.now() + (coldStart ? 15 * 60_000 : 90_000);
+  while (Date.now() < deadline) {
     try { if ((await fetch(healthUrl)).ok) return; } catch { /* backend is still starting */ }
+    if (backendProcess?.exitCode != null) break;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`Timed out waiting for OpenBot backend at ${healthUrl}`);
+  const why = backendProcess?.exitCode != null ? `The backend exited with code ${backendProcess.exitCode}` : `Timed out waiting for OpenBot backend at ${healthUrl}`;
+  throw new Error(`${why}. See ${backendLogPath} for its output.`);
 }
 function createWindow() {
   const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 600, backgroundColor: "#111827", icon: appIconPath, webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
