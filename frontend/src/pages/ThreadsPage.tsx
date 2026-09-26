@@ -40,7 +40,7 @@ export default function ThreadsPage() {
       <PageTitle>Threads</PageTitle>
       <Card className="space-y-4">
         <SectionTitle>New thread</SectionTitle>
-        <Field label="Title" hint="Optional. Without one, the thread is named after who is in it.">
+        <Field label="Title" hint="Optional. Without one, the thread is titled with its start time. After the first three messages, the default bot renames it from the conversation.">
           <Input placeholder="What is this thread about?" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         <Field label="Working directory" hint="Where the thread's file and shell tools run. Leave blank for the workspace root, or use a path under it or under your home, such as ~/work/project.">
