@@ -30,6 +30,8 @@ extraResources:
     to: tools
 icon: electron/assets/icon.png
 mac:
+  # Name both architectures explicitly; by default only arm64 gets a suffix, leaving x64 unlabeled.
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
   target:
     - dmg
     - zip
