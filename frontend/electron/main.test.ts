@@ -130,3 +130,29 @@ describe("Electron packaged startup", () => {
     expect(backendScriptSource).toContain('export UV_PROJECT_ENVIRONMENT="${OPENBOT_USER_DATA}/venv"');
   });
 });
+
+describe("Electron status page", () => {
+  const statusSource = readFileSync(path.join(__dirname, "loading.html"), "utf8");
+
+  it("is a static page with a locked-down CSP", () => {
+    expect(statusSource).toContain(`content="default-src 'none'; style-src 'unsafe-inline'"`);
+    expect(statusSource).not.toMatch(/<script/i);
+    expect(statusSource).toContain('id="starting"');
+    expect(statusSource).toContain('id="unavailable"');
+  });
+
+  it("opens the window before waiting for the backend", () => {
+    expect(mainSource.indexOf("createWindow({ waitingForBackend })")).toBeGreaterThan(-1);
+    expect(mainSource.indexOf("createWindow({ waitingForBackend })")).toBeLessThan(mainSource.indexOf("await waitForBackend()"));
+    expect(mainSource).toContain('showStatus(window, "starting")');
+  });
+
+  it("shows the retry state instead of a blank window when the app fails to load", () => {
+    expect(mainSource).toContain('"did-fail-load"');
+    expect(mainSource).toContain('showStatus(window, "unavailable")');
+  });
+
+  it("is packaged with the Electron files", () => {
+    expect(builderSource).toContain("electron/**/*");
+  });
+});
