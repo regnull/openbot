@@ -74,17 +74,14 @@ pnpm electron`; that manual workflow continues to use port 8000.
 
 For a production desktop package, run `make electron-package`. electron-builder emits a platform-native
 installer under `frontend/release/` (run it on the target platform). Packaged builds expect a local API
-on port 8000; set `OPENBOT_URL` to an HTTPS OpenBot deployment to use another instance. The renderer
-has no Node integration and communicates through the same API as the browser; the preload bridge is
-intentionally minimal.
+on port 8000 (override with `OPENBOT_BACKEND_PORT`); set `OPENBOT_URL` to an HTTPS OpenBot
+deployment to use another instance. The renderer has no Node integration and communicates through
+the same API as the browser; the preload bridge is intentionally minimal.
 
-The browser app talks to the backend through Vite's `/api` proxy, so no CORS setup is needed there.
-The Electron desktop app is different: its preload makes direct, absolute requests to
-`OPENBOT_API_URL` (bypassing the proxy) so packaged builds work without one, which means the
-renderer's origin must be in `CORS_ORIGINS`. `make app` binds Vite to `localhost` (matching the
-default `CORS_ORIGINS=http://localhost:5173`) rather than `127.0.0.1` for exactly this reason —
-binding to `127.0.0.1` instead makes every API request fail CORS and the app report the backend as
-unavailable.
+Neither mode needs CORS. In development the renderer talks to the backend through Vite's `/api`
+proxy. The packaged app serves the built UI from its own `app://openbot` origin and forwards `/api`
+to the bundled backend from the Electron main process (`frontend/electron/scheme.cjs`), so the
+renderer is same-origin with its API there too and the backend stays reachable only from the app.
 
 For a single-process, production-style run that serves the built frontend from the backend on
 port 8000:
