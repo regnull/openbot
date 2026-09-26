@@ -1,7 +1,7 @@
-.PHONY: dev backend frontend app electron electron-package test smoke build run lint setup reset_db sync_bots --include-llm-call-details
+.PHONY: dev backend frontend app electron electron-release electron-package test smoke build run lint setup reset_db sync_bots --include-llm-call-details
 
 ELECTRON_DETAIL_ARGS := $(if $(filter --include-llm-call-details,$(MAKECMDGOALS)),--include-llm-call-details,)
-ELECTRON_ROOT_ARGS := $(if $(ROOT_DIRECTORY),--root-directory "$(ROOT_DIRECTORY)",)
+ELECTRON_ROOT_ARGS := $(if $(strip $(ROOT_DIRECTORY)),--root-directory "$(ROOT_DIRECTORY)",)
 
 # Resolves the Electron binary path and fails unless the file exists (require() alone only checks path.txt).
 ELECTRON_PROBE := node -e "require('fs').accessSync(require('electron'))"
@@ -34,8 +34,13 @@ electron:       ## launch Electron with a Vite frontend and dedicated backend on
 app:            ## alias for `make electron`; starts the Electron frontend and backend together
 	$(MAKE) electron ELECTRON_DETAIL_ARGS="$(ELECTRON_DETAIL_ARGS)"
 
-electron-package: ## Build a distributable Electron package (requires platform tooling)
+electron-release: ## Build a host-platform Electron release under frontend/release/
+	@command -v node >/dev/null 2>&1 || { echo "Node 24+ is required (https://nodejs.org/)" >&2; exit 1; }
+	@command -v pnpm >/dev/null 2>&1 || { echo "pnpm 10+ is required (https://pnpm.io/installation)" >&2; exit 1; }
 	cd frontend && pnpm electron:package
+
+# Backward-compatible name retained for existing packaging workflows.
+electron-package: electron-release
 
 test:           ## run backend and frontend test suites (live provider smoke tests excluded)
 	cd backend && uv run pytest -q

@@ -2,11 +2,11 @@
 
 ## Build and install
 
-On macOS, install dependencies and build the signed/unsigned artifacts:
+On macOS, install dependencies and build the signed/unsigned artifacts. `make electron-release` is host-platform aware; it does not force a macOS target when run elsewhere. On Linux it produces the configured AppImage, and on Windows it produces the configured NSIS installer. The exact filename includes the app version and architecture.
 
 ```bash
 make setup
-make electron-package
+make electron-release
 open frontend/release/OpenBot-0.0.0-arm64.dmg
 ```
 

@@ -72,8 +72,13 @@ requests use the dedicated port. `make electron` is an equivalent launcher comma
 individual processes manually, use `make backend`, `make frontend`, and then `cd frontend &&
 pnpm electron`; that manual workflow continues to use port 8000.
 
-For a production desktop package, run `make electron-package`. electron-builder emits a platform-native
-installer under `frontend/release/` (run it on the target platform). Packaged builds expect a local API
+For a production desktop release, run `make electron-release`. This builds the renderer first and
+invokes the repository's electron-builder configuration without selecting another operating system:
+electron-builder automatically creates the host-platform artifact under `frontend/release/` (for
+example, a `.dmg`/`.zip` on macOS, an AppImage on Linux, or an NSIS installer on Windows). The existing
+`make electron-package` command remains a compatibility alias. Run packaging on the target operating
+system for a usable native app; local macOS builds are unsigned/not notarized unless signing credentials
+are configured, and the packaged backend requires `uv` on the host. Packaged builds expect a local API
 on port 8000 (override with `OPENBOT_BACKEND_PORT`); set `OPENBOT_URL` to an HTTPS OpenBot
 deployment to use another instance. The renderer has no Node integration and communicates through
 the same API as the browser; the preload bridge is intentionally minimal.
