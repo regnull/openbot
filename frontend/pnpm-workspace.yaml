@@ -1,0 +1,8 @@
+# pnpm 10 refuses to run dependency lifecycle scripts unless they are allow-listed here.
+# Electron's postinstall downloads the platform binary that `make electron` / `make electron-package`
+# need; electron-winstaller (pulled in by electron-builder) fetches Squirrel for Windows installers.
+# Without this file `pnpm install` "succeeds" but `require('electron')` throws
+# "Electron failed to install correctly".
+allowBuilds:
+  electron: true
+  electron-winstaller: true

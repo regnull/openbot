@@ -3,9 +3,20 @@
 ELECTRON_DETAIL_ARGS := $(if $(filter --include-llm-call-details,$(MAKECMDGOALS)),--include-llm-call-details,)
 ELECTRON_ROOT_ARGS := $(if $(ROOT_DIRECTORY),--root-directory "$(ROOT_DIRECTORY)",)
 
-setup:          ## install backend and frontend dependencies, create .env from the template
+# Resolves the Electron binary path and fails unless the file exists (require() alone only checks path.txt).
+ELECTRON_PROBE := node -e "require('fs').accessSync(require('electron'))"
+
+# pnpm 10 only runs the dependency lifecycle scripts allow-listed in frontend/pnpm-workspace.yaml.
+# That list covers Electron's binary download, so the single `pnpm install` below also provisions
+# the desktop app; the probe below turns a silently skipped download into a rebuild, then an error.
+setup:          ## install backend, frontend and Electron dependencies, create .env from the template
+	@command -v uv >/dev/null 2>&1 || { echo "uv is required (https://docs.astral.sh/uv/)" >&2; exit 1; }
+	@command -v node >/dev/null 2>&1 || { echo "Node 24+ is required (https://nodejs.org/)" >&2; exit 1; }
+	@command -v pnpm >/dev/null 2>&1 || { echo "pnpm 10+ is required (https://pnpm.io/installation)" >&2; exit 1; }
 	cd backend && uv sync
 	cd frontend && pnpm install
+	@cd frontend && $(ELECTRON_PROBE) 2>/dev/null || { echo "Electron binary missing; re-running its download..."; pnpm rebuild electron; }
+	@cd frontend && $(ELECTRON_PROBE) || { echo "Electron binary still missing; check frontend/pnpm-workspace.yaml allowBuilds and your network, then re-run make setup" >&2; exit 1; }
 	cp -n .env.example .env || true
 
 dev:            ## run backend (8000) and frontend dev server (5173) together

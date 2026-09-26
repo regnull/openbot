@@ -42,7 +42,7 @@ Prerequisites: Python 3.12+ with [uv](https://docs.astral.sh/uv/) and Node 24+ w
 (recommended), an OpenAI, Anthropic or xAI key, or a local [Ollama](https://ollama.com) server.
 
 ```bash
-make setup            # uv sync (backend), pnpm install (frontend), copy .env.example -> .env
+make setup            # uv sync (backend), pnpm install (frontend + Electron), copy .env.example -> .env
 make dev               # backend on :8000, frontend dev server on :5173
 ```
 
