@@ -15,3 +15,4 @@ mcp.json
 mcp_token.key
 .DS_Store
 .superpowers/
+frontend/release/

@@ -83,6 +83,21 @@ on port 8000 (override with `OPENBOT_BACKEND_PORT`); set `OPENBOT_URL` to an HTT
 deployment to use another instance. The renderer has no Node integration and communicates through
 the same API as the browser; the preload bridge is intentionally minimal.
 
+#### Versions and GitHub releases
+
+Versions are `major.minor.build`. `major.minor` lives in the repository-root `VERSION` file and is
+edited by hand; the build number is one past the highest `vX.Y.N` release tag and never resets, so
+bumping `VERSION` from `0.1` to `0.2` after `v0.1.7` makes the next release `0.2.8`. `make
+electron-release` stamps local builds `<next version>-dev`.
+
+`make github-release` publishes the next version: from a clean, pushed `main` it builds macOS
+(arm64 and x64 `.dmg`/`.zip`) and Linux (x64 AppImage) apps in a temporary `git worktree` of `HEAD`,
+so untracked files such as `backend/secret.key` are never bundled, then creates the GitHub release
+and its `vX.Y.N` tag with `gh` (which must be logged in) and uploads the builds. Artifacts are also
+kept under `frontend/release/vX.Y.N/`. `make github-release DRY_RUN=1` does everything except
+publish, and also works off an unpushed branch. Release builds are unsigned, and Windows is not
+built yet because the packaged backend launcher is a bash script.
+
 Neither mode needs CORS. In development the renderer talks to the backend through Vite's `/api`
 proxy. The packaged app serves the built UI from its own `app://openbot` origin and forwards `/api`
 to the bundled backend from the Electron main process (`frontend/electron/scheme.cjs`), so the
