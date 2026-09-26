@@ -465,6 +465,18 @@ outbound delivery to external actors), Docker sandboxing for tools, chat platfor
 (Slack/Discord/etc.), and multi-node deployment. The actor system, the LangGraph store, and the
 tool registry are designed as the seams for adding these later.
 
+Docker sandboxing for tools ([#145](https://github.com/regnull/openbot/issues/145)) and a
+Slack/Discord adapter ([#146](https://github.com/regnull/openbot/issues/146)) are open for
+contributors.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the `make test` / `make lint` checks and pull
+request expectations. Issues labelled
+[`good-first-issue`](https://github.com/regnull/openbot/labels/good-first-issue) and
+[`help-wanted`](https://github.com/regnull/openbot/labels/help-wanted) are good starting points.
+For questions or proposals, open an issue.
+
 ## License
 
 [MIT](LICENSE)
