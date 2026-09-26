@@ -3,7 +3,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { contentSecurityPolicy, isApprovedExternalUrl, sameOriginOrPackagedPath } = require("./security.cjs");
 const { appIconPath } = require("./icon.cjs");
-const { resolveApiOrigin } = require("./origin.cjs");
+const { apiBaseArgument, resolveApiOrigin } = require("./origin.cjs");
 
 const isDevelopment = !app.isPackaged;
 const backendPort = process.env.OPENBOT_BACKEND_PORT || "8000";
@@ -43,7 +43,7 @@ async function waitForBackend() {
   throw new Error(`Timed out waiting for OpenBot backend at ${healthUrl}`);
 }
 function createWindow() {
-  const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 600, backgroundColor: "#111827", icon: appIconPath, webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 600, backgroundColor: "#111827", icon: appIconPath, webPreferences: { preload: path.join(__dirname, "preload.cjs"), additionalArguments: [`${apiBaseArgument}${apiOrigin}`], contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.webContents.setWindowOpenHandler(({ url }) => { if (sameOrigin(url)) return { action: "allow" }; openApprovedExternal(url); return { action: "deny" }; });
   window.webContents.on("will-navigate", (event, url) => { if (sameOrigin(url)) return; event.preventDefault(); openApprovedExternal(url); });
   window.loadURL(appUrl);

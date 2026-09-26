@@ -4,4 +4,7 @@ function resolveApiOrigin(env = process.env) {
   return `http://127.0.0.1:${env.OPENBOT_BACKEND_PORT || "8000"}`;
 }
 
-module.exports = { resolveApiOrigin };
+// The sandboxed preload cannot require local modules, so main passes the origin as this argument.
+const apiBaseArgument = "--openbot-api-base=";
+
+module.exports = { apiBaseArgument, resolveApiOrigin };
