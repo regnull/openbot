@@ -4,6 +4,7 @@ import { Api } from "../api/client";
 import type { SetupStatus } from "../api/types";
 import { CHAT_CHOICES, KEY_LABEL, initialWizardState, validateWizard, wizardPayload, type EmbeddingChoice, type WizardState } from "../lib/setup";
 import { Button, ErrorText, Hint, Input } from "./ui";
+import { logoSrc } from "../lib/desktop";
 
 /** One entry in the two-step progress list: the current step is filled with the accent, the rest outlined. */
 function Step({ n, current, label }: { n: 1 | 2; current: 1 | 2; label: string }) {
@@ -35,7 +36,7 @@ export default function SetupWizard({ status, onDone }: { status: SetupStatus; o
       <div className="w-full max-w-xl space-y-6 rounded-ui border border-line bg-surface p-7">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <img src="/logo-icon.svg" alt="" className="h-5 w-5 rounded-[4px]" aria-hidden="true" />
+            <img src={logoSrc} alt="" className="h-5 w-5 rounded-[4px]" aria-hidden="true" />
             <h1 className="text-base font-semibold tracking-tight">Set up OpenBot</h1>
           </div>
           <Hint>Two choices and your bots can work. Everything here is stored encrypted in OpenBot's database and can be changed later under Settings.</Hint>

@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "vite",
     "electron": "electron electron/main.cjs",
-    "electron:package": "pnpm build && electron-builder --config ../electron-builder.yml",
+    "electron:package": "pnpm build:electron && electron-builder --config ../electron-builder.yml",
     "build": "tsc -b && vite build",
+    "build:electron": "tsc -b && vite build --base ./",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
