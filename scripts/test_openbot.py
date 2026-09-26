@@ -18,6 +18,7 @@ class OpenBotLauncherTests(unittest.TestCase):
                 "printf 'cwd=%s\\n' \"$PWD\"\n"
                 "printf 'workspace=%s\\n' \"$WORKSPACE_ROOT\"\n"
                 "printf 'database=%s\\n' \"$DATABASE_URL\"\n"
+                "printf 'details=%s\\n' \"$OPENBOT_INCLUDE_LLM_CALL_DETAILS\"\n"
                 "printf 'args='; printf '%s|' \"$@\"; printf '\\n'\n"
             )
             fake_make.chmod(0o755)
@@ -37,6 +38,7 @@ class OpenBotLauncherTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(f"workspace={Path(tmp).resolve()}", result.stdout)
             self.assertIn(f"database=sqlite+aiosqlite:///{Path(home).resolve() / '.openbot' / 'openbot.db'}", result.stdout)
+            self.assertIn("details=false\n", result.stdout)
             self.assertIn("args=-C|", result.stdout)
             self.assertIn("|app|ROOT_DIRECTORY=", result.stdout)
 
@@ -99,6 +101,16 @@ class OpenBotLauncherTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(f"workspace={root.resolve()}", result.stdout)
             self.assertIn(f"database=sqlite+aiosqlite:///{db.resolve() / 'openbot.db'}", result.stdout)
+
+    def test_include_llm_call_details_is_forwarded_only_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            default_result = self.run_launcher(cwd=tmp, home=home)
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            self.assertIn("details=false\n", default_result.stdout)
+
+            opt_in_result = self.run_launcher("--include-llm-call-details", cwd=tmp, home=home)
+            self.assertEqual(opt_in_result.returncode, 0, opt_in_result.stderr)
+            self.assertIn("details=true\n", opt_in_result.stdout)
 
     def test_repository_location_is_used_from_another_working_directory(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:

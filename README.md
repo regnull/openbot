@@ -59,12 +59,16 @@ app remains unchanged. Launch the complete development desktop app with:
 
 ```bash
 make app            # starts the backend, Vite, and Electron together
+make app -- --include-llm-call-details  # opt in to detailed model-call token data
 ```
+
+The repository-root `openbot` launcher accepts the same opt-in flag:
+`./openbot --include-llm-call-details`.
 
 The desktop launcher runs its backend on port **8001** (override with
 `ELECTRON_BACKEND_PORT`) so it can run alongside `make run`, whose production-style backend
 continues to use port **8000**. It passes the selected backend URL to Electron so API and SSE
-requests use the dedicated port. `make electron` is an equivalent launcher command. Electron omits detailed per-LLM-call token data by default; pass `make electron -- --include-llm-call-details` to opt in. The backend CLI also supports `--include-llm-call-details` and `--exclude-llm-call-details`; ordinary `make run` and browser workflows retain detailed call data by default. To run the
+requests use the dedicated port. `make electron` is an equivalent launcher command. Electron omits detailed per-LLM-call token data by default; pass `make electron -- --include-llm-call-details` to opt in. The backend CLI also supports `--include-llm-call-details` and `--exclude-llm-call-details`; ordinary `make run` and browser workflows retain detailed call data by default. The root `openbot` launcher and Electron launcher default to exclusion and require the explicit include flag for opt-in. To run the
 individual processes manually, use `make backend`, `make frontend`, and then `cd frontend &&
 pnpm electron`; that manual workflow continues to use port 8000.
 
