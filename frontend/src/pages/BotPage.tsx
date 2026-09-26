@@ -9,6 +9,7 @@ import { ChevronLeftIcon } from "../components/icons";
 import { hasOpenItems, inboxRowState } from "../lib/botInbox";
 import { parseTs } from "../lib/time";
 import BotEditorPage from "./BotEditorPage";
+import { modKey } from "../lib/shortcuts";
 
 const TABS = ["inbox", "memory", "settings"] as const;
 type Tab = (typeof TABS)[number];
@@ -89,7 +90,7 @@ function InboxTab({ botId }: { botId: string }) {
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }} />
         <div className="flex items-center gap-3">
           <Button onClick={send} disabled={post.isPending || !text.trim()}>{post.isPending ? "Sending…" : "Send"}</Button>
-          <span className="inline-flex items-center gap-1 text-[11px] text-faint"><Kbd>⌘⏎</Kbd> send</span>
+          <span className="inline-flex items-center gap-1 text-[11px] text-faint"><Kbd>{modKey}⏎</Kbd> send</span>
         </div>
         <ErrorText error={post.error} />
       </Card>

@@ -3,6 +3,7 @@ import { applyMention, mentionQuery } from "../lib/mentions";
 import type { AttachmentIn } from "../api/client";
 import { Button, Kbd } from "./ui";
 import { CloseIcon } from "./icons";
+import { modKey } from "../lib/shortcuts";
 
 // Paste constraints for attached images (client-side guard; the API re-validates).
 const MAX_IMAGES = 4;
@@ -172,7 +173,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus }:
             <span className="inline-flex items-center gap-1"><Kbd>⏎</Kbd> send</span>
             <span className="inline-flex items-center gap-1"><Kbd>⇧⏎</Kbd> new line</span>
             <span className="inline-flex items-center gap-1"><Kbd>@</Kbd> mention a bot</span>
-            <span className="inline-flex items-center gap-1"><Kbd>⌘V</Kbd> paste an image</span>
+            <span className="inline-flex items-center gap-1"><Kbd>{modKey}V</Kbd> paste an image</span>
           </div>
           <Button size="sm" onClick={() => void send()} disabled={!canSend} className="ml-auto">
             {sending ? "Sending…" : "Send"}
