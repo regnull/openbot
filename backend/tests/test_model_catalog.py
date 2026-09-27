@@ -11,7 +11,7 @@ SAMPLE = json.loads((Path(__file__).parent / "fixtures" / "models_dev_sample.jso
 def test_normalize_keeps_only_agent_capable_models_of_supported_providers():
     cat = normalize_catalog(SAMPLE)
     assert set(cat) == set(CATALOG_PROVIDERS) == {"openai", "anthropic", "openrouter", "ollama"}
-    # deprecated, no tool calling, image output, no/invalid context and the malformed entry are all gone
+    # deprecated, no tool calling, image output, no/invalid context, non-dict blocks, and the malformed entry are all gone
     assert [m["id"] for m in cat["openai"]] == ["gpt-5.5"]
     # newest first; beta kept; tiny context and no-tools dropped
     assert [m["id"] for m in cat["openrouter"]] == ["z-ai/glm-5.3-flash", "stealth/new-thing"]
@@ -50,3 +50,11 @@ def test_missing_provider_or_models_block_yields_empty_list_without_touching_oth
 def test_document_must_be_an_object():
     with pytest.raises(ValueError):
         normalize_catalog([])
+
+
+def test_non_dict_block_inside_an_entry_is_skipped_not_fatal():
+    raw = {"openai": {"models": {
+        "bad": {"id": "bad", "tool_call": True, "modalities": ["text"], "limit": {"context": 100000}},
+        "good": {"id": "good", "tool_call": True, "modalities": {"input": ["text"], "output": ["text"]}, "limit": {"context": 100000}},
+    }}}
+    assert [m["id"] for m in normalize_catalog(raw)["openai"]] == ["good"]

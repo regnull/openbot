@@ -77,7 +77,8 @@ def normalize_catalog(raw: Any) -> dict[str, list[dict]]:
             try:
                 if _fit_for_agents(m):
                     models.append(normalize_model(str(key), m))
-            except (TypeError, ValueError, KeyError) as e:
+            except (TypeError, ValueError, KeyError, AttributeError) as e:
+                # AttributeError: non-dict modalities/limit/cost block surfaces when .get() is called on it
                 log.warning("models.dev %s/%s: malformed entry skipped: %s", source, key, e)
         models.sort(key=lambda x: x["release_date"], reverse=True)
         out[provider] = models
