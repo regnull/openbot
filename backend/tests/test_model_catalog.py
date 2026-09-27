@@ -58,3 +58,112 @@ def test_non_dict_block_inside_an_entry_is_skipped_not_fatal():
         "good": {"id": "good", "tool_call": True, "modalities": {"input": ["text"], "output": ["text"]}, "limit": {"context": 100000}},
     }}}
     assert [m["id"] for m in normalize_catalog(raw)["openai"]] == ["good"]
+
+
+from datetime import timedelta
+
+import httpx
+from sqlalchemy import select
+
+from openbot.db.models import ModelCatalogRow, utcnow
+from openbot.runtime.model_catalog import MODELS_DEV_URL, ModelCatalog
+
+
+def _catalog(services, handler) -> tuple[ModelCatalog, httpx.AsyncClient]:
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return ModelCatalog(services.session_factory, client), client
+
+
+def _ok(request: httpx.Request) -> httpx.Response:
+    assert str(request.url) == MODELS_DEV_URL
+    return httpx.Response(200, json=SAMPLE)
+
+
+async def _rows(services) -> dict[str, ModelCatalogRow]:
+    async with services.session_factory() as s:
+        return {r.provider: r for r in (await s.execute(select(ModelCatalogRow))).scalars()}
+
+
+async def _seed(services, provider: str, models: list[dict], age: timedelta) -> None:
+    async with services.session_factory() as s:
+        s.add(ModelCatalogRow(provider=provider, models=models, fetched_at=utcnow() - age))
+        await s.commit()
+
+
+async def test_refresh_writes_one_row_per_provider(services):
+    cat, client = _catalog(services, _ok)
+    async with client:
+        assert await cat.refresh() is True
+    rows = await _rows(services)
+    assert set(rows) == {"openai", "anthropic", "openrouter", "ollama"}
+    assert [m["id"] for m in rows["ollama"].models] == ["kimi-k3", "gpt-oss:20b"]
+    assert rows["openai"].fetched_at.tzinfo is not None
+
+
+async def test_get_on_empty_db_returns_none_and_schedules_one_refresh(services):
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=SAMPLE)
+
+    cat, client = _catalog(services, handler)
+    async with client:
+        assert await cat.get("openai") is None
+        assert await cat.get("anthropic") is None      # second miss while the first fetch is in flight
+        await cat.schedule_refresh()                    # returns the in-flight task; awaiting it waits for the fetch
+        assert calls == 1
+        got = await cat.get("openai")
+    assert got is not None and got.stale is False and got.models[0]["id"] == "gpt-5.5"
+
+
+async def test_stale_row_is_served_now_and_refreshed_in_the_background(services):
+    await _seed(services, "openai", [{"id": "old"}], timedelta(hours=25))
+    cat, client = _catalog(services, _ok)
+    async with client:
+        got = await cat.get("openai")
+        assert got is not None and got.stale is True and got.models == [{"id": "old"}]
+        await cat.schedule_refresh()
+        fresh = await cat.get("openai")
+    assert fresh is not None and fresh.stale is False and fresh.models[0]["id"] == "gpt-5.5"
+
+
+async def test_fresh_row_does_not_trigger_a_fetch(services):
+    await _seed(services, "openai", [{"id": "fresh"}], timedelta(minutes=5))
+
+    def never(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("fresh rows must not be refetched")
+
+    cat, client = _catalog(services, never)
+    async with client:
+        got = await cat.get("openai")
+        assert got is not None and got.stale is False
+        assert cat._task is None                        # nothing was scheduled
+
+
+def _refused(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("refused")
+
+
+async def test_failed_fetch_keeps_existing_rows(services):
+    await _seed(services, "openai", [{"id": "old"}], timedelta(hours=25))
+    for handler in (
+        lambda r: httpx.Response(500, text="nope"),
+        lambda r: httpx.Response(200, text="not json"),
+        lambda r: httpx.Response(200, json=[]),      # not an object: normalize_catalog raises
+        _refused,
+    ):
+        cat, client = _catalog(services, handler)
+        async with client:
+            assert await cat.refresh() is False
+        assert (await _rows(services))["openai"].models == [{"id": "old"}]
+
+
+async def test_unknown_provider_and_no_http_client(services):
+    cat = ModelCatalog(services.session_factory, None)
+    with pytest.raises(ValueError):
+        await cat.get("xai")
+    assert await cat.get("openai") is None          # no client: nothing to schedule, no error
+    assert cat.schedule_refresh() is None
+    await cat.close()                               # nothing running: a no-op
