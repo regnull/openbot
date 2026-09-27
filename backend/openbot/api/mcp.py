@@ -6,7 +6,15 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from openbot.api.deps import get_services
-from openbot.api.schemas import McpConnectOut, McpServerCreate, McpServerOut, McpServerUpdate
+from openbot.api.schemas import (
+    McpCatalogEntryOut,
+    McpCatalogInstall,
+    McpConnectOut,
+    McpServerCreate,
+    McpServerOut,
+    McpServerUpdate,
+)
+from openbot.mcp.catalog import CATALOG, CATALOG_BY_ID
 from openbot.mcp.config import McpConfigError
 from openbot.mcp.store import McpKeyError
 from openbot.services import Services
@@ -41,6 +49,32 @@ async def list_servers(services: Services = Depends(get_services)):
     mgr = _mgr(services)
     specs = await mgr.store.all_masked()
     return [_out(mgr, s, specs.get(s.name, {})) for s in mgr.statuses()]
+
+
+@router.get("/catalog", response_model=list[McpCatalogEntryOut])
+async def list_catalog() -> list[McpCatalogEntryOut]:
+    """Return metadata for the reviewed, opt-in catalog; no server is started by this endpoint."""
+    return [McpCatalogEntryOut(**entry) for entry in CATALOG]
+
+
+@router.post("/catalog/{entry_id}/install", response_model=McpServerOut, status_code=201)
+async def install_catalog_entry(entry_id: str, body: McpCatalogInstall, services: Services = Depends(get_services)):
+    """Store a catalog command disabled by default; connecting remains an explicit user action."""
+    mgr = _mgr(services)
+    entry = CATALOG_BY_ID.get(entry_id)
+    if entry is None:
+        raise HTTPException(404, "unknown MCP catalog entry")
+    if mgr.has(body.name) or await mgr.store.raw(body.name) is not None:
+        raise HTTPException(409, f"an MCP server named {body.name!r} already exists")
+    spec = {"command": entry["command"], "args": entry["args"], "env": body.env, "enabled": body.enabled}
+    try:
+        await mgr.store.upsert({"name": body.name, **spec})
+    except McpKeyError as e:
+        raise HTTPException(503, str(e)) from e
+    except McpConfigError as e:
+        raise HTTPException(422, str(e)) from e
+    await mgr.add_server(await mgr.store.config(body.name), connect=False)
+    return await _one(mgr, body.name)
 
 
 @router.post("/servers", response_model=McpServerOut, status_code=201)

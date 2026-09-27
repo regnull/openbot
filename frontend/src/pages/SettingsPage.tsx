@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Api, getApiKey, setApiKey } from "../api/client";
-import type { AppSetting, McpServer, McpServerInput } from "../api/types";
+import type { AppSetting, McpCatalogEntry, McpServer, McpServerInput } from "../api/types";
 import { Badge, Button, Card, Dialog, ErrorText, Field, Hint, Input, PageTitle, SectionTitle, Textarea } from "../components/ui";
 import { dismissSaveNotification, notifySave, useSaveMutation } from "../lib/saveNotifications";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
@@ -230,6 +230,7 @@ function McpServersCard() {
         <Button variant="secondary" size="sm" onClick={() => setDialog({ mode: "add" })}>Add server</Button>
       </div>
       <Hint>Tools from Model Context Protocol servers, remote (HTTPS, OAuth when the server asks) or local (a command run over stdio). Tools appear in the tool list as <Code>server__tool</Code>; grant them per bot in the bot editor, by server or one at a time.</Hint>
+      <details><summary className="cursor-pointer text-sm font-medium">Browse MCP catalog</summary><div className="pt-3"><McpCatalog installed={servers.data ?? []} onInstalled={refresh} /></div></details>
       {dialog && <McpServerDialog server={dialog.mode === "edit" ? dialog.server : undefined} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); refresh(); }} />}
       <ErrorText error={servers.error ?? connect.error ?? disconnect.error ?? forget.error ?? remove.error ?? toggleEnabled.error} />
       {servers.data?.length === 0 && <p className="text-xs text-faint">No servers yet.</p>}
@@ -269,6 +270,21 @@ function McpServersCard() {
       </ul>
     </Card>
   );
+}
+
+function McpCatalog({ installed, onInstalled }: { installed: McpServer[]; onInstalled: () => void }) {
+  const catalog = useQuery({ queryKey: ["mcp-catalog"], queryFn: Api.listMcpCatalog });
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<McpCatalogEntry | null>(null);
+  const [name, setName] = useState("");
+  const install = useSaveMutation({ mutationFn: () => Api.installMcpCatalogEntry(selected!.id, { name: name.trim() || selected!.id, enabled: false }), onSuccess: () => { setSelected(null); setName(""); onInstalled(); } }, "MCP catalog entry added (disabled)");
+  const rows = (catalog.data ?? []).filter((e) => `${e.name} ${e.description} ${e.provider}`.toLowerCase().includes(search.toLowerCase()));
+  return <div className="space-y-3">
+    <Input aria-label="Search MCP catalog" placeholder="Search catalog" value={search} onChange={(e) => setSearch(e.target.value)} />
+    <ErrorText error={catalog.error ?? install.error} />
+    <ul className="grid gap-2 sm:grid-cols-2">{rows.map((entry) => { const duplicate = installed.some((s) => s.name === entry.id); return <li key={entry.id} className="rounded-ui border border-line p-3 text-[13px]"><div className="flex items-start justify-between gap-2"><div><strong>{entry.name}</strong><p className="text-xs text-muted">{entry.description}</p><p className="mt-1 text-[11px] text-faint">{entry.provider}</p></div><Button variant="secondary" size="sm" disabled={duplicate} onClick={() => { setSelected(entry); setName(entry.id); }}>{duplicate ? "Installed" : "Details"}</Button></div></li>; })}</ul>
+    {selected && <Dialog title={`Add ${selected.name}`} onClose={() => setSelected(null)} onSubmit={(e) => { e.preventDefault(); install.mutate(); }}><p className="text-sm">{selected.description}</p><p className="text-xs text-muted">Provider: {selected.provider} · <a className="underline" href={selected.source_url} target="_blank" rel="noreferrer">Source</a></p><Field label="Server name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field><p className="text-xs text-muted">Command: <Code>{selected.command} {selected.args.join(" ")}</Code></p><p className="text-xs text-muted">Credentials: {selected.required_credentials.join(", ") || "none"}</p>{selected.compatibility.map((note) => <p key={note} className="text-xs text-warn">{note}</p>)}<Hint>Added disabled. Review the command and credentials, then enable and connect it explicitly.</Hint><div className="flex justify-end"><Button type="submit" disabled={install.isPending || !name.trim()}>{install.isPending ? "Adding…" : "Add disabled server"}</Button></div></Dialog>}
+  </div>;
 }
 
 function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onClose: () => void; onSaved: () => void }) {

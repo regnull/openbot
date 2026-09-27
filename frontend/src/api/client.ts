@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, DirectoryListing, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
+import type { Actor, AppSetting, Bot, DirectoryListing, McpCatalogEntry, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface ScheduledMessage { id: string; thread_id: string; content: string; due_at: string; status: string; attempts: number; last_error?: string | null; result_message_id?: string | null; to_handles: string[]; }
@@ -80,6 +80,8 @@ export const Api = {
   cancelRun: (id: string) => api<Run>(`/runs/${id}/cancel`, { method: "POST" }),
   listTools: () => api<{ tools: ToolInfo[]; errors: { file: string; error: string }[] }>("/tools"),
   listMcpServers: () => api<McpServer[]>("/mcp/servers"),
+  listMcpCatalog: () => api<McpCatalogEntry[]>("/mcp/catalog"),
+  installMcpCatalogEntry: (id: string, body: { name: string; env?: Record<string, string>; enabled?: boolean }) => api<McpServer>(`/mcp/catalog/${id}/install`, { method: "POST", json: body }),
   addMcpServer: (body: McpServerInput) => api<McpServer>("/mcp/servers", { method: "POST", json: body }),
   updateMcpServer: (name: string, body: McpServerInput) => api<McpServer>(`/mcp/servers/${name}`, { method: "PATCH", json: body }),
   removeMcpServer: (name: string) => api<void>(`/mcp/servers/${name}`, { method: "DELETE" }),
