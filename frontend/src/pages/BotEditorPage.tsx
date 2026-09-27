@@ -9,6 +9,8 @@ import { ChevronDownIcon, ChevronRightIcon } from "../components/icons";
 import { BOT_ICONS, DEFAULT_BOT_ICON, botIconFor } from "../lib/botIcons";
 import { groupState, groupTools, toggleGroup, toolLabel, unavailableGrants } from "../lib/toolGroups";
 import { supportsWebSearch } from "../lib/webSearch";
+import { ModelPicker } from "../components/ModelPicker";
+import { effortLevelsFor, hasCatalog, reconcileEffort, splitAutoDefault } from "../lib/modelCatalog";
 
 function ToolRow({ name, label, description, on, approval, onToggle, onToggleApproval }:
   { name: string; label: string; description: string; on: boolean; approval: boolean; onToggle: () => void; onToggleApproval: () => void }) {
@@ -51,7 +53,11 @@ export default function BotEditorPage() {
 
   const save = useSaveMutation({
     mutationFn: () => {
-      const payload = { ...form, approval_tools: form.approval_tools.filter((t) => form.tool_names.includes(t)) };
+      const payload = {
+        ...form,
+        approval_tools: form.approval_tools.filter((t) => form.tool_names.includes(t)),
+        model_settings: reconcileEffort(form.model_settings, effortCatalog.data?.models, effortModel),
+      };
       return isNew ? Api.createBot(payload) : Api.updateBot(id!, payload);
     },
     onSuccess: (b) => { qc.invalidateQueries({ queryKey: ["bots"] }); qc.invalidateQueries({ queryKey: ["bot", b.id] }); nav(`/bots/${b.id}?tab=settings`); },
@@ -83,6 +89,22 @@ export default function BotEditorPage() {
   const isAuto = form.provider === "auto";
   const auto = providers.data?.providers.find((p) => p.id === "auto");
   const prov = providers.data?.providers.find((p) => p.id === form.provider);
+  // The model whose effort levels apply: the bot's own, or for "auto" whatever the server resolves to.
+  const autoTarget = isAuto ? splitAutoDefault(auto?.default_model) : null;
+  const effortProvider = isAuto ? autoTarget?.provider : form.provider;
+  const effortModel = isAuto ? autoTarget?.model ?? "" : form.model;
+  const effortCatalog = useQuery({
+    queryKey: ["models", effortProvider], queryFn: () => Api.getModels(effortProvider!),
+    enabled: !!effortProvider && hasCatalog(effortProvider), staleTime: 5 * 60_000,
+  });
+  const effortLevels = effortLevelsFor(effortCatalog.data?.models, effortModel);
+  const effort = typeof form.model_settings.reasoning_effort === "string" ? form.model_settings.reasoning_effort : "";
+  const setEffort = (v: string) => {
+    const { reasoning_effort: _current, ...rest } = form.model_settings;
+    set("model_settings", v ? { ...rest, reasoning_effort: v } : rest);
+  };
+  // effective_bot_profile sends every non-Ollama bot to the default OpenRouter model once that key exists.
+  const rerouted = !isAuto && form.provider !== "ollama" && (providers.data?.providers.find((p) => p.id === "openrouter")?.configured ?? false);
   const grouped = groupTools(tools.data?.tools ?? []);
   const unavailable = unavailableGrants(form.tool_names, tools.data?.tools ?? []);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -148,11 +170,29 @@ export default function BotEditorPage() {
           <Field label="Model" hint="Chosen automatically from the configured provider.">
             <Input value={auto?.configured ? `auto (currently ${auto.default_model})` : "auto (no provider configured yet)"} disabled />
           </Field>
+        ) : hasCatalog(form.provider) ? (
+          <Field label="Model" hint="Pick from the catalog or type any model id.">
+            <ModelPicker provider={form.provider} value={form.model} onChange={(v) => set("model", v)}
+              suggested={prov?.models ?? []} suggestedLabel={form.provider === "ollama" ? "Installed" : "Suggested"} required />
+          </Field>
         ) : (
           <Field label="Model" hint="Pick from the list or type any model id.">
             <Input list="models" value={form.model} onChange={(e) => set("model", e.target.value)} required />
             <datalist id="models">{prov?.models.map((m) => <option key={m} value={m} />)}</datalist>
           </Field>
+        )}
+        {effortLevels.length > 0 && (
+          <Field label="Effort" hint="How much reasoning the model spends per step. Default lets the provider decide.">
+            <Select aria-label="Effort" value={effortLevels.includes(effort) ? effort : ""} onChange={(e) => setEffort(e.target.value)}>
+              <option value="">Default (provider decides)</option>
+              {effortLevels.map((l) => <option key={l} value={l}>{l}</option>)}
+            </Select>
+          </Field>
+        )}
+        {rerouted && (
+          <Hint className="text-xs text-warn sm:col-span-2">
+            With an OpenRouter key configured, cloud bots run on the default OpenRouter model from Settings. This model is saved but not used until that key is removed.
+          </Hint>
         )}
         <div className="space-y-2 sm:col-span-2">
           <Toggle checked={form.memory_enabled} onChange={(v) => set("memory_enabled", v)}>Background memory extraction</Toggle>
