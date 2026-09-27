@@ -28,7 +28,7 @@ const providers: ProvidersOut = { embedding_model: "none", embeddings_configured
 ] };
 const nameInput = () => el.querySelector<HTMLInputElement>("input[required]")?.value;
 const effortSelect = () => el.querySelector<HTMLSelectElement>("select[aria-label=Effort]");
-const submit = () => act(async () => { el.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await new Promise((r) => setTimeout(r, 20)); });
+const submit = () => act(async () => { el.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
 async function until(condition: () => boolean) {
   const deadline = Date.now() + 2000;
   while (!condition()) {
@@ -103,9 +103,9 @@ it("drops an effort the model does not accept on save and removes the key when D
   const update = vi.spyOn(Api, "updateBot").mockImplementation(async (id, b) => ({ ...bot(id, "Stale"), ...b } as Bot));
   await show("/edit/b1");
   await until(() => nameInput() === "Stale");
-  await until(() => vi.mocked(Api.getModels).mock.calls.length > 0);
-  await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+  await until(() => !el.textContent?.includes("Not in the catalog"));
   await submit();
+  await until(() => update.mock.calls.length > 0);
   expect(update.mock.calls[0][1].model_settings).toEqual({ web_search: true });
 
   vi.spyOn(Api, "getBot").mockResolvedValue({ ...bot("b2", "Opus"), provider: "anthropic", model: "claude-opus-5-5", model_settings: { reasoning_effort: "low" } });
@@ -116,6 +116,7 @@ it("drops an effort the model does not accept on save and removes the key when D
     effortSelect()!.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await submit();
+  await until(() => update.mock.calls.length > 1);
   expect(update.mock.calls[1][1].model_settings).toEqual({});
 });
 
