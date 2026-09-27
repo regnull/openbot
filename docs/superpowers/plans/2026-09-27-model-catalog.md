@@ -1785,3 +1785,130 @@ git commit -m "docs: describe the model catalog, picker and effort setting
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
+
+---
+
+### Task 11: Only configured providers list models (amendment, runs before Task 10)
+
+**Files:**
+- Modify: `backend/openbot/api/schemas.py` (`ModelsOut`)
+- Modify: `backend/openbot/api/models.py`
+- Modify: `backend/tests/test_models_api.py`
+- Modify: `frontend/src/api/types.ts` (`ModelsOut`)
+- Modify: `frontend/src/components/ModelPicker.tsx`
+- Modify: `frontend/src/components/ModelPicker.test.tsx`, `frontend/src/pages/BotEditorPage.test.tsx`, `frontend/src/pages/SettingsPage.test.tsx` (fixtures gain `configured: true`)
+- Modify: `README.md` (one sentence in the catalog paragraph, only if Task 10 has already run; otherwise Task 10 includes it)
+
+**Interfaces:**
+- Consumes: `provider_configured(settings, provider)` from `openbot.runtime.providers` (Ollama is configured when `ollama_base_url` is set; others when their API key is set).
+- Produces: `ModelsOut.configured: bool` on the wire and in `types.ts`; the picker's "not configured" state.
+
+- [ ] **Step 1: Write the failing backend test and adjust the existing ones**
+
+In `backend/tests/test_models_api.py`, add:
+
+```python
+async def test_models_endpoint_lists_nothing_for_an_unconfigured_provider(client, services):
+    services.model_catalog = ModelCatalog(services.session_factory, None)
+    await _seed(services, "anthropic", normalize_catalog(SAMPLE)["anthropic"])
+    body = (await client.get("/api/v1/models", params={"provider": "anthropic"})).json()
+    assert body["configured"] is False and body["models"] == []
+    services.settings.anthropic_api_key = "k"
+    body = (await client.get("/api/v1/models", params={"provider": "anthropic"})).json()
+    assert body["configured"] is True and body["models"][0]["id"] == "claude-opus-5-5"
+```
+
+The `client` fixture's settings have no keys, so the three existing tests that expect rows must configure their provider first. Add as the first line of each: `services.settings.openai_api_key = "k"` (builtin test; add `services` to its parameters), `services.settings.anthropic_api_key = "k"` (catalog test), `services.settings.openrouter_api_key = "k"` (empty-row test). Every existing assertion stays; add `and body["configured"] is True` to the builtin test's first assert line.
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `cd backend && uv run pytest -q tests/test_models_api.py`
+Expected: the new test FAILS with `KeyError: 'configured'`.
+
+- [ ] **Step 3: Implement**
+
+`backend/openbot/api/schemas.py`, in `ModelsOut`, add after `provider: str`:
+
+```python
+    configured: bool
+```
+
+`backend/openbot/api/models.py`: import `provider_configured` alongside `PROVIDER_MODELS`, and replace the body after the 422 check with:
+
+```python
+    if not provider_configured(services.settings, provider):
+        # No key (or no Ollama URL): nothing to list, and no reason to touch the catalog for it. Models of
+        # this provider that OpenRouter serves are listed under openrouter already (anthropic/..., openai/...).
+        return ModelsOut(provider=provider, configured=False, source="catalog", stale=False, fetched_at=None, models=[])
+    catalog = services.model_catalog
+    got = await catalog.get(provider) if catalog is not None else None
+    if got is None:
+        return ModelsOut(provider=provider, configured=True, source="builtin", stale=True, fetched_at=None,
+                         models=[{"id": m, "name": m} for m in PROVIDER_MODELS[provider]])
+    return ModelsOut(provider=provider, configured=True, source="catalog", stale=got.stale, fetched_at=got.fetched_at, models=got.models)
+```
+
+- [ ] **Step 4: Run backend tests and ruff**
+
+Run: `cd backend && uv run pytest -q tests/test_models_api.py && uv run ruff check openbot/api/models.py openbot/api/schemas.py`
+Expected: all PASS, ruff clean.
+
+- [ ] **Step 5: Write the failing picker test and update fixtures**
+
+`frontend/src/api/types.ts`: add `configured: boolean;` to `ModelsOut` right after `provider`.
+
+In every frontend test fixture that builds a `ModelsOut` (`ModelPicker.test.tsx` `catalog` and its builtin override, `BotEditorPage.test.tsx` `catalog`, `SettingsPage.test.tsx` `getModels` mock), add `configured: true`.
+
+Append to `frontend/src/components/ModelPicker.test.tsx`:
+
+```tsx
+it("shows a not-configured notice and no rows when the provider has no key", async () => {
+  vi.mocked(Api.getModels).mockResolvedValue({ ...catalog, configured: false, models: [] });
+  await show({ initial: "claude-opus-5-5" });
+  await focus();
+  expect(options()).toEqual([]);
+  expect(el.textContent).toContain("Anthropic is not configured. Add its API key in Settings.");
+  expect(el.textContent).not.toContain("No matching models");
+  expect(el.textContent).not.toContain("Not in the catalog");
+  expect(el.querySelector("[data-chip=reasoning]")).toBeNull();
+});
+```
+
+- [ ] **Step 6: Run to verify failure**
+
+Run: `cd frontend && pnpm exec vitest run src/components/ModelPicker.test.tsx`
+Expected: the new test FAILS (rows and chips render, notice absent).
+
+- [ ] **Step 7: Implement the picker state**
+
+In `frontend/src/components/ModelPicker.tsx`:
+
+1. Add near the top:
+
+```tsx
+const PROVIDER_LABEL: Record<string, string> = { openai: "OpenAI", anthropic: "Anthropic", openrouter: "OpenRouter", ollama: "Ollama" };
+function notConfiguredText(provider: string): string {
+  const name = PROVIDER_LABEL[provider] ?? provider;
+  return provider === "ollama" ? `${name} is not configured. Set its base URL in Settings.` : `${name} is not configured. Add its API key in Settings.`;
+}
+```
+
+2. After `const models = useQuery(...)` add `const unconfigured = models.data !== undefined && !models.data.configured;`.
+3. Change the "Not in the catalog" note condition to `{!known && !models.isLoading && !unconfigured && (...)}`.
+4. Inside the panel, render the notice instead of everything else when unconfigured: wrap the header, spinner, "No matching models." and groups in `{unconfigured ? (<div className="px-3 py-2 font-sans text-[13px] text-muted">{notConfiguredText(provider)}</div>) : (<> ...existing header, spinner, empty state and groups... </>)}`.
+
+- [ ] **Step 8: Run all frontend checks**
+
+Run: `cd frontend && pnpm exec vitest run src/components/ModelPicker.test.tsx && pnpm test && pnpm typecheck && pnpm lint`
+Expected: all PASS, clean.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add backend/openbot/api/schemas.py backend/openbot/api/models.py backend/tests/test_models_api.py frontend/src/api/types.ts frontend/src/components/ModelPicker.tsx frontend/src/components/ModelPicker.test.tsx frontend/src/pages/BotEditorPage.test.tsx frontend/src/pages/SettingsPage.test.tsx
+git commit -m "feat(catalog): list models only for configured providers
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+Task 10's README paragraph gains this sentence after "...falls back to a short builtin list.": "Providers without a key (or Ollama without a base URL) list no models; their models served through OpenRouter still appear under OpenRouter."

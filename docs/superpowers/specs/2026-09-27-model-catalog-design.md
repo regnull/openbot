@@ -128,7 +128,19 @@ drops a provider.
 - Unknown provider, `auto` and `xai` return 422; xAI keeps its builtin list in `/providers`.
 
 `/providers` is unchanged. Its short `models` list becomes the "Suggested" group the picker pins at
-the top, and `default_model` keeps its meaning. For Ollama that list is the installed models when
+the top, and `default_model` keeps its meaning.
+
+### Only configured providers list models (amendment, 2026-09-27)
+
+A provider whose key (or, for Ollama, base URL) is not set gets no model list: `ModelsOut` carries
+`configured: bool` (from `provider_configured`), and when it is false the endpoint returns
+`models: []` without touching the catalog or scheduling a refresh. Models of an unconfigured
+provider that are reachable through OpenRouter are already listed under `openrouter` (their ids are
+`anthropic/...`, `openai/...`), so nothing more is needed for that case. The picker shows
+"<Provider> is not configured. Add its API key in Settings." (Ollama: "... Set its base URL in
+Settings.") instead of chips and rows, and suppresses the "not in catalog" note. The provider
+dropdown in the bot editor keeps listing unconfigured providers with its existing "(not configured)"
+label, so a user can still type a model id for a key they are about to add. For Ollama that list is the installed models when
 the server is reachable (today's behaviour), so the pinned group is the installed set.
 
 ### Effort at runtime
