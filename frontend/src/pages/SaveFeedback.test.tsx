@@ -60,6 +60,7 @@ beforeEach(() => {
   qc.setQueryData(["actors"], []); qc.setQueryData(["mcp-servers"], []);
   qc.setQueryData(["bot", "b1"], bot);
   vi.spyOn(Api, "getSettings").mockResolvedValue([row]);
+  vi.spyOn(Api, "getDatabaseLocation").mockResolvedValue({ location: "/home/blah/.openbot" });
   vi.spyOn(Api, "getProviders").mockResolvedValue({ providers: [], embedding_model: "none", embeddings_configured: false });
   vi.spyOn(Api, "listTools").mockResolvedValue({ tools: [], errors: [] });
   vi.spyOn(Api, "listActors").mockResolvedValue([]);
@@ -69,6 +70,12 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   el.remove(); qc.clear(); dismissSaveNotification(); vi.restoreAllMocks();
+});
+
+it("shows the active database location", async () => {
+  await mount();
+  await until(() => el.textContent?.includes("/home/blah/.openbot") === true);
+  expect(el.textContent).toContain("Active database location");
 });
 
 it.each([true, false])("runtime settings only confirm persisted saves (success=%s)", async (success) => {

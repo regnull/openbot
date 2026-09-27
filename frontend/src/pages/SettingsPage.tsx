@@ -30,6 +30,8 @@ export default function SettingsPage() {
 
       <RuntimeSettings />
 
+      <DatabaseLocationCard />
+
       <McpServersCard />
 
       <Card className="space-y-3">
@@ -108,6 +110,19 @@ function RuntimeSettings() {
     <>
       {groupSettings(settings.data).map((g) => <SettingsGroupCard key={g.name} group={g} />)}
     </>
+  );
+}
+
+function DatabaseLocationCard() {
+  const location = useQuery({ queryKey: ["database-location"], queryFn: Api.getDatabaseLocation });
+  return (
+    <Card className="space-y-2">
+      <SectionTitle>Database</SectionTitle>
+      <Hint>Active database location</Hint>
+      {location.isLoading ? <p className="font-mono text-xs text-muted">Loading…</p> :
+        location.data ? <p className="break-all font-mono text-xs text-fg">{location.data.location}</p> :
+          <ErrorText error={location.error} />}
+    </Card>
   );
 }
 

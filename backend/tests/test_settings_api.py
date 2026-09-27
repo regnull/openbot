@@ -5,6 +5,19 @@ from openbot.db.session import make_engine, run_migrations
 from openbot.runtime.app_settings import TUNABLES, load_overrides
 
 
+async def test_database_location_reports_effective_sqlite_directory(client, services, tmp_path):
+    services.settings.database_url = f"sqlite+aiosqlite:///{tmp_path / 'nested' / 'openbot.db'}"
+    response = await client.get("/api/v1/settings/database-location")
+    assert response.status_code == 200
+    assert response.json() == {"location": str(tmp_path / "nested")}
+
+
+async def test_database_location_preserves_non_sqlite_url(client, services):
+    services.settings.database_url = "postgresql+asyncpg://db.example/openbot"
+    response = await client.get("/api/v1/settings/database-location")
+    assert response.json() == {"location": "postgresql+asyncpg://db.example/openbot"}
+
+
 async def test_settings_listing_shows_every_tunable_with_its_default(client, services):
     rows = (await client.get("/api/v1/settings")).json()
     by_key = {r["key"]: r for r in rows}
