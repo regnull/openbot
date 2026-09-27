@@ -75,4 +75,4 @@ async def test_catalog_install_is_disabled_and_rejects_unknown_or_duplicate(sett
         assert response.status_code == 201, response.text
         installed = response.json()
         assert installed["enabled"] is False
-        assert installed["url"] == "https://mcp.linear.app/sse"
+        assert installed["url"] == "https://mcp.linear.app/mcp"

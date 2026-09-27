@@ -6,7 +6,7 @@
       "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" }
     },
     "linear": {
-      "url": "https://mcp.linear.app/sse"
+      "url": "https://mcp.linear.app/mcp"
     },
     "internal-docs": {
       "url": "https://mcp.example.com/mcp",

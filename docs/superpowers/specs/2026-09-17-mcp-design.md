@@ -17,7 +17,7 @@ the runner, per-bot tool selection, approvals or the output cap changes.
 {
   "mcpServers": {
     "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}},
-    "linear": {"url": "https://mcp.linear.app/sse"},
+    "linear": {"url": "https://mcp.linear.app/mcp"},
     "internal": {"url": "https://mcp.example.com/mcp", "headers": {"Authorization": "Bearer ${INTERNAL_KEY}"}}
   }
 }

@@ -73,7 +73,7 @@ CATALOG: tuple[CatalogEntry, ...] = (
     _npm("context7", "Context7", "Retrieve current, version-specific library documentation for coding tasks.", "@upstash/context7-mcp", "Upstash", "https://github.com/upstash/context7", ["CONTEXT7_API_KEY"], compatibility=["API key may be optional depending on the Context7 plan"]),
     _npm("playwright", "Playwright", "Browser automation using Playwright.", "@playwright/mcp", "Microsoft", "https://github.com/microsoft/playwright-mcp", compatibility=["Requires browser binaries; run the package's browser install step"]),
     _npm("notion", "Notion", "Search and update Notion pages and databases.", "@notionhq/notion-mcp-server", "Notion", "https://github.com/makenotion/notion-mcp-server", ["NOTION_TOKEN"]),
-    _remote("linear", "Linear", "Read and manage Linear issues, projects, and cycles.", "https://mcp.linear.app/sse", "Linear", "https://github.com/linear/linear-mcp"),
+    _remote("linear", "Linear", "Read and manage Linear issues, projects, and cycles.", "https://mcp.linear.app/mcp", "Linear", "https://github.com/linear/linear-mcp"),
     _npm("sentry", "Sentry", "Investigate Sentry errors, issues, and performance data.", "@sentry/mcp-server", "Sentry", "https://github.com/getsentry/sentry-mcp", ["SENTRY_AUTH_TOKEN", "SENTRY_ORG"]),
     _npm("stripe", "Stripe", "Inspect customers, payments, subscriptions, and invoices.", "@stripe/mcp", "Stripe", "https://github.com/stripe/agent-toolkit", ["STRIPE_SECRET_KEY"]),
     _npm("supabase", "Supabase", "Manage Supabase projects, databases, and edge functions.", "@supabase/mcp-server-supabase", "Supabase", "https://github.com/supabase-community/supabase-mcp", ["SUPABASE_ACCESS_TOKEN"]),
