@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Api } from "../api/client";
 import type { BotInput } from "../api/types";
 import { useSaveMutation } from "../lib/saveNotifications";
 import { Button, Card, ErrorText, Field, Hint, Input, PageTitle, SectionTitle, Select, Spinner, Textarea } from "../components/ui";
 import { ChevronDownIcon, ChevronRightIcon } from "../components/icons";
-import { BOT_ICONS, DEFAULT_BOT_ICON } from "../lib/botIcons";
+import { BOT_ICONS, DEFAULT_BOT_ICON, botIconFor } from "../lib/botIcons";
 import { groupState, groupTools, toggleGroup, toolLabel, unavailableGrants } from "../lib/toolGroups";
 import { supportsWebSearch } from "../lib/webSearch";
 
@@ -59,6 +59,20 @@ export default function BotEditorPage() {
     return { ...f, tool_names, approval_tools };
   });
   const toggleApproval = (name: string) => set("approval_tools", form.approval_tools.includes(name) ? form.approval_tools.filter((t) => t !== name) : [...form.approval_tools, name]);
+
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const iconPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!iconPickerOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (iconPickerRef.current && !iconPickerRef.current.contains(e.target as Node)) {
+        setIconPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [iconPickerOpen]);
+
   const isAuto = form.provider === "auto";
   const auto = providers.data?.providers.find((p) => p.id === "auto");
   const prov = providers.data?.providers.find((p) => p.id === form.provider);
@@ -76,24 +90,38 @@ export default function BotEditorPage() {
         <Field label="Handle" hint="Lowercase letters, digits, _ or -. This is the @handle people and other bots use."><Input value={form.handle} onChange={(e) => set("handle", e.target.value)} pattern="[a-z0-9_\-]{2,32}" required /></Field>
         <div className="sm:col-span-2"><Field label="Description" hint="Shown to other bots so they know when to hand work to this one."><Input value={form.description} onChange={(e) => set("description", e.target.value)} /></Field></div>
         <div className="sm:col-span-2"><Field label="Icon">
-          <div className="grid grid-cols-8 gap-1 rounded-ui border border-line bg-canvas p-1.5 sm:grid-cols-10 md:grid-cols-12" role="radiogroup" aria-label="Icon">
-            {BOT_ICONS.map((icon) => (
+          <div ref={iconPickerRef}>
+            {!iconPickerOpen ? (
               <button
-                key={icon.key}
                 type="button"
-                role="radio"
-                aria-checked={form.icon === icon.key}
-                aria-label={icon.label}
-                title={icon.label}
-                onClick={() => set("icon", icon.key)}
-                className={`flex h-9 w-9 items-center justify-center rounded-ui border text-lg transition-colors
-                  ${form.icon === icon.key
-                    ? "border-accent bg-accent/10"
-                    : "border-transparent hover:bg-sunken"}`}
+                onClick={() => setIconPickerOpen(true)}
+                className="flex h-11 w-11 items-center justify-center rounded-ui border border-line bg-canvas text-2xl transition-colors hover:bg-sunken"
+                title="Click to change icon"
+                aria-label="Change icon"
               >
-                {icon.glyph}
+                {botIconFor(form.icon).glyph}
               </button>
-            ))}
+            ) : (
+              <div className="grid grid-cols-8 gap-1 rounded-ui border border-line bg-canvas p-1.5 sm:grid-cols-10 md:grid-cols-12" role="radiogroup" aria-label="Icon">
+                {BOT_ICONS.map((icon) => (
+                  <button
+                    key={icon.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.icon === icon.key}
+                    aria-label={icon.label}
+                    title={icon.label}
+                    onClick={() => { set("icon", icon.key); setIconPickerOpen(false); }}
+                    className={`flex h-9 w-9 items-center justify-center rounded-ui border text-lg transition-colors
+                      ${form.icon === icon.key
+                        ? "border-accent bg-accent/10"
+                        : "border-transparent hover:bg-sunken"}`}
+                  >
+                    {icon.glyph}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </Field></div>
         <div className="sm:col-span-2"><Field label="Instructions" hint="The system prompt. Say what the bot is for, how it should work, and when to hand off."><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} className="font-sans text-[13.5px]" /></Field></div>
