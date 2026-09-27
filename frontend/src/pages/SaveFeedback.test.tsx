@@ -123,6 +123,30 @@ it.each([true, false])("MCP add confirms only persistence, not connection (succe
   expect(!!el.querySelector('[role="dialog"]')).toBe(!success);
 });
 
+it.each([true, false])("MCP catalog Add submits and reports persistence failures (success=%s)", async (success) => {
+  vi.spyOn(Api, "listMcpCatalog").mockResolvedValue([{
+    id: "github", name: "GitHub", description: "GitHub tools", provider: "Example", source_url: "https://example.com", transport: "stdio", command: "npx", args: ["github-mcp"], required_credentials: ["GITHUB_TOKEN"], compatibility: [],
+  }]);
+  const pending = deferred<McpServer>();
+  const install = vi.spyOn(Api, "installMcpCatalogEntry").mockReturnValue(pending.promise);
+  await mount();
+  await until(() => !!button("Details"));
+  await click(button("Details"));
+  const dialog = el.querySelector('[role="dialog"]')!;
+  expect(dialog.querySelector('button[type="submit"]')).not.toBeNull();
+  await click(button("Add disabled server", dialog));
+  expect(install).toHaveBeenCalledExactlyOnceWith("github", { name: "github", enabled: false });
+  await act(async () => { if (success) pending.resolve({ status: "disabled" } as McpServer); else pending.reject(new Error("Catalog install failed")); });
+  await until(() => success ? !!notice() : !!el.querySelector('[role="alert"]'));
+  if (success) {
+    expect(notice()).toContain("MCP catalog entry added");
+    expect(el.querySelector('[role="dialog"]')).toBeNull();
+  } else {
+    expect(notice()).toContain("Could not save changes");
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("Catalog install failed");
+  }
+});
+
 it.each([true, false])("browser API key persistence reports storage failures (success=%s)", async (success) => {
   if (!success) vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage blocked"); });
   await mount();
