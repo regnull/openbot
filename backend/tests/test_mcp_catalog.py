@@ -7,8 +7,11 @@ def test_catalog_is_curated_and_complete():
     for entry in CATALOG:
         assert entry["id"] and entry["name"] and entry["description"]
         assert entry["provider"] and entry["source_url"].startswith("https://")
-        assert entry["command"] and entry["args"]
-        assert entry["transport"] == "stdio"
+        assert entry["transport"] in ("stdio", "http")
+        if entry["transport"] == "stdio":
+            assert entry["command"] and entry["args"]
+        else:
+            assert entry["url"]
 
 
 def test_catalog_contains_requested_examples():
@@ -25,7 +28,9 @@ def test_catalog_commands_match_documented_runners():
     assert by_id["aws"]["args"] == ["awslabs.aws-documentation-mcp-server@latest"]
 
     for entry in CATALOG:
-        if entry["command"] == "npx":
+        if entry["transport"] == "http":
+            assert entry["url"].startswith("https://")
+        elif entry["command"] == "npx":
             assert entry["args"][:1] == ["-y"]
             assert len(entry["args"]) >= 2
             assert entry["args"][1] not in {"@oraios/serena", "awslabs.mcp-server-aws-documentation"}
@@ -61,3 +66,13 @@ async def test_catalog_install_is_disabled_and_rejects_unknown_or_duplicate(sett
         assert installed["command"] == "npx"
         assert (await client.post("/api/v1/mcp/catalog/time/install", json={"name": "catalog-time"})).status_code == 409
         assert (await client.post("/api/v1/mcp/catalog/no-such/install", json={"name": "nope"})).status_code == 404
+
+        # URL-based catalog entries (e.g. Linear) install with url, not command
+        response = await client.post(
+            "/api/v1/mcp/catalog/linear/install",
+            json={"name": "catalog-linear"},
+        )
+        assert response.status_code == 201, response.text
+        installed = response.json()
+        assert installed["enabled"] is False
+        assert installed["url"] == "https://mcp.linear.app/sse"

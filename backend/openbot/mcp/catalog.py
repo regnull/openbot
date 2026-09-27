@@ -1,6 +1,6 @@
 """Curated, opt-in MCP server catalog.
 
-Entries are metadata and paste-ready stdio specs only; installing an entry stores it disabled so
+Entries are metadata for opt-in servers (stdio or remote HTTP); installing an entry stores it disabled so
 OpenBot never executes a newly discovered third-party server without an explicit user action.
 The catalog is reviewed against the official MCP Registry and upstream project documentation.
 """
@@ -15,9 +15,10 @@ class CatalogEntry(TypedDict):
     description: str
     provider: str
     source_url: str
-    transport: str
-    command: str
-    args: list[str]
+    transport: str                           # "stdio" | "http"
+    command: str                             # empty string for remote entries
+    args: list[str]                          # empty list for remote entries
+    url: str                                 # empty string for stdio entries
     required_credentials: list[str]
     compatibility: list[str]
 
@@ -27,7 +28,8 @@ def _npm(id: str, name: str, description: str, package: str, provider: str, sour
          compatibility: list[str] | None = None) -> CatalogEntry:
     return {"id": id, "name": name, "description": description, "provider": provider,
             "source_url": source_url, "transport": "stdio", "command": "npx",
-            "args": ["-y", package, *(args or [])], "required_credentials": credentials or [],
+            "args": ["-y", package, *(args or [])], "url": "",
+            "required_credentials": credentials or [],
             "compatibility": compatibility or ["Requires Node.js and npx"]}
 
 
@@ -36,8 +38,19 @@ def _uvx(id: str, name: str, description: str, package: str, provider: str, sour
          compatibility: list[str] | None = None) -> CatalogEntry:
     return {"id": id, "name": name, "description": description, "provider": provider,
             "source_url": source_url, "transport": "stdio", "command": "uvx",
-            "args": [package, *(args or [])], "required_credentials": credentials or [],
+            "args": [package, *(args or [])], "url": "",
+            "required_credentials": credentials or [],
             "compatibility": compatibility or ["Requires uv and Python"]}
+
+
+def _remote(id: str, name: str, description: str, url: str, provider: str, source_url: str,
+            credentials: list[str] | None = None,
+            compatibility: list[str] | None = None) -> CatalogEntry:
+    return {"id": id, "name": name, "description": description, "provider": provider,
+            "source_url": source_url, "transport": "http", "command": "",
+            "args": [], "url": url,
+            "required_credentials": credentials or [],
+            "compatibility": compatibility or ["Remote server – no local runtime required"]}
 
 
 CATALOG: tuple[CatalogEntry, ...] = (
@@ -56,11 +69,11 @@ CATALOG: tuple[CatalogEntry, ...] = (
     _npm("slack", "Slack", "Search conversations and interact with Slack workspaces.", "@modelcontextprotocol/server-slack", "MCP steering group", "https://github.com/modelcontextprotocol/servers/tree/main/src/slack", ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]),
     _npm("google-drive", "Google Drive", "Search and read files in Google Drive.", "@modelcontextprotocol/server-gdrive", "MCP steering group", "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive", ["GOOGLE_APPLICATION_CREDENTIALS"]),
     _npm("everart", "EverArt", "Generate images through EverArt models.", "@modelcontextprotocol/server-everart", "EverArt", "https://github.com/modelcontextprotocol/servers/tree/main/src/everart", ["EVERART_API_KEY"]),
-    {"id": "serena", "name": "Serena", "description": "Semantic code navigation, editing, and project memories for software agents.", "provider": "Oraios", "source_url": "https://github.com/oraios/serena", "transport": "stdio", "command": "uvx", "args": ["--from", "serena-agent", "serena", "start-mcp-server", "--project-from-cwd"], "required_credentials": [], "compatibility": ["Requires uv; the upstream package exposes the serena executable and uses the current working directory as the project"]},
+    {"id": "serena", "name": "Serena", "description": "Semantic code navigation, editing, and project memories for software agents.", "provider": "Oraios", "source_url": "https://github.com/oraios/serena", "transport": "stdio", "command": "uvx", "args": ["--from", "serena-agent", "serena", "start-mcp-server", "--project-from-cwd"], "url": "", "required_credentials": [], "compatibility": ["Requires uv; the upstream package exposes the serena executable and uses the current working directory as the project"]},
     _npm("context7", "Context7", "Retrieve current, version-specific library documentation for coding tasks.", "@upstash/context7-mcp", "Upstash", "https://github.com/upstash/context7", ["CONTEXT7_API_KEY"], compatibility=["API key may be optional depending on the Context7 plan"]),
     _npm("playwright", "Playwright", "Browser automation using Playwright.", "@playwright/mcp", "Microsoft", "https://github.com/microsoft/playwright-mcp", compatibility=["Requires browser binaries; run the package's browser install step"]),
     _npm("notion", "Notion", "Search and update Notion pages and databases.", "@notionhq/notion-mcp-server", "Notion", "https://github.com/makenotion/notion-mcp-server", ["NOTION_TOKEN"]),
-    _npm("linear", "Linear", "Read and manage Linear issues, projects, and cycles.", "@linear/mcp-server", "Linear", "https://github.com/linear/linear-mcp", ["LINEAR_API_KEY"]),
+    _remote("linear", "Linear", "Read and manage Linear issues, projects, and cycles.", "https://mcp.linear.app/sse", "Linear", "https://github.com/linear/linear-mcp"),
     _npm("sentry", "Sentry", "Investigate Sentry errors, issues, and performance data.", "@sentry/mcp-server", "Sentry", "https://github.com/getsentry/sentry-mcp", ["SENTRY_AUTH_TOKEN", "SENTRY_ORG"]),
     _npm("stripe", "Stripe", "Inspect customers, payments, subscriptions, and invoices.", "@stripe/mcp", "Stripe", "https://github.com/stripe/agent-toolkit", ["STRIPE_SECRET_KEY"]),
     _npm("supabase", "Supabase", "Manage Supabase projects, databases, and edge functions.", "@supabase/mcp-server-supabase", "Supabase", "https://github.com/supabase-community/supabase-mcp", ["SUPABASE_ACCESS_TOKEN"]),

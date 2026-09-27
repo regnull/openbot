@@ -132,7 +132,7 @@ it.each([true, false])("MCP add confirms only persistence, not connection (succe
 
 it.each([true, false])("MCP catalog Add submits and reports persistence failures (success=%s)", async (success) => {
   vi.spyOn(Api, "listMcpCatalog").mockResolvedValue([{
-    id: "github", name: "GitHub", description: "GitHub tools", provider: "Example", source_url: "https://example.com", transport: "stdio", command: "npx", args: ["github-mcp"], required_credentials: ["GITHUB_TOKEN"], compatibility: [],
+    id: "github", name: "GitHub", description: "GitHub tools", provider: "Example", source_url: "https://example.com", transport: "stdio", command: "npx", args: ["github-mcp"], url: "", required_credentials: ["GITHUB_TOKEN"], compatibility: [],
   }]);
   const pending = deferred<McpServer>();
   const install = vi.spyOn(Api, "installMcpCatalogEntry").mockReturnValue(pending.promise);

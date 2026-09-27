@@ -452,8 +452,9 @@ class McpCatalogEntryOut(BaseModel):
     provider: str
     source_url: str
     transport: str
-    command: str
-    args: list[str]
+    command: str = ""
+    args: list[str] = []
+    url: str = ""
     required_credentials: list[str]
     compatibility: list[str]
 
