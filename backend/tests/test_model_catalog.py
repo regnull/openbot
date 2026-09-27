@@ -160,6 +160,25 @@ async def test_failed_fetch_keeps_existing_rows(services):
         assert (await _rows(services))["openai"].models == [{"id": "old"}]
 
 
+async def test_write_failure_returns_false_and_leaves_rows_untouched(services):
+    await _seed(services, "openai", [{"id": "old"}], timedelta(hours=1))
+
+    def failing_session_factory():
+        session = services.session_factory()
+
+        async def failing_commit() -> None:
+            raise RuntimeError("disk full")
+
+        session.commit = failing_commit
+        return session
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_ok))
+    cat = ModelCatalog(failing_session_factory, client)
+    async with client:
+        assert await cat.refresh() is False
+    assert (await _rows(services))["openai"].models == [{"id": "old"}]
+
+
 async def test_unknown_provider_and_no_http_client(services):
     cat = ModelCatalog(services.session_factory, None)
     with pytest.raises(ValueError):

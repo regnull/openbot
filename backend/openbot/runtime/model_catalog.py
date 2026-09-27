@@ -152,10 +152,14 @@ class ModelCatalog:
             log.warning("model catalog refresh from %s failed: %s", self._url, e)
             return False
         now = utcnow()
-        async with self._sessions() as session:
-            for provider, models in catalog.items():
-                await session.merge(ModelCatalogRow(provider=provider, models=models, fetched_at=now))
-            await session.commit()
+        try:
+            async with self._sessions() as session:
+                for provider, models in catalog.items():
+                    await session.merge(ModelCatalogRow(provider=provider, models=models, fetched_at=now))
+                await session.commit()
+        except Exception as e:  # noqa: BLE001 - a write failure must not crash the background task
+            log.warning("model catalog write failed: %s", e)
+            return False
         log.info("model catalog refreshed: %s", ", ".join(f"{p}={len(m)}" for p, m in catalog.items()))
         return True
 
