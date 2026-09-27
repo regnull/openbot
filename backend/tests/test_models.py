@@ -87,3 +87,13 @@ async def test_migrations_create_schema(tmp_path):
     assert "default_bot_actor_id" in cols
     assert "working_directory" in cols
     assert "icon" in bot_cols
+
+
+async def test_migration_creates_model_catalog_table(tmp_path):
+    url = f"sqlite+aiosqlite:///{tmp_path}/m.db"
+    await run_migrations(url)
+    engine = make_engine(url)
+    async with engine.connect() as conn:
+        cols = await conn.run_sync(lambda c: {col["name"] for col in inspect(c).get_columns("model_catalog")})
+    await engine.dispose()
+    assert cols == {"provider", "models", "fetched_at"}

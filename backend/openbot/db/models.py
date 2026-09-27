@@ -273,3 +273,11 @@ class AppSetting(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[object] = mapped_column(JSON, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class ModelCatalogRow(Base):
+    """One provider's slice of the models.dev catalog, already filtered and normalized (see runtime/model_catalog.py)."""
+    __tablename__ = "model_catalog"
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    models: Mapped[list] = mapped_column(JSON, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
