@@ -216,7 +216,7 @@ async def test_purge_cancels_the_waiting_run_and_the_queued_mail(client, service
 
 async def test_purge_cancels_a_live_run(client, services, scripts):
     def slow():
-        time.sleep(1.5)          # runs in the model's executor thread, so the loop (and the purge) keep going
+        time.sleep(5)            # runs in the model's executor thread, so the loop (and the purge) keep going
         yield ai("late")
 
     scripts["eng"] = slow()
