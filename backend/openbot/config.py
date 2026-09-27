@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Shared regex for validating Telegram Bot API tokens (format: <bot_id>:<token>).
@@ -42,7 +42,12 @@ class Settings(BaseSettings):
     # MCP servers (docs/superpowers/specs/2026-09-17-mcp-design.md): Claude Code's mcpServers file; PUBLIC_URL builds
     # the OAuth redirect URI; credentials are Fernet-encrypted with MCP_TOKEN_KEY, or a key generated once into the file.
     mcp_config: Path = Path("./mcp.json")
-    public_url: str = "http://127.0.0.1:8000"
+    # PUBLIC_URL is the canonical server origin for browser redirects. OPENBOT_URL is accepted as
+    # the deployment-facing alias used by Electron/hosted environments; PUBLIC_URL wins when both exist.
+    public_url: str = Field(
+        default="http://127.0.0.1:8000",
+        validation_alias=AliasChoices("PUBLIC_URL", "OPENBOT_URL"),
+    )
     # The one key protecting every secret stored in the database (provider keys, MCP headers/env, OAuth
     # tokens): SECRET_KEY, or generated once into SECRET_KEY_FILE. MCP_TOKEN_KEY* are the older names.
     secret_key: str | None = None
@@ -100,6 +105,19 @@ class Settings(BaseSettings):
         if "database_url" not in self.model_fields_set:
             self.database_url = f"sqlite+aiosqlite:///{root / '.openbot' / 'openbot.db'}"
         return self
+
+
+    @model_validator(mode="before")
+    @classmethod
+    def _prefer_deployment_url_over_local_default(cls, values):
+        """Do not let a copied local .env mask the URL of a hosted/Electron deployment."""
+        if isinstance(values, dict):
+            public = values.get("PUBLIC_URL", values.get("public_url"))
+            deployment = values.get("OPENBOT_URL")
+            if deployment and (public is None or public == "http://127.0.0.1:8000"):
+                values = dict(values)
+                values["PUBLIC_URL"] = deployment
+        return values
 
     @field_validator("cors_origins", "webhook_retry_delays", "openrouter_provider_order", mode="before")
     @classmethod

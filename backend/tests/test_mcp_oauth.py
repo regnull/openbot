@@ -4,7 +4,13 @@ import asyncio
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
-from openbot.mcp.oauth import DbTokenStorage, PendingFlows, load_or_create_key
+from openbot.mcp.oauth import (
+    CALLBACK_PATH,
+    DbTokenStorage,
+    PendingFlows,
+    build_oauth_provider,
+    load_or_create_key,
+)
 
 
 def test_key_is_generated_once_and_kept_private(tmp_path):
@@ -45,6 +51,18 @@ async def test_pending_flow_records_the_url_and_the_callback_resolves_it():
     assert await asyncio.wait_for(waiter, 1) == ("the-code", "abc123")
     assert flows.authorization_url("linear") is None                 # consumed
     assert flows.complete("unknown", code="x") is False
+
+
+
+def test_oauth_provider_uses_configured_application_origin_for_callback(services, tmp_path):
+    key = load_or_create_key(None, tmp_path / "k.key")
+    store = DbTokenStorage(services.session_factory, server="linear", key=key)
+    provider = build_oauth_provider(
+        "https://mcp.linear.app/mcp", "https://openbot.example.test", store, PendingFlows(), "linear"
+    )
+    assert [str(uri) for uri in provider.context.client_metadata.redirect_uris] == [
+        f"https://openbot.example.test{CALLBACK_PATH}"
+    ]
 
 
 async def test_pending_flow_can_fail_with_an_error_from_the_authorization_server():

@@ -121,6 +121,21 @@ def test_without_root_directory_defaults_are_unchanged(monkeypatch):
 
 
 
+def test_public_url_accepts_hosted_openbot_url_alias(monkeypatch):
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    monkeypatch.setenv("OPENBOT_URL", "https://openbot.example.test/workspace")
+    settings = Settings(_env_file=None)
+    assert settings.public_url == "https://openbot.example.test/workspace"
+
+
+def test_public_url_takes_precedence_over_openbot_url_alias(monkeypatch):
+    monkeypatch.setenv("PUBLIC_URL", "https://canonical.example.test")
+    monkeypatch.setenv("OPENBOT_URL", "https://fallback.example.test")
+    settings = Settings(_env_file=None)
+    assert settings.public_url == "https://canonical.example.test"
+
+
+
 def test_sqlite_parent_is_created_for_default_and_override(tmp_path):
     from openbot.db.session import ensure_sqlite_parent
 
