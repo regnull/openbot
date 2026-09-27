@@ -477,6 +477,31 @@ class SettingOut(BaseModel):
     is_set: bool
 
 
+class CatalogModelOut(BaseModel):
+    """One catalog row as the picker sees it; the builtin fallback fills only id and name."""
+    id: str
+    name: str
+    family: str = ""
+    description: str = ""
+    reasoning: bool = False
+    effort_levels: list[str] = []
+    image_input: bool = False
+    context: int | None = None
+    output: int | None = None
+    cost_input: float | None = None
+    cost_output: float | None = None
+    release_date: str = ""
+    status: str | None = None
+
+
+class ModelsOut(BaseModel):
+    provider: str
+    source: Literal["catalog", "builtin"]
+    stale: bool
+    fetched_at: datetime | None
+    models: list[CatalogModelOut]
+
+
 class DatabaseLocationOut(BaseModel):
     location: str
 

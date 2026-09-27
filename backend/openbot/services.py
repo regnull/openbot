@@ -23,6 +23,7 @@ class Services:
     reflector: Any = None      # MemoryReflector
     model_factory: Callable[[Any], Any] | None = None  # (Actor) -> BaseChatModel
     http_client: Any = None    # httpx.AsyncClient for webhook delivery
+    model_catalog: Any = None  # runtime.model_catalog.ModelCatalog (models.dev cache)
     mcp: Any = None            # McpManager
     secrets: Any = None        # runtime.secrets.SecretBox for secrets stored in the database
     langgraph_stack: Any = None  # AsyncExitStack holding the checkpointer/store; replaced when embeddings change

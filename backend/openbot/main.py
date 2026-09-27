@@ -30,6 +30,7 @@ from openbot.api import (
     tools,
 )
 from openbot.api import mcp as mcp_api
+from openbot.api import models as models_api
 from openbot.api import settings as settings_api
 from openbot.api import setup as setup_api
 from openbot.api import telegram as telegram_api
@@ -49,6 +50,7 @@ from openbot.runtime import activity, app_settings
 from openbot.runtime.actors import ActorSystem
 from openbot.runtime.bus import EventBus
 from openbot.runtime.memory import MemoryReflector
+from openbot.runtime.model_catalog import ModelCatalog
 from openbot.runtime.persistence import open_langgraph_backends
 from openbot.runtime.providers import chat_model, embeddings
 from openbot.runtime.runner import Runner
@@ -86,6 +88,7 @@ async def build_services(settings: Settings) -> Services:
     services.reflector = MemoryReflector(services, settings.memory_reflection_delay)
     services.runner = Runner(services)
     services.http_client = httpx.AsyncClient(timeout=15)
+    services.model_catalog = ModelCatalog(services.session_factory, services.http_client)
     services.actors = ActorSystem(services, settings.max_concurrent_runs)
     services.scheduler = Scheduler(services)
     services._owned_resources = [engine, stack, services.http_client]
@@ -118,6 +121,9 @@ async def close_services(services: Services) -> None:
 async def start_background(services: Services) -> None:
     if not services.env_defaults:                      # services built by hand (tests) skip build_services
         await app_settings.apply_stored_overrides(services)
+    if services.model_catalog is not None:
+        # First fetch (or a stale refresh) starts at boot, so the picker is populated by the first page load.
+        await services.model_catalog.get("openrouter")
     await ensure_human_actor(services)
     await ensure_cron_actor(services)
     if services.settings.seed_demo_bots:
@@ -163,6 +169,8 @@ async def stop_background(services: Services) -> None:
         await services.actors.stop()
     if services.mcp is not None:
         await services.mcp.stop()
+    if services.model_catalog is not None:
+        await services.model_catalog.close()
     if services.reflector is not None:
         # Reflection is debounced by MEMORY_REFLECTION_DELAY (30s by default), so on a normal
         # restart the last run's memories are still sitting in the pending map. Run them now rather
@@ -295,7 +303,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
     for r in (actors.router, bots.router, threads.router, messages.router, inbox.router, runs.router, tools.router,
-              providers.router, events.router, settings_api.router, mcp_api.router, setup_api.router,
+              providers.router, models_api.router, events.router, settings_api.router, mcp_api.router, setup_api.router,
               workspace_api.router, activity_api.router, scheduled.router):
         api.include_router(r)
     app.include_router(public)
