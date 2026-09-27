@@ -75,6 +75,11 @@ it("keeps free text as the value and notes it is not in the catalog", async () =
 it("picks with the keyboard and closes; Escape closes without picking", async () => {
   await show();
   await focus();
+  // No row is highlighted by default (the empty value matches nothing), so Enter does nothing yet.
+  await key("Enter");
+  expect(last).toBe("");
+  expect(el.querySelector("[role=listbox]")).not.toBeNull();
+  await key("ArrowDown");
   await key("ArrowDown");
   await key("Enter");
   expect(last).toBe("claude-haiku-4-5");
@@ -83,6 +88,42 @@ it("picks with the keyboard and closes; Escape closes without picking", async ()
   await key("Escape");
   expect(el.querySelector("[role=listbox]")).toBeNull();
   expect(last).toBe("claude-haiku-4-5");
+});
+
+it("opening with an existing value already in the catalog lists the whole catalog and highlights that row", async () => {
+  await show({ initial: "claude-haiku-4-5" });
+  await focus();
+  expect(options()).toEqual(["claude-opus-5-5", "claude-haiku-4-5"]);
+  const rows = el.querySelectorAll("[role=option]");
+  expect(rows[0].getAttribute("aria-selected")).toBe("false");
+  expect(rows[1].getAttribute("aria-selected")).toBe("true");
+});
+
+it("typing an exact id then Enter keeps that id and closes", async () => {
+  await show();
+  await focus();
+  await type("claude-haiku-4-5");
+  await key("Enter");
+  expect(last).toBe("claude-haiku-4-5");
+  expect(el.querySelector("[role=listbox]")).toBeNull();
+});
+
+it("typing a prefix of several ids then Enter does not change the value", async () => {
+  await show();
+  await focus();
+  await type("claude-");
+  expect(options()).toEqual(["claude-opus-5-5", "claude-haiku-4-5"]);
+  await key("Enter");
+  expect(last).toBe("claude-");
+  expect(el.querySelector("[role=listbox]")).not.toBeNull();
+});
+
+it("mousedown on the listbox container itself does not close the panel", async () => {
+  await show();
+  await focus();
+  const listbox = el.querySelector("[role=listbox]")!;
+  await act(async () => { listbox.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })); });
+  expect(el.querySelector("[role=listbox]")).not.toBeNull();
 });
 
 it("picks with the mouse, shows cost and badges, and the chips narrow the list", async () => {

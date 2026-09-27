@@ -36,16 +36,29 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   const models = useQuery({ queryKey: ["models", provider], queryFn: () => Api.getModels(provider), staleTime: 5 * 60_000 });
   const unconfigured = models.data !== undefined && !models.data.configured;
   const [open, setOpen] = useState(false);
-  const [sel, setSel] = useState(0);
+  const [query, setQuery] = useState("");
+  const [sel, setSel] = useState(-1);
   const [reasoning, setReasoning] = useState(false);
   const [vision, setVision] = useState(false);
   const [sort, setSort] = useState<ModelSort>("newest");
   const listId = useId();
   const all = useMemo(() => withSuggested(models.data?.models ?? [], suggested), [models.data, suggested]);
-  const groups = useMemo(() => groupModels(filterModels(all, { text: value, reasoning, vision }), suggested, suggestedLabel, sort),
-    [all, value, reasoning, vision, sort, suggested, suggestedLabel]);
+  const groups = useMemo(() => groupModels(filterModels(all, { text: query, reasoning, vision }), suggested, suggestedLabel, sort),
+    [all, query, reasoning, vision, sort, suggested, suggestedLabel]);
   const flat = useMemo(() => groups.flatMap((g) => g.models), [groups]);
-  const highlight = Math.min(sel, Math.max(flat.length - 1, 0));
+  // The highlight defaults to the row whose id exactly matches the field's value (or none), and is put
+  // back there whenever the filtered list changes underneath it (typing, a chip, sort, or reopening).
+  // Callers often pass a fresh `suggested` array each render (e.g. a default parameter, or `x ?? []`),
+  // so `flat` gets a new identity even when its contents haven't changed; compare a content key instead
+  // of the array itself, or this state adjustment during render would loop forever. See
+  // https://react.dev/learn/you-might-not-need-an-effect for the pattern (adjusting state during render
+  // skips painting the stale highlight from the previous list rather than fixing it up one frame later).
+  const flatKey = flat.map((m) => m.id).join("\u0000");
+  const [seenFlatKey, setSeenFlatKey] = useState(flatKey);
+  const [seenOpen, setSeenOpen] = useState(open);
+  if (flatKey !== seenFlatKey) { setSeenFlatKey(flatKey); setSel(flat.findIndex((m) => m.id === value)); }
+  if (open !== seenOpen) { setSeenOpen(open); if (open) setSel(flat.findIndex((m) => m.id === value)); }
+  const highlight = sel < 0 ? -1 : Math.min(sel, Math.max(flat.length - 1, 0));
   const known = value === "" || all.some((m) => m.id === value);
   const installed = provider === "ollama" ? new Set(suggested) : null;
   const pick = (m: CatalogModel) => { onChange(m.id); setOpen(false); };
@@ -53,20 +66,21 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   return (
     <div className="relative">
       <Input role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list" autoComplete="off" spellCheck={false}
+        aria-activedescendant={highlight >= 0 ? `${listId}-${highlight}` : undefined}
         id={id} required={required} value={value} className={`font-mono ${className}`}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); setSel(0); }}
-        onFocus={() => setOpen(true)}
+        onChange={(e) => { const v = e.target.value; onChange(v); setQuery(v); setOpen(true); }}
+        onFocus={() => { setOpen(true); setQuery(""); }}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
-          if (!open) { if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } return; }
-          if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, flat.length - 1)); }
+          if (!open) { if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setQuery(""); } return; }
+          if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => (s < 0 ? 0 : Math.min(s + 1, flat.length - 1))); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
-          else if (e.key === "Enter") { if (flat[highlight]) { e.preventDefault(); pick(flat[highlight]); } }
+          else if (e.key === "Enter") { if (highlight >= 0 && flat[highlight]) { e.preventDefault(); pick(flat[highlight]); } }
           else if (e.key === "Escape" || e.key === "Tab") { setOpen(false); }
         }} />
       {!known && !models.isLoading && !unconfigured && <div className="mt-1 font-sans text-[11px] text-faint">Not in the catalog; sent to the provider as typed.</div>}
       {open && (
-        <div id={listId} role="listbox" aria-label="Models"
+        <div id={listId} role="listbox" aria-label="Models" onMouseDown={(e) => e.preventDefault()}
           className="absolute left-0 right-0 top-full z-10 mt-1 max-h-80 overflow-y-auto rounded-ui border border-line bg-surface py-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
           {unconfigured ? (
             <div className="px-3 py-2 font-sans text-[13px] text-muted">{notConfiguredText(provider)}</div>
@@ -90,7 +104,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
                     const i = flat.indexOf(m);
                     const cost = formatCost(m);
                     return (
-                      <div key={m.id} role="option" aria-selected={i === highlight} onMouseDown={(e) => { e.preventDefault(); pick(m); }} onMouseEnter={() => setSel(i)}
+                      <div key={m.id} id={`${listId}-${i}`} role="option" aria-selected={i === highlight} onMouseDown={(e) => { e.preventDefault(); pick(m); }} onMouseEnter={() => setSel(i)}
                         className={`cursor-pointer px-3 py-1.5 ${i === highlight ? "bg-sunken" : ""}`}>
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="font-mono text-[13px] text-fg">{m.id}</span>

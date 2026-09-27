@@ -52,15 +52,9 @@ it("renders the default bot model as an OpenRouter catalog picker and saves the 
   expect(combobox()!.value).toBe("openai/gpt-4o-mini");
   expect(Api.getModels).toHaveBeenCalledWith("openrouter");
 
-  // ModelPicker filters its dropdown by substring-matching the field's current text (the selected
-  // value) against the catalog (see filterModels in ../lib/modelCatalog.ts), so reopening it without
-  // changing the text would filter the single mocked catalog entry out forever. Clear the field first,
-  // the way a user would to browse the catalog (same technique ModelPicker.test.tsx's `type` helper uses).
-  await act(async () => {
-    combobox()!.focus();
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(combobox()!, "");
-    combobox()!.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  // Focusing the combobox opens the panel over the whole catalog (it no longer filters by the field's
+  // current value), so the picker lists z-ai/glm-5.3-flash even though the field still holds the saved id.
+  await act(async () => { combobox()!.focus(); });
   await until(() => el.querySelector("[role=option]") !== null);
   await act(async () => { el.querySelector("[role=option]")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })); });
   expect(combobox()!.value).toBe("z-ai/glm-5.3-flash");
