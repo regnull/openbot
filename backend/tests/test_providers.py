@@ -243,3 +243,12 @@ def test_web_search_is_disabled_by_default_for_every_supported_provider(provider
     if provider == "openrouter":
         assert not (model_instance.extra_body or {}).get("plugins")
 
+
+def test_reasoning_effort_passes_through_to_anthropic():
+    """Same knob as the OpenAI-compatible path: ChatAnthropic maps it to output_config.effort."""
+    m = chat_model(BotProfile(provider="anthropic", model="claude-opus-5-5", model_settings={"reasoning_effort": "low"}),
+                   s(anthropic_api_key="k"))
+    assert isinstance(m, ChatAnthropic) and m.reasoning_effort == "low"
+    m = chat_model(BotProfile(provider="anthropic", model="claude-opus-5-5", model_settings={}), s(anthropic_api_key="k"))
+    assert m.reasoning_effort is None
+

@@ -45,6 +45,16 @@ class ActorUpdate(BaseModel):
     webhook_secret: str | None = None
 
 
+def validate_model_settings(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Only the type is checked here: which effort values a model accepts is the provider's call, and a
+    user may type a model the catalog does not know."""
+    if value is not None and "reasoning_effort" in value:
+        effort = value["reasoning_effort"]
+        if not isinstance(effort, str) or not effort.strip():
+            raise ValueError("model_settings.reasoning_effort must be a non-empty string")
+    return value
+
+
 class BotCreate(BaseModel):
     handle: str = Field(pattern=HANDLE_RE)
     name: str = Field(min_length=1, max_length=120)
@@ -71,6 +81,11 @@ class BotCreate(BaseModel):
             raise ValueError("model is required unless provider is \"auto\"")
         return value
 
+    @field_validator("model_settings")
+    @classmethod
+    def _model_settings(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return validate_model_settings(value) or {}
+
 
 class BotUpdate(BaseModel):
     handle: str | None = Field(default=None, pattern=HANDLE_RE)
@@ -90,6 +105,11 @@ class BotUpdate(BaseModel):
     @classmethod
     def validate_icon(cls, value: str | None) -> str | None:
         return validate_bot_icon(value) if value is not None else None
+
+    @field_validator("model_settings")
+    @classmethod
+    def _model_settings(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        return validate_model_settings(value)
 
 
 class BotOut(BaseModel):

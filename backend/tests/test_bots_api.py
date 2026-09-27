@@ -240,3 +240,14 @@ async def test_purge_cancels_a_live_run(client, services, scripts):
     assert run.status == "cancelled"
     rows = (await client.get(f"/api/v1/bots/{bot['id']}/inbox")).json()
     assert [row["status"] for row in rows] == ["cancelled"]
+
+
+async def test_reasoning_effort_must_be_a_non_empty_string(client):
+    assert (await client.post("/api/v1/bots", json={**BOT, "handle": "e1", "model_settings": {"reasoning_effort": 3}})).status_code == 422
+    assert (await client.post("/api/v1/bots", json={**BOT, "handle": "e2", "model_settings": {"reasoning_effort": ""}})).status_code == 422
+    r = await client.post("/api/v1/bots", json={**BOT, "handle": "e3", "model_settings": {"reasoning_effort": "low"}})
+    assert r.status_code == 201, r.text
+    assert r.json()["model_settings"] == {"reasoning_effort": "low"}
+    assert (await client.patch(f"/api/v1/bots/{r.json()['id']}", json={"model_settings": {"reasoning_effort": []}})).status_code == 422
+    r2 = await client.patch(f"/api/v1/bots/{r.json()['id']}", json={"model_settings": {}})
+    assert r2.status_code == 200 and r2.json()["model_settings"] == {}

@@ -135,6 +135,9 @@ def provider_chat_model(
         from langchain_anthropic import ChatAnthropic
 
         kwargs.setdefault("max_tokens", 8192)
+        if "reasoning_effort" in ms:
+            # Same knob as the OpenAI-compatible path below; ChatAnthropic maps it to output_config.effort.
+            kwargs["reasoning_effort"] = ms["reasoning_effort"]
         return ChatAnthropic(model=model, api_key=key, **kwargs)
 
     from langchain_openai import ChatOpenAI
