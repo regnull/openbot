@@ -6,6 +6,8 @@ import { Badge, Button, Card, Dialog, ErrorText, Field, Hint, Input, PageTitle, 
 import { dismissSaveNotification, notifySave, useSaveMutation } from "../lib/saveNotifications";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
 import { formatArgs, formatKeyValues, mcpActions, mcpInFlight, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer, type McpTransport } from "../lib/mcpServers";
+import { ChevronDownIcon, ChevronRightIcon } from "../components/icons";
+import { groupTools, toolLabel } from "../lib/toolGroups";
 
 const emptyExt = { handle: "", name: "", webhook_url: "", webhook_secret: "" };
 const Code = ({ children }: { children: React.ReactNode }) => <code className="rounded-ui border border-line bg-sunken px-1 text-[11px]">{children}</code>;
@@ -16,6 +18,7 @@ export default function SettingsPage() {
   const tools = useQuery({ queryKey: ["tools"], queryFn: Api.listTools });
   const actors = useQuery({ queryKey: ["actors"], queryFn: Api.listActors });
   const [key, setKey] = useState(getApiKey());
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [keyError, setKeyError] = useState<Error | null>(null);
   const [ext, setExt] = useState(emptyExt);
   const createExt = useSaveMutation({
@@ -68,16 +71,7 @@ export default function SettingsPage() {
         </form>
       </Card>
 
-      <Card className="space-y-3">
-        <SectionTitle>Tools</SectionTitle>
-        <ErrorText error={tools.error} />
-        {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-danger">{e.file}: {e.error}</p>)}
-        <ul className="divide-y divide-line">
-          {tools.data?.tools.map((t) => (
-            <li key={t.name} className="flex flex-wrap items-baseline gap-x-3 py-1.5 text-[13px]"><span>{t.name}</span> <span className="min-w-0 flex-1 font-sans text-xs text-muted">{t.description}</span> <span className="text-[11px] text-faint">{t.source}</span></li>
-          ))}
-        </ul>
-      </Card>
+      <ToolsCard tools={tools} openGroups={openGroups} setOpenGroups={setOpenGroups} />
 
       <Card className="space-y-3">
         <SectionTitle>API key</SectionTitle>
@@ -101,6 +95,60 @@ export default function SettingsPage() {
   );
 }
 
+
+function ToolsCard({ tools, openGroups, setOpenGroups }: { tools: ReturnType<typeof useQuery<{ tools: import("../api/types").ToolInfo[]; errors: { file: string; error: string }[] }>>; openGroups: Record<string, boolean>; setOpenGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>> }) {
+  const grouped = groupTools(tools.data?.tools ?? []);
+  return (
+    <Card className="space-y-3">
+      <SectionTitle>Tools</SectionTitle>
+      <ErrorText error={tools.error} />
+      {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-danger">{e.file}: {e.error}</p>)}
+      {grouped.flat.length > 0 && (
+        <ul className="divide-y divide-line">
+          {grouped.flat.map((t) => (
+            <li key={t.name} className="flex flex-wrap items-baseline gap-x-3 py-1.5 text-[13px]">
+              <span>{t.name}</span>
+              <span className="min-w-0 flex-1 font-sans text-xs text-muted">{t.description}</span>
+              <span className="text-[11px] text-faint">{t.source}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {grouped.servers.length > 0 && (
+        <div className="divide-y divide-line">
+          {grouped.servers.map((g) => {
+            const expanded = !!openGroups[g.server];
+            return (
+              <div key={g.server} className="py-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 text-left"
+                  aria-expanded={expanded}
+                  onClick={() => setOpenGroups((o) => ({ ...o, [g.server]: !expanded }))}
+                >
+                  <span className="text-[13px]">{g.server}</span>
+                  <span className="text-xs text-muted">{g.tools.length} tools</span>
+                  <span className="ml-auto text-faint">{expanded ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}</span>
+                </button>
+                {expanded && (
+                  <div className="ml-6 mt-1 divide-y divide-line/60">
+                    {g.tools.map((t) => (
+                      <li key={t.name} className="flex flex-wrap items-baseline gap-x-3 py-1.5 text-[13px] list-none">
+                        <span>{toolLabel(g.server, t.name)}</span>
+                        <span className="min-w-0 flex-1 font-sans text-xs text-muted">{t.description}</span>
+                        <span className="text-[11px] text-faint">{t.source}</span>
+                      </li>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function RuntimeSettings() {
   const settings = useQuery({ queryKey: ["settings"], queryFn: Api.getSettings });
