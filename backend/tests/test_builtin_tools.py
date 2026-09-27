@@ -211,3 +211,27 @@ def test_home_relative_core_web_and_rejects_traversal(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="cannot contain"):
         validate_workspace_directory(tmp_path / "workspace", "~/../outside")
     assert thread_workspace_root(tmp_path / "workspace", "~/work/core-web") == target
+
+
+async def test_workspace_tools_keep_out_of_the_openbot_state_dir(tmp_path):
+    """In root-directory mode the live SQLite files live at <workspace>/.openbot. Opening them from
+    the backend process (read_file, search_code's walk) drops the process's POSIX locks on the WAL
+    index, after which a `sqlite3` CLI the bot runs sees itself as the only connection, checkpoints
+    under the backend and every open connection reports "database disk image is malformed"."""
+    from openbot.tools.builtin.search import search_code
+    state = tmp_path / ".openbot"
+    state.mkdir()
+    (state / "openbot.db-shm").write_text("needle in the wal index\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("needle = 1\n")
+    r = rt(tmp_path)
+    out = await search_code.ainvoke({"pattern": "needle", "runtime": r})
+    assert "src/a.py:1: needle = 1" in out and ".openbot" not in out
+    assert (await read_file.ainvoke({"path": ".openbot/openbot.db-shm", "runtime": r})).startswith("error:")
+    assert (await write_file.ainvoke({"path": ".openbot/x", "content": "y", "runtime": r})).startswith("error:")
+    assert ".openbot" not in await list_files.ainvoke({"runtime": r, "depth": 2})
+    assert "openbot.db-shm" not in await list_files.ainvoke({"runtime": r, "path": ".openbot"})
+    with pytest.raises(ValueError, match="OpenBot state directory"):
+        resolve_in_workspace(tmp_path.resolve(), ".openbot/openbot.db")
+    with pytest.raises(ValueError, match="OpenBot state directory"):
+        resolve_in_workspace(tmp_path.resolve(), str(state / "openbot.db"))

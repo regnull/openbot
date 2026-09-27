@@ -3,7 +3,7 @@ import os
 
 from langchain.tools import ToolRuntime, tool
 
-from openbot.tools.builtin.workspace import cap, resolve_in_workspace
+from openbot.tools.builtin.workspace import STATE_DIR, cap, resolve_in_workspace
 from openbot.tools.context import RunContext
 
 
@@ -171,14 +171,14 @@ async def patch_file(
 @tool
 async def list_files(runtime: ToolRuntime[RunContext], path: str = ".", depth: int = 2) -> str:
     """List files under a directory (relative to the workspace root) up to `depth` levels.
-    Skips .git, node_modules, .venv and __pycache__."""
+    Skips .git, node_modules, .venv, __pycache__ and OpenBot's own .openbot state directory."""
     try:
         root = resolve_in_workspace(runtime.context.workspace_root, path)
     except ValueError as e:
         return f"error: {e}"
     if not root.exists():
         return f"error: {path} does not exist"
-    skip = {".git", "node_modules", ".venv", "__pycache__", "dist"}
+    skip = {".git", "node_modules", ".venv", "__pycache__", "dist", STATE_DIR}
     lines: list[str] = []
     base_depth = len(root.parts)
     for dirpath, dirnames, filenames in os.walk(root):

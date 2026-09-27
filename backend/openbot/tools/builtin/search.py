@@ -5,11 +5,11 @@ from pathlib import Path
 
 from langchain.tools import ToolRuntime, tool
 
-from openbot.tools.builtin.workspace import cap, resolve_in_workspace
+from openbot.tools.builtin.workspace import STATE_DIR, cap, resolve_in_workspace
 from openbot.tools.context import RunContext
 
 SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next",
-             ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage", ".turbo"}
+             ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage", ".turbo", STATE_DIR}
 MAX_FILE_BYTES = 2_000_000
 
 

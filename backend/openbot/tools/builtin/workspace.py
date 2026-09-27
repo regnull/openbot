@@ -3,6 +3,12 @@ from pathlib import Path
 
 OUTPUT_CAP = 8000
 HEAD_SHARE = 0.7
+# Where OpenBot keeps its own state under a root directory (see config.py): the live SQLite files.
+# No in-process tool may open anything in it. Opening the WAL index (openbot.db-shm) from the backend
+# process, even read-only, drops the process's POSIX locks on it; the next `sqlite3` a bot runs then
+# takes itself for the only connection, checkpoints under the backend, and every open connection
+# fails with "database disk image is malformed" (or SIGBUS when the shm is truncated under an mmap).
+STATE_DIR = ".openbot"
 
 
 def expand_path(path: str | None) -> str | None:
@@ -19,6 +25,8 @@ def resolve_in_workspace(root: Path, path: str | None) -> Path:
     target = Path(expanded).resolve() if expanded and Path(expanded).is_absolute() else (root / expanded).resolve() if expanded else root
     if target != root and root not in target.parents:
         raise ValueError(f"path escapes workspace root: {path}")
+    if STATE_DIR in target.relative_to(root).parts:
+        raise ValueError(f"path is inside the OpenBot state directory ({STATE_DIR}), which tools must not touch: {path}")
     return target
 
 
