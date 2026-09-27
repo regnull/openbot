@@ -461,7 +461,6 @@ class McpCatalogEntryOut(BaseModel):
 class McpCatalogInstall(BaseModel):
     name: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,40}$")
     env: dict[str, str] = {}
-    enabled: bool = False
 
 
 class SettingOut(BaseModel):

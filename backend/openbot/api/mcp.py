@@ -66,7 +66,7 @@ async def install_catalog_entry(entry_id: str, body: McpCatalogInstall, services
         raise HTTPException(404, "unknown MCP catalog entry")
     if mgr.has(body.name) or await mgr.store.raw(body.name) is not None:
         raise HTTPException(409, f"an MCP server named {body.name!r} already exists")
-    spec = {"command": entry["command"], "args": entry["args"], "env": body.env, "enabled": body.enabled}
+    spec = {"command": entry["command"], "args": entry["args"], "env": body.env, "enabled": False}
     try:
         await mgr.store.upsert({"name": body.name, **spec})
     except McpKeyError as e:

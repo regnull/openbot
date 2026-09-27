@@ -16,6 +16,14 @@ def test_catalog_contains_requested_examples():
 
 
 def test_catalog_commands_match_documented_runners():
+    by_id = {entry["id"]: entry for entry in CATALOG}
+    assert by_id["serena"]["command"] == "uvx"
+    assert by_id["serena"]["args"] == [
+        "--from", "serena-agent", "serena", "start-mcp-server", "--project-from-cwd"
+    ]
+    assert by_id["aws"]["command"] == "uvx"
+    assert by_id["aws"]["args"] == ["awslabs.aws-documentation-mcp-server@latest"]
+
     for entry in CATALOG:
         if entry["command"] == "npx":
             assert entry["args"][:1] == ["-y"]
@@ -43,7 +51,10 @@ async def test_catalog_install_is_disabled_and_rejects_unknown_or_duplicate(sett
     async with LifespanManager(app), AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         entries = (await client.get("/api/v1/mcp/catalog")).json()
         assert len(entries) >= 30
-        response = await client.post("/api/v1/mcp/catalog/time/install", json={"name": "catalog-time"})
+        response = await client.post(
+            "/api/v1/mcp/catalog/time/install",
+            json={"name": "catalog-time", "enabled": True},
+        )
         assert response.status_code == 201, response.text
         installed = response.json()
         assert installed["enabled"] is False
