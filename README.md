@@ -479,6 +479,19 @@ default bot model if an OpenRouter key is set, else the first configured provide
 as keys are added, removed, or changed. Pick an explicit provider/model per bot in the bot editor to
 opt out for that bot.
 
+The model pickers in the bot editor and in Settings list a catalog fetched from
+[models.dev](https://models.dev) for OpenAI, Anthropic, OpenRouter and Ollama (for Ollama: the models
+installed on your server first, then the models Ollama supports). Only models the agent loop can use
+are listed: tool calling, text in and out, not deprecated, at least a 32k context. Each row shows the
+price per million tokens, the context window and whether it supports reasoning, effort levels and
+images. The catalog is cached in the database and refreshed in the background once it is a day old;
+before the first fetch (or offline) the picker falls back to a short builtin list. Providers without
+a key (or Ollama without a base URL) list no models; their models served through OpenRouter still
+appear under OpenRouter. Any model id can still be typed by hand, whether or not the catalog knows it.
+
+For models that declare reasoning effort levels, the bot editor offers an **Effort** setting (stored
+as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and Anthropic models.
+
 ### `.env`
 
 <details>
@@ -519,7 +532,7 @@ name, if set, is the default the page shows and the value a reset returns to.
 | Providers | `openrouter_api_key`, `openai_api_key`, `anthropic_api_key`, `xai_api_key` | Enable the respective provider. Secret: encrypted at rest, masked in the API. |
 | Providers | `ollama_base_url`, `ollama_model` | A local Ollama server (e.g. `http://localhost:11434`) enables the `ollama` provider; the bot editor lists the models installed there. Bots on `ollama` keep their model even when an OpenRouter key is set. |
 | Embeddings | `embedding_model`, `embedding_dims` | `provider:model` for semantic memory search (`openrouter:openai/text-embedding-3-small`/1536 using the OpenRouter key, `openai:text-embedding-3-small`/1536, `ollama:nomic-embed-text`/768). Empty turns semantic search off. Applies immediately: the memory store is reopened. |
-| Run limits | `max_model_calls_per_run` (60), `max_bot_hops` (20) | Model turns per run before the agent stops with a notice (a bot can lower it in `model_settings.max_model_calls`; the seeded Chief of Staff uses 6); bot-to-bot mention chain limit per thread. `model_settings` also accepts `reasoning_effort`, `temperature`, `max_tokens`. |
+| Run limits | `max_model_calls_per_run` (60), `max_bot_hops` (20) | Model turns per run before the agent stops with a notice (a bot can lower it in `model_settings.max_model_calls`; the seeded Chief of Staff uses 6); bot-to-bot mention chain limit per thread. `model_settings` also accepts `reasoning_effort` (set from the Effort select for models that declare levels), `temperature`, `max_tokens`. |
 | Context | `tool_output_cap` (8000), `shell_output_cap` (4000) | Longest single tool result the model sees; shorter cap for `run_shell` so dumping files through the shell loses to `read_file` ranges. |
 | Context | `context_trigger_tokens` (40000), `context_clear_at_least` (10000) | Once a run's messages pass the trigger, tool results from turns before the last two, and their call arguments, become a placeholder, oldest first; each clearing reclaims at least the second value so clearings are rare and the prompt cache stays warm. What the last two model turns fetched is never cleared. |
 | Context | `summary_trigger_tokens` (60000), `summary_keep_messages` (24) | Older history folds into one structured summary by the bot's own model once the run's messages pass the trigger. Measured on the messages alone: the system prompt and tool schemas are not counted. |
