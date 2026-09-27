@@ -4,7 +4,7 @@ const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { contentSecurityPolicy, isApprovedExternalUrl, isSameOrigin, originOf } = require("./security.cjs");
 const { appIconPath } = require("./icon.cjs");
-const { resolveApiOrigin } = require("./origin.cjs");
+const { parseBackendUrl, resolveApiOrigin } = require("./origin.cjs");
 const { APP_SCHEME, APP_URL, createAppProtocolHandler, schemePrivileges } = require("./scheme.cjs");
 const { UV_MISSING, backendLaunch, findUv } = require("./backend-launcher.cjs");
 
@@ -13,8 +13,9 @@ const backendPort = process.env.OPENBOT_BACKEND_PORT || "8000";
 const defaultUrl = isDevelopment ? "http://localhost:5173" : APP_URL;
 const appUrl = process.env.OPENBOT_URL || defaultUrl;
 const configuredOrigin = originOf(appUrl);
-const apiOrigin = resolveApiOrigin();
-const usesExternalBackend = Boolean(process.env.OPENBOT_URL || process.env.OPENBOT_API_URL);
+const cliBackendUrl = parseBackendUrl();
+const apiOrigin = resolveApiOrigin(undefined, cliBackendUrl);
+const usesExternalBackend = Boolean(cliBackendUrl || process.env.OPENBOT_URL || process.env.OPENBOT_API_URL);
 // Packaged: serve dist/ and proxy /api from app://openbot (see scheme.cjs). Registration has to
 // happen before "ready", and it is harmless when the app ends up loading Vite or OPENBOT_URL.
 const servesPackagedUi = appUrl === APP_URL;

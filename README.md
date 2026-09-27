@@ -107,6 +107,19 @@ by default; `make run` and the browser workflows keep it. The backend CLI itself
 `--include-llm-call-details` / `--exclude-llm-call-details`. To run the processes by hand instead,
 use `make backend`, `make frontend`, then `cd frontend && pnpm electron` (port 8000).
 
+The packaged or development Electron app also accepts a `--backend_url` command-line flag to
+point at a remote or alternative backend instead of the bundled one:
+
+```bash
+./OpenBot.app/Contents/MacOS/OpenBot --backend_url http://remote-host:8000
+OpenBot.exe --backend_url http://remote-host:8000        # Windows
+./OpenBot.AppImage --backend_url http://remote-host:8000  # Linux
+```
+
+When `--backend_url` is given the bundled backend is not started, and all API calls go to the
+specified URL.  Any trailing slashes are stripped.  If the flag is omitted the app falls back to
+its default behaviour (bundled backend or `OPENBOT_API_URL`/`OPENBOT_URL` environment variables).
+
 #### Building a desktop app locally
 
 ```bash

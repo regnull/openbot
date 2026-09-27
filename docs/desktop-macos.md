@@ -24,7 +24,7 @@ make app       # backend :8001 + Vite + Electron, with cleanup on Ctrl-C
 
 To check the status page, start Electron with `OPENBOT_URL` pointing at a port with nothing on it (for example `OPENBOT_URL=http://127.0.0.1:5999 pnpm --dir frontend electron`): the window shows the retry message, and loads the UI once something serves that URL.
 
-Browser workflows (`make dev`, `make run`) remain unchanged. `OPENBOT_URL` selects a remote deployment; `OPENBOT_API_URL` can override its API origin.
+Browser workflows (`make dev`, `make run`) remain unchanged. `OPENBOT_URL` selects a remote deployment; `OPENBOT_API_URL` can override its API origin. The packaged app also accepts `--backend_url <url>` on the command line, which takes precedence over both environment variables and disables the bundled backend.
 
 ## Signing and notarization
 

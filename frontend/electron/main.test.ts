@@ -127,10 +127,16 @@ describe("Electron packaged startup", () => {
     expect(builderSource).toContain("productName: OpenBot");
   });
 
-  it("skips bundled backend startup and readiness for explicit API or remote URLs", () => {
-    expect(mainSource).toContain("const usesExternalBackend = Boolean(process.env.OPENBOT_URL || process.env.OPENBOT_API_URL);");
+    it("skips bundled backend startup and readiness for explicit API, remote URLs, or --backend_url", () => {
+    expect(mainSource).toContain("const usesExternalBackend = Boolean(cliBackendUrl || process.env.OPENBOT_URL || process.env.OPENBOT_API_URL);");
     expect(mainSource).toContain("if (isDevelopment || usesExternalBackend) return;");
     expect(mainSource).toContain("if (isDevelopment || usesExternalBackend) return;\n  if (backendStartError) throw backendStartError;\n  const healthUrl");
+  });
+
+  it("parses --backend_url from the command line and passes it to resolveApiOrigin", () => {
+    expect(mainSource).toContain("const cliBackendUrl = parseBackendUrl();");
+    expect(mainSource).toContain("resolveApiOrigin(undefined, cliBackendUrl)");
+    expect(mainSource).toContain('const { parseBackendUrl, resolveApiOrigin } = require("./origin.cjs")');
   });
 
   it("quits on window-all-closed in development, including macOS", () => {
