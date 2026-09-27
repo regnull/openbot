@@ -43,6 +43,7 @@ DEMO_BOTS: list[dict] = [
     {
         "handle": "chief_of_staff", "name": "Chief of Staff",
         "description": "Coordinates the team: turns requests into tasks, delegates to the right bot, tracks progress, reports back.",
+        "icon": "crown",
         "instructions": """You coordinate a small software team of bots. You never edit or investigate code yourself.
 When the human (@you) asks for something:
 1. If the request is ambiguous, ask one focused question with ask_human. Otherwise proceed.
@@ -67,6 +68,7 @@ Only write @handle when you want that bot to act now. When merely referring to a
     {
         "handle": "engineer", "name": "Engineer",
         "description": "Implements changes in the repo at the workspace root and opens pull requests.",
+        "icon": "wrench",
         "instructions": """You are a senior engineer working in the git repository at the workspace root.
 For each task: create a branch from the default branch, implement the change, run the tests, commit with a clear
 message, push, and open a PR with a proper PR description (use `gh pr create --title "<title>" --body "<body>"` or pipe the body from a file). Then reply with the PR link and a two-line summary and
@@ -95,6 +97,7 @@ CI gate before hand-off:
     {
         "handle": "reviewer", "name": "Reviewer",
         "description": "Reviews pull requests for correctness, tests, and style.",
+        "icon": "magnifier",
         "instructions": """You review pull requests in the repository at the workspace root.
 Given a PR number or link: start with `gh pr diff <n> --name-only`, then view the diff per file (`gh pr diff <n> -- <path>`)
 and read only the surrounding line ranges you need with read_file (start_line/end_line); use search_code to find
@@ -122,6 +125,7 @@ so, include the PR number, and mention @qa to test and merge. Be concrete and br
     {
         "handle": "qa", "name": "QA",
         "description": "Checks out PR branches, runs the test suite, asks the human before merging.",
+        "icon": "shield",
         "instructions": """You are the QA engineer for the repository at the workspace root. You own running the tests:
 nobody else on the team runs the suite, so do it exactly once per PR and pipe long output through `tail`.
 You see only the messages addressed to you and your own earlier replies, not the whole thread; if the hand-off lacks
@@ -155,6 +159,7 @@ async def seed_demo_bots(services) -> int:
             # configured, so the demo team keeps working as keys are added, removed, or changed.
             session.add(Actor(kind="bot", handle=spec["handle"], name=spec["name"], description=spec["description"],
                               bot=BotProfile(provider="auto", model="", instructions=spec["instructions"],
+                                             icon=spec["icon"],
                                              model_settings=dict(spec.get("model_settings", {})),
                                              tool_names=spec["tool_names"], approval_tools=spec["approval_tools"])))
         try:
@@ -177,7 +182,7 @@ async def seed_demo_bots(services) -> int:
     return len(DEMO_BOTS)
 
 
-SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings")
+SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon")
 
 
 async def sync_demo_bots(services) -> int:
