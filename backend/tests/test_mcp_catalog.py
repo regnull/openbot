@@ -15,6 +15,19 @@ def test_catalog_contains_requested_examples():
     assert {"serena", "context7"} <= CATALOG_BY_ID.keys()
 
 
+def test_catalog_commands_match_documented_runners():
+    for entry in CATALOG:
+        if entry["command"] == "npx":
+            assert entry["args"][:1] == ["-y"]
+            assert len(entry["args"]) >= 2
+            assert entry["args"][1] not in {"@oraios/serena", "awslabs.mcp-server-aws-documentation"}
+        elif entry["command"] == "uvx":
+            assert entry["args"]
+            assert not entry["args"][0].startswith("@")
+        else:
+            raise AssertionError(f"Unsupported catalog runner: {entry['command']}")
+
+
 async def test_catalog_install_is_disabled_and_rejects_unknown_or_duplicate(settings, tmp_path):
     from asgi_lifespan import LifespanManager
     from httpx import ASGITransport, AsyncClient

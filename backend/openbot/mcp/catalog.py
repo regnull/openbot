@@ -31,6 +31,15 @@ def _npm(id: str, name: str, description: str, package: str, provider: str, sour
             "compatibility": compatibility or ["Requires Node.js and npx"]}
 
 
+def _uvx(id: str, name: str, description: str, package: str, provider: str, source_url: str,
+         credentials: list[str] | None = None, args: list[str] | None = None,
+         compatibility: list[str] | None = None) -> CatalogEntry:
+    return {"id": id, "name": name, "description": description, "provider": provider,
+            "source_url": source_url, "transport": "stdio", "command": "uvx",
+            "args": [package, *(args or [])], "required_credentials": credentials or [],
+            "compatibility": compatibility or ["Requires uv and Python"]}
+
+
 CATALOG: tuple[CatalogEntry, ...] = (
     _npm("filesystem", "Filesystem", "Read, write, search, and manage files in explicitly allowed directories.", "@modelcontextprotocol/server-filesystem", "MCP steering group", "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem", compatibility=["Pass one or more allowed directory paths after the package name"]),
     _npm("git", "Git", "Inspect and manipulate local Git repositories.", "@modelcontextprotocol/server-git", "MCP steering group", "https://github.com/modelcontextprotocol/servers/tree/main/src/git", compatibility=["Requires Git"]),
@@ -47,7 +56,7 @@ CATALOG: tuple[CatalogEntry, ...] = (
     _npm("slack", "Slack", "Search conversations and interact with Slack workspaces.", "@modelcontextprotocol/server-slack", "MCP steering group", "https://github.com/modelcontextprotocol/servers/tree/main/src/slack", ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]),
     _npm("google-drive", "Google Drive", "Search and read files in Google Drive.", "@modelcontextprotocol/server-gdrive", "MCP steering group", "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive", ["GOOGLE_APPLICATION_CREDENTIALS"]),
     _npm("everart", "EverArt", "Generate images through EverArt models.", "@modelcontextprotocol/server-everart", "EverArt", "https://github.com/modelcontextprotocol/servers/tree/main/src/everart", ["EVERART_API_KEY"]),
-    _npm("serena", "Serena", "Semantic code navigation, editing, and project memories for software agents.", "@oraios/serena", "Oraios", "https://github.com/oraios/serena", compatibility=["The upstream Serena distribution is commonly run with uvx; verify the package command for your platform"]),
+    _uvx("serena", "Serena", "Semantic code navigation, editing, and project memories for software agents.", "serena-agent", "Oraios", "https://github.com/oraios/serena", args=["start-mcp-server", "--project-from-cwd"], compatibility=["Requires uv; the upstream package exposes start-mcp-server and uses the current working directory as the project"]),
     _npm("context7", "Context7", "Retrieve current, version-specific library documentation for coding tasks.", "@upstash/context7-mcp", "Upstash", "https://github.com/upstash/context7", ["CONTEXT7_API_KEY"], compatibility=["API key may be optional depending on the Context7 plan"]),
     _npm("playwright", "Playwright", "Browser automation using Playwright.", "@playwright/mcp", "Microsoft", "https://github.com/microsoft/playwright-mcp", compatibility=["Requires browser binaries; run the package's browser install step"]),
     _npm("notion", "Notion", "Search and update Notion pages and databases.", "@notionhq/notion-mcp-server", "Notion", "https://github.com/makenotion/notion-mcp-server", ["NOTION_TOKEN"]),
@@ -56,7 +65,7 @@ CATALOG: tuple[CatalogEntry, ...] = (
     _npm("stripe", "Stripe", "Inspect customers, payments, subscriptions, and invoices.", "@stripe/mcp", "Stripe", "https://github.com/stripe/agent-toolkit", ["STRIPE_SECRET_KEY"]),
     _npm("supabase", "Supabase", "Manage Supabase projects, databases, and edge functions.", "@supabase/mcp-server-supabase", "Supabase", "https://github.com/supabase-community/supabase-mcp", ["SUPABASE_ACCESS_TOKEN"]),
     _npm("vercel", "Vercel", "Inspect deployments, projects, logs, and environment variables.", "vercel-mcp", "Vercel", "https://github.com/vercel/mcp-adapter", ["VERCEL_TOKEN"]),
-    _npm("aws", "AWS", "Explore AWS resources and infrastructure context.", "awslabs.mcp-server-aws-documentation", "AWS Labs", "https://github.com/awslabs/mcp", compatibility=["The upstream AWS Labs server may be distributed through uvx rather than npx"]),
+    _uvx("aws", "AWS", "Explore AWS resources and infrastructure context.", "awslabs.aws-documentation-mcp-server@latest", "AWS Labs", "https://github.com/awslabs/mcp", compatibility=["Requires uv and AWS credentials/configuration when accessing private AWS resources"]),
     _npm("cloudflare", "Cloudflare", "Work with Cloudflare Workers, KV, R2, and DNS.", "@cloudflare/mcp-server-cloudflare", "Cloudflare", "https://github.com/cloudflare/mcp-server-cloudflare", ["CLOUDFLARE_API_TOKEN"]),
     _npm("mongodb", "MongoDB", "Query MongoDB collections and aggregations.", "@mongodb-js/mongodb-mcp-server", "MongoDB", "https://github.com/mongodb-js/mongodb-mcp-server", ["MDB_MCP_API_KEY", "MDB_MCP_API_CLIENT_ID", "MDB_MCP_API_CLIENT_SECRET"]),
     _npm("redis", "Redis", "Inspect and manage Redis data.", "@modelcontextprotocol/server-redis", "MCP community", "https://github.com/modelcontextprotocol/servers/tree/main/src/redis", ["REDIS_URL"]),
