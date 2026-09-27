@@ -18,6 +18,7 @@ def test_catalog_contains_requested_examples():
 async def test_catalog_install_is_disabled_and_rejects_unknown_or_duplicate(settings, tmp_path):
     from asgi_lifespan import LifespanManager
     from httpx import ASGITransport, AsyncClient
+
     from openbot.main import create_app
     from tests.conftest import build_test_services
 
