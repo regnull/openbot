@@ -22,21 +22,9 @@ export function withSuggested(models: CatalogModel[], suggested: string[]): Cata
 /** Case-insensitive substring match on id, name and family; the chips narrow further. */
 export function filterModels(models: CatalogModel[], f: ModelFilters): CatalogModel[] {
   const q = f.text.trim().toLowerCase();
-  if (!q) return models.filter(m => (!f.reasoning || m.reasoning) && (!f.vision || m.image_input));
-
-  return models.filter((m) => {
-    const lowerId = m.id.toLowerCase();
-    const lowerFamily = m.family.toLowerCase();
-    const lowerName = m.name.toLowerCase();
-
-    // For name, try matching without the version number (e.g., "Claude Opus 5.5" -> "Claude Opus")
-    // This prevents "sonnet 4" from matching "Claude Sonnet 4.5"
-    const nameWithoutVersion = lowerName.replace(/\s+[\d.]+$/, "");
-
-    const matches = lowerId.includes(q) || nameWithoutVersion.includes(q) || lowerFamily.includes(q);
-
-    return matches && (!f.reasoning || m.reasoning) && (!f.vision || m.image_input);
-  });
+  return models.filter((m) =>
+    (!q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || m.family.toLowerCase().includes(q))
+    && (!f.reasoning || m.reasoning) && (!f.vision || m.image_input));
 }
 
 const byNewest = (a: CatalogModel, b: CatalogModel) => b.release_date.localeCompare(a.release_date) || a.id.localeCompare(b.id);

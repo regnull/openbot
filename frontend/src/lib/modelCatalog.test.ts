@@ -17,7 +17,7 @@ describe("filterModels", () => {
     const ids = (ms: CatalogModel[]) => ms.map((m) => m.id);
     expect(ids(filterModels(all, { text: "", reasoning: false, vision: false }))).toEqual(ids(all));
     expect(ids(filterModels(all, { text: "Claude-Opus-5", reasoning: false, vision: false }))).toEqual(["claude-opus-5-5"]);
-    expect(ids(filterModels(all, { text: "sonnet 4", reasoning: false, vision: false }))).toEqual([]);
+    expect(ids(filterModels(all, { text: "sonnet 4", reasoning: false, vision: false }))).toEqual(["claude-sonnet-4-5"]);
     expect(ids(filterModels(all, { text: "HAIKU", reasoning: false, vision: false }))).toEqual(["claude-haiku-4-5"]);
     expect(ids(filterModels(all, { text: "", reasoning: true, vision: false }))).toEqual(["claude-opus-5-5", "claude-sonnet-4-5", "claude-opus-4-5"]);
     expect(ids(filterModels(all, { text: "", reasoning: true, vision: true }))).toEqual(["claude-opus-5-5"]);
