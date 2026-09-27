@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Api, getApiKey, setApiKey } from "../api/client";
 import type { AppSetting, McpCatalogEntry, McpServer, McpServerInput } from "../api/types";
 import { Badge, Button, Card, Dialog, ErrorText, Field, Hint, Input, PageTitle, SectionTitle, Textarea } from "../components/ui";
+import { ModelPicker } from "../components/ModelPicker";
 import { dismissSaveNotification, notifySave, useSaveMutation } from "../lib/saveNotifications";
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
 import { formatArgs, formatKeyValues, mcpActions, mcpInFlight, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer, type McpTransport } from "../lib/mcpServers";
@@ -235,6 +236,10 @@ function SettingsGroupCard({ group }: { group: SettingGroup }) {
                     <Input type="password" autoComplete="off" value={edited ? draft : ""} placeholder={item.is_set ? "set (enter a new value to replace)" : "not set"}
                       className={edited ? "border-warn" : ""} onChange={(e) => setDraft(e.target.value)} />
                     <div className="text-[11px] text-faint">{item.is_set ? "Stored encrypted." : "Not set."}</div>
+                  </div>
+                ) : item.key === "bot_model" ? (
+                  <div className="w-full">
+                    <ModelPicker provider="openrouter" value={draft} onChange={setDraft} className={edited ? "border-warn" : ""} />
                   </div>
                 ) : (
                   <Input value={draft} inputMode={item.type === "int" || item.type === "float" ? "decimal" : undefined}
