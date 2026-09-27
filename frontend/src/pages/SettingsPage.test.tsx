@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.spyOn(Api, "listMcpServers").mockResolvedValue([]);
   vi.spyOn(Api, "listMcpCatalog").mockResolvedValue([]);
   vi.spyOn(Api, "getDatabaseLocation").mockResolvedValue({ location: "/tmp" });
-  vi.spyOn(Api, "getModels").mockResolvedValue({ provider: "openrouter", source: "catalog", stale: false, fetched_at: "2026-09-27T00:00:00Z", models: [
+  vi.spyOn(Api, "getModels").mockResolvedValue({ provider: "openrouter", configured: true, source: "catalog", stale: false, fetched_at: "2026-09-27T00:00:00Z", models: [
     { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash", family: "glm-flash", description: "", reasoning: true, effort_levels: ["low", "high"], image_input: false, context: 200000, output: null, cost_input: 0.1, cost_output: 0.3, release_date: "2026-04-01", status: null },
   ] });
   el = document.createElement("div"); document.body.append(el); root = createRoot(el);

@@ -13,7 +13,7 @@ const model = (id: string, extra: Partial<CatalogModel> = {}): CatalogModel => (
   id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: 200000, output: null,
   cost_input: 1, cost_output: 5, release_date: "2026-01-01", status: null, ...extra,
 });
-const catalog: ModelsOut = { provider: "anthropic", source: "catalog", stale: false, fetched_at: "2026-09-27T00:00:00Z", models: [
+const catalog: ModelsOut = { provider: "anthropic", configured: true, source: "catalog", stale: false, fetched_at: "2026-09-27T00:00:00Z", models: [
   model("claude-opus-5-5", { name: "Claude Opus 5.5", family: "claude-opus", description: "Most capable", reasoning: true, effort_levels: ["low", "high"], image_input: true, cost_input: 5, cost_output: 25, release_date: "2026-03-01" }),
   model("claude-haiku-4-5", { name: "Claude Haiku 4.5", family: "claude-haiku", release_date: "2025-10-15" }),
 ] };
@@ -116,4 +116,15 @@ it("shows the updating hint when the catalog is stale or builtin", async () => {
   await focus();
   expect(el.textContent).toContain("Catalog updating");
   expect(options()).toEqual(["gpt-5.5"]);
+});
+
+it("shows a not-configured notice and no rows when the provider has no key", async () => {
+  vi.mocked(Api.getModels).mockResolvedValue({ ...catalog, configured: false, models: [] });
+  await show({ initial: "claude-opus-5-5" });
+  await focus();
+  expect(options()).toEqual([]);
+  expect(el.textContent).toContain("Anthropic is not configured. Add its API key in Settings.");
+  expect(el.textContent).not.toContain("No matching models");
+  expect(el.textContent).not.toContain("Not in the catalog");
+  expect(el.querySelector("[data-chip=reasoning]")).toBeNull();
 });

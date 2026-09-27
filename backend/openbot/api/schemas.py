@@ -516,6 +516,7 @@ class CatalogModelOut(BaseModel):
 
 class ModelsOut(BaseModel):
     provider: str
+    configured: bool
     source: Literal["catalog", "builtin"]
     stale: bool
     fetched_at: datetime | None
