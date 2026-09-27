@@ -62,7 +62,7 @@ const money = (n: number): string => (n > 0 && n < 0.01 ? Number(n.toPrecision(1
 /** "$1.25 / $10 per M tokens" (input / output); "free" when both are zero; "" when both are unknown. */
 export function formatCost(m: Pick<CatalogModel, "cost_input" | "cost_output">): string {
   if (m.cost_input == null && m.cost_output == null) return "";
-  if ((m.cost_input ?? 0) === 0 && (m.cost_output ?? 0) === 0) return "free";
+  if (m.cost_input === 0 && m.cost_output === 0) return "free";
   const part = (v: number | null) => (v == null ? "$?" : `$${money(v)}`);
   return `${part(m.cost_input)} / ${part(m.cost_output)} per M tokens`;
 }

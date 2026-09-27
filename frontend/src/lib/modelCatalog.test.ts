@@ -58,6 +58,7 @@ describe("formatting", () => {
     expect(formatCost({ cost_input: 0, cost_output: 0 })).toBe("free");
     expect(formatCost({ cost_input: null, cost_output: null })).toBe("");
     expect(formatCost({ cost_input: null, cost_output: 2 })).toBe("$? / $2 per M tokens");
+    expect(formatCost({ cost_input: 0, cost_output: null })).toBe("$0 / $? per M tokens");
   });
   it("formats context windows", () => {
     expect(formatContext(200000)).toBe("200k");
