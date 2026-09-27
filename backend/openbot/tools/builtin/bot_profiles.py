@@ -23,7 +23,7 @@ def _authorized(ctx: RunContext) -> bool:
 
 @tool
 async def read_bot_description(bot: str, runtime: ToolRuntime[RunContext]) -> str:
-    """Read another bot's description and instructions. Available to the Chief of Staff."""
+    """Read another bot's description. Available to the Chief of Staff."""
     ctx = runtime.context
     if not _authorized(ctx):
         return "error: only the Chief of Staff can inspect bot descriptions"
@@ -31,34 +31,62 @@ async def read_bot_description(bot: str, runtime: ToolRuntime[RunContext]) -> st
         actor = await _target(session, bot)
         if actor is None:
             return "error: bot not found"
-        return f"@{actor.handle} ({actor.name})\ndescription: {actor.description}\ninstructions: {actor.bot.instructions}"
+        return f"@{actor.handle} ({actor.name})\ndescription: {actor.description}"
+
+
+@tool
+async def read_bot_instructions(bot: str, runtime: ToolRuntime[RunContext]) -> str:
+    """Read another bot's instructions. Available to the Chief of Staff."""
+    ctx = runtime.context
+    if not _authorized(ctx):
+        return "error: only the Chief of Staff can inspect bot instructions"
+    async with ctx.services.session_factory() as session:
+        actor = await _target(session, bot)
+        if actor is None:
+            return "error: bot not found"
+        return f"@{actor.handle} ({actor.name})\ninstructions: {actor.bot.instructions}"
 
 
 @tool
 async def update_bot_description(
     bot: str,
     runtime: ToolRuntime[RunContext],
-    description: str | None = None,
-    instructions: str | None = None,
+    description: str,
 ) -> str:
-    """Update another bot's description and/or instructions. Available to the Chief of Staff."""
+    """Update another bot's description. Available to the Chief of Staff."""
     ctx = runtime.context
     if not _authorized(ctx):
         return "error: only the Chief of Staff can update bot descriptions"
-    if description is None and instructions is None:
-        return "error: provide description or instructions"
     async with ctx.services.session_factory() as session:
         actor = await _target(session, bot)
         if actor is None:
             return "error: bot not found"
-        if description is not None:
-            actor.description = description
-        if instructions is not None:
-            actor.bot.instructions = instructions
+        actor.description = description
         await session.commit()
         out = bot_out(actor)
         await ctx.services.bus.publish("bots.updated", None, out.model_dump(mode="json"))
-        return f"updated @{actor.handle}"
+        return f"updated @{actor.handle} description"
 
 
-BOT_PROFILE_TOOLS = [read_bot_description, update_bot_description]
+@tool
+async def update_bot_instructions(
+    bot: str,
+    runtime: ToolRuntime[RunContext],
+    instructions: str,
+) -> str:
+    """Update another bot's instructions. Available to the Chief of Staff."""
+    ctx = runtime.context
+    if not _authorized(ctx):
+        return "error: only the Chief of Staff can update bot instructions"
+    async with ctx.services.session_factory() as session:
+        actor = await _target(session, bot)
+        if actor is None:
+            return "error: bot not found"
+        actor.bot.instructions = instructions
+        await session.commit()
+        out = bot_out(actor)
+        await ctx.services.bus.publish("bots.updated", None, out.model_dump(mode="json"))
+        return f"updated @{actor.handle} instructions"
+
+
+BOT_PROFILE_TOOLS = [read_bot_description, read_bot_instructions, update_bot_description, update_bot_instructions]

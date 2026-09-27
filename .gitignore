@@ -16,3 +16,6 @@ mcp_token.key
 .DS_Store
 .superpowers/
 frontend/release/
+
+.serena/
+secret.key
