@@ -84,7 +84,16 @@ async def create_bot(body: BotCreate, session: AsyncSession = Depends(get_sessio
 @router.get("/catalog", response_model=list[BotCatalogEntryOut])
 async def list_catalog() -> list[BotCatalogEntryOut]:
     from openbot.bots.catalog import CATALOG
-    return [BotCatalogEntryOut(**entry) for entry in CATALOG]
+    return [
+        BotCatalogEntryOut(
+            **{
+                **entry,
+                "approval_tools": entry.get("approval_tools", []),
+                "model_settings": entry.get("model_settings", {}),
+            }
+        )
+        for entry in CATALOG
+    ]
 
 
 @router.post("/catalog/{entry_id}/install", response_model=BotOut, status_code=201)
@@ -108,6 +117,7 @@ async def install_catalog_entry(entry_id: str, body: BotCatalogInstall | None = 
     actor = Actor(kind="bot", **{k: data.pop(k) for k in ACTOR_FIELDS}, bot=BotProfile(**data))
     session.add(actor)
     try:
+        await session.flush()
         await session.commit()
     except Exception as exc:
         await session.rollback()
