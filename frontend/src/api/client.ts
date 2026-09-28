@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, DirectoryListing, McpCatalogEntry, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ModelsOut, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo, DatabaseLocation } from "./types";
+import type { Actor, AppSetting, Bot, BotCatalogEntry, DirectoryListing, McpCatalogEntry, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ModelsOut, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo, DatabaseLocation } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface ScheduledMessage { id: string; thread_id: string; content: string; due_at: string; status: string; attempts: number; last_error?: string | null; result_message_id?: string | null; to_handles: string[]; }
@@ -14,8 +14,6 @@ declare global {
   }
 }
 
-// Relative everywhere: the browser build is served by the backend, Vite proxies /api in
-// development, and the packaged Electron app proxies /api from its app://openbot origin.
 export const BASE = "/api/v1";
 const KEY = "openbot_api_key";
 const ACTOR = "openbot_actor_handle";
@@ -31,26 +29,17 @@ async function api<T>(path: string, init: RequestInit & { json?: unknown } = {})
   let body: BodyInit | undefined;
   if (init.json !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(init.json); }
   let r: Response;
-  try {
-    r = await fetch(BASE + path, { ...init, headers, body });
-  } catch (err) {
-    // Connection refused / backend down: surface the same "backend unavailable" signal
-    // as an error response so the UI can fall back to the home view.
-    if (err instanceof TypeError) window.dispatchEvent(new CustomEvent(backendUnavailableEvent));
-    throw err;
-  }
+  try { r = await fetch(BASE + path, { ...init, headers, body }); }
+  catch (err) { if (err instanceof TypeError) window.dispatchEvent(new CustomEvent(backendUnavailableEvent)); throw err; }
   if (r.status === 401) window.dispatchEvent(new CustomEvent("openbot:unauthorized"));
-  if (!r.ok) {
-    const text = await r.text().catch(() => "");
-    const err = new ApiError(r.status, text || r.statusText);
-    if (isBackendUnavailable(err)) window.dispatchEvent(new CustomEvent(backendUnavailableEvent));
-    throw err;
-  }
+  if (!r.ok) { const text = await r.text().catch(() => ""); const err = new ApiError(r.status, text || r.statusText); if (isBackendUnavailable(err)) window.dispatchEvent(new CustomEvent(backendUnavailableEvent)); throw err; }
   return r.status === 204 ? (undefined as T) : r.json();
 }
 
 export const Api = {
   listBots: () => api<Bot[]>("/bots"),
+  listBotCatalog: () => api<BotCatalogEntry[]>("/bots/catalog"),
+  installBotCatalogEntry: (id: string, handle?: string) => api<Bot>(`/bots/catalog/${id}/install`, { method: "POST", json: handle ? { handle } : {} }),
   getBot: (id: string) => api<Bot>(`/bots/${id}`),
   createBot: (b: BotInput) => api<Bot>("/bots", { method: "POST", json: b }),
   updateBot: (id: string, b: Partial<BotInput>) => api<Bot>(`/bots/${id}`, { method: "PATCH", json: b }),
@@ -74,7 +63,7 @@ export const Api = {
   ackItem: (id: string) => api<InboxItem>(`/inbox/${id}/ack`, { method: "POST" }),
   listRuns: (threadId: string) => api<Run[]>(`/runs?thread_id=${threadId}`),
   getRun: (id: string) => api<RunDetail>(`/runs/${id}`),
-  getThreadUsage: (id: string) => api<ThreadUsage>(`/threads/${id}/usage`),
+  getThreadUsage: (threadId: string) => api<ThreadUsage>(`/threads/${threadId}/usage`),
   listDirectories: (path: string) => api<DirectoryListing>(`/workspace/directories?path=${encodeURIComponent(path || ".")}`),
   resumeRun: (id: string, body: { answer?: string; decisions?: ("approve" | "reject")[] }) => api<Run>(`/runs/${id}/resume`, { method: "POST", json: body }),
   cancelRun: (id: string) => api<Run>(`/runs/${id}/cancel`, { method: "POST" }),
