@@ -111,8 +111,10 @@ async def build_test_services(settings: Settings, scripts: dict | None = None) -
     def factory(actor):
         # One iterator per handle, created lazily on first use, so a resumed run continues the script
         # and tests may still assign scripts[handle] in their body before the first run starts.
+        # Do not materialize generators here: slow() must run in the model executor,
+        # not block this event-loop thread before the cancellation tests can act.
         if actor.handle not in iters:
-            iters[actor.handle] = iter(list(scripts.get(actor.handle, [])))
+            iters[actor.handle] = iter(scripts.get(actor.handle, []))
         return ScriptedChatModel(messages=iters[actor.handle])
 
     services.model_factory = factory
