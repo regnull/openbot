@@ -12,7 +12,16 @@ def main() -> None:
     _apply_detail_setting(args)
     if args.root_directory:
         os.environ["OPENBOT_ROOT_DIRECTORY"] = args.root_directory
-    uvicorn.run("openbot.main:app", **_uvicorn_options(uvicorn_args))
+    options = _uvicorn_options(uvicorn_args)
+    _apply_listen_port(options)
+    uvicorn.run("openbot.main:app", **options)
+
+
+def _apply_listen_port(options: dict[str, object]) -> None:
+    """Tell Settings which port this server listens on, so a local PUBLIC_URL (the OAuth redirect
+    target) follows it instead of pointing at :8000 while e.g. `make app` serves on :8001."""
+    if "port" in options:
+        os.environ["OPENBOT_LISTEN_PORT"] = str(options["port"])
 
 
 def _apply_detail_setting(args: argparse.Namespace) -> None:

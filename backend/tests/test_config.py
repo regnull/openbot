@@ -8,7 +8,7 @@ startup, which is exactly where both bugs surfaced.
 import os
 from pathlib import Path
 
-from openbot.cli import _apply_detail_setting, _parse_args
+from openbot.cli import _apply_detail_setting, _apply_listen_port, _parse_args, _uvicorn_options
 from openbot.config import Settings
 
 
@@ -133,6 +133,40 @@ def test_public_url_takes_precedence_over_openbot_url_alias(monkeypatch):
     monkeypatch.setenv("OPENBOT_URL", "https://fallback.example.test")
     settings = Settings(_env_file=None)
     assert settings.public_url == "https://canonical.example.test"
+
+
+def test_cli_port_is_exported_as_the_listen_port(monkeypatch):
+    monkeypatch.setenv("OPENBOT_LISTEN_PORT", "")  # recorded, so the value set below is undone
+    _, uvicorn_args = _parse_args(["--port", "8001"])
+    _apply_listen_port(_uvicorn_options(uvicorn_args))
+    assert os.environ["OPENBOT_LISTEN_PORT"] == "8001"
+
+
+def test_public_url_follows_listen_port_when_unset(monkeypatch):
+    # `make app` runs its backend on 8001: an OAuth redirect to the default :8000 lands nowhere.
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    monkeypatch.delenv("OPENBOT_URL", raising=False)
+    monkeypatch.setenv("OPENBOT_LISTEN_PORT", "8001")
+    assert Settings(_env_file=None).public_url == "http://127.0.0.1:8001"
+
+
+def test_public_url_follows_listen_port_over_copied_local_default(monkeypatch, tmp_path):
+    # .env.example ships PUBLIC_URL=http://127.0.0.1:8000, so a copied .env must not pin the port.
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    monkeypatch.delenv("OPENBOT_URL", raising=False)
+    monkeypatch.setenv("OPENBOT_LISTEN_PORT", "8001")
+    env_file = tmp_path / ".env"
+    env_file.write_text("PUBLIC_URL=http://127.0.0.1:8000\n")
+    assert Settings(_env_file=env_file).public_url == "http://127.0.0.1:8001"
+
+
+def test_explicit_public_url_ignores_listen_port(monkeypatch):
+    monkeypatch.setenv("PUBLIC_URL", "https://openbot.example.test")
+    monkeypatch.setenv("OPENBOT_LISTEN_PORT", "8001")
+    assert Settings(_env_file=None).public_url == "https://openbot.example.test"
+    monkeypatch.delenv("PUBLIC_URL")
+    monkeypatch.setenv("OPENBOT_URL", "https://deployed.example.test")
+    assert Settings(_env_file=None).public_url == "https://deployed.example.test"
 
 
 

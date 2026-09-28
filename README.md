@@ -521,7 +521,7 @@ as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and
 | `SECRET_KEY` | *(unset)* | Fernet key protecting every secret stored in the database (provider keys, MCP headers/env, OAuth tokens). Unset: generated once into `SECRET_KEY_FILE`. `MCP_TOKEN_KEY` is accepted as an older name. |
 | `SECRET_KEY_FILE` | `./secret.key` | Where the generated key lives (owner-only permissions). An existing `mcp_token.key` is picked up. |
 | `OPENBOT_API_KEY` | *(unset)* | When set, every API route except `/health` and the MCP OAuth callback requires header `X-API-Key: <value>`. |
-| `PUBLIC_URL` | `http://127.0.0.1:8000` | Where browsers reach this server; builds the OAuth redirect URI for remote MCP servers. |
+| `PUBLIC_URL` | `http://127.0.0.1:8000` | Where browsers reach this server; builds the OAuth redirect URI for remote MCP servers. While it is this local default, it follows the port the backend CLI was started on (e.g. `:8001` under `make app`); set it explicitly for any other address. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed origins. |
 | `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the confinement root for file tools. `run_shell` only *starts* there. |
 | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |

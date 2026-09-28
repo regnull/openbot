@@ -6,6 +6,8 @@ from typing import Annotated
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+# PUBLIC_URL's local default; a value equal to it is treated as unset (see the validators below).
+LOCAL_PUBLIC_URL = "http://127.0.0.1:8000"
 # Shared regex for validating Telegram Bot API tokens (format: <bot_id>:<token>).
 TELEGRAM_TOKEN_RE = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")
 
@@ -44,10 +46,13 @@ class Settings(BaseSettings):
     mcp_config: Path = Path("./mcp.json")
     # PUBLIC_URL is the canonical server origin for browser redirects. OPENBOT_URL is accepted as
     # the deployment-facing alias used by Electron/hosted environments; PUBLIC_URL wins when both exist.
+    # The shipped local default (also in .env.example) is not a deliberate choice: when the CLI reports
+    # a different listen port (OPENBOT_LISTEN_PORT), the local URL follows it.
     public_url: str = Field(
-        default="http://127.0.0.1:8000",
+        default=LOCAL_PUBLIC_URL,
         validation_alias=AliasChoices("PUBLIC_URL", "OPENBOT_URL"),
     )
+    listen_port: int | None = Field(default=None, validation_alias="OPENBOT_LISTEN_PORT")
     # The one key protecting every secret stored in the database (provider keys, MCP headers/env, OAuth
     # tokens): SECRET_KEY, or generated once into SECRET_KEY_FILE. MCP_TOKEN_KEY* are the older names.
     secret_key: str | None = None
@@ -95,6 +100,12 @@ class Settings(BaseSettings):
     telegram_transport: str = "long_polling"  # "long_polling" or "webhook"
 
     @model_validator(mode="after")
+    def _local_public_url_follows_listen_port(self):
+        if self.listen_port and self.public_url.rstrip("/") == LOCAL_PUBLIC_URL:
+            self.public_url = f"http://127.0.0.1:{self.listen_port}"
+        return self
+
+    @model_validator(mode="after")
     def _apply_root_directory_defaults(self):
         """Use a caller-supplied root for defaults without overriding explicit settings."""
         if self.root_directory is None:
@@ -114,7 +125,7 @@ class Settings(BaseSettings):
         if isinstance(values, dict):
             public = values.get("PUBLIC_URL", values.get("public_url"))
             deployment = values.get("OPENBOT_URL")
-            if deployment and (public is None or public == "http://127.0.0.1:8000"):
+            if deployment and (public is None or public == LOCAL_PUBLIC_URL):
                 values = dict(values)
                 values["PUBLIC_URL"] = deployment
         return values
