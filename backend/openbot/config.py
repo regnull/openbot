@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     summary_trigger_tokens: int = 60000  # summarize older history into one message once a run's messages exceed this
     summary_keep_messages: int = 24      # ...keeping this many recent messages verbatim (two turns of ~10 tool calls)
     max_model_calls_per_run: int = 60    # model turns per run before the agent is stopped (bots can lower it)
+    max_repeated_tool_failures: int = 3  # identical failed tool calls (same args, same error) before a run is stopped; 0 = off
     history_token_budget: int = 24000
     history_max_messages: int = 80
     memory_reflection_delay: float = 30.0

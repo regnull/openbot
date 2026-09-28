@@ -61,6 +61,9 @@ TUNABLES: dict[str, Tunable] = {
     # --- Run limits ------------------------------------------------------------------------------------------
     "max_model_calls_per_run": Tunable("Run limits", "Model calls per run",
         "Model turns a run may make before the agent is stopped and posts a notice. A bot can lower it for itself in its model settings.", 1),
+    "max_repeated_tool_failures": Tunable("Run limits", "Repeated tool failures",
+        "Times one tool call may fail with the same arguments and the same error before the run is stopped "
+        "with that error as the reply. 0 turns the stop off.", 0),
     "max_bot_hops": Tunable("Run limits", "Bot-to-bot hop limit",
         "Consecutive bot-to-bot hand-offs allowed before the thread pauses for a human message.", 1),
     # --- Context ---------------------------------------------------------------------------------------------

@@ -38,6 +38,7 @@ from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_
 from openbot.runtime.prompt import build_history, build_system_prompt
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
+from openbot.runtime.tool_failures import ToolFailureMiddleware
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.scheduling import SCHEDULING_TOOLS
 from openbot.tools.builtin.workspace import thread_workspace_root
@@ -295,6 +296,8 @@ class Runner:
             *caching_middleware(model, st),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
+            # Marks "error: ..." tool results as errors and ends a run stuck repeating one failing call.
+            ToolFailureMiddleware(st.max_repeated_tool_failures),
             RunMessagesSummarization(model, trigger=("tokens", st.summary_trigger_tokens),
                                       keep=("messages", st.summary_keep_messages)),
             ContextEditingMiddleware(edits=[ClearOlderTurnsEdit(trigger=st.context_trigger_tokens, keep=0, keep_turns=2,
