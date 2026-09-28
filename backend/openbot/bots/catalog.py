@@ -24,10 +24,49 @@ class BotCatalogEntry(BaseModel):
 
 
 CATALOG: tuple[dict, ...] = (
-    {"id": "chief_of_staff", "handle": "chief_of_staff", "name": "Chief of Staff", "description": "Coordinates the team: turns requests into tasks, delegates to the right bot, tracks progress, reports back.", "icon": "crown", "instruction_file": "chief_of_staff.md", "tool_names": ("create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"), "model_settings": {"max_model_calls": 6}},
-    {"id": "engineer", "handle": "engineer", "name": "Engineer", "description": "Implements changes in the repo at the workspace root and opens pull requests.", "icon": "wrench", "instruction_file": "engineer.md", "tool_names": ("run_shell", "read_file", "write_file", "list_files", "search_code")},
-    {"id": "reviewer", "handle": "reviewer", "name": "Reviewer", "description": "Reviews pull requests for correctness, tests, and style.", "icon": "magnifier", "instruction_file": "reviewer.md", "tool_names": ("run_shell", "read_file", "list_files", "search_code")},
-    {"id": "qa", "handle": "qa", "name": "QA", "description": "Checks out PR branches, runs the test suite, asks the human before merging.", "icon": "shield", "instruction_file": "qa.md", "tool_names": ("run_shell", "read_file", "list_files", "search_code")},
+    {
+        "id": "chief_of_staff",
+        "handle": "chief_of_staff",
+        "name": "Chief of Staff",
+        "description": "Coordinates the team: turns requests into tasks, delegates to the right bot, tracks progress, reports back.",
+        "icon": "crown",
+        "instruction_file": "chief_of_staff.md",
+        "tool_names": (
+            "create_bot",
+            "read_bot_description",
+            "read_bot_instructions",
+            "update_bot_description",
+            "update_bot_instructions",
+        ),
+        "model_settings": {"max_model_calls": 6},
+    },
+    {
+        "id": "engineer",
+        "handle": "engineer",
+        "name": "Engineer",
+        "description": "Implements changes in the repo at the workspace root and opens pull requests.",
+        "icon": "wrench",
+        "instruction_file": "engineer.md",
+        "tool_names": ("run_shell", "read_file", "write_file", "list_files", "search_code"),
+    },
+    {
+        "id": "reviewer",
+        "handle": "reviewer",
+        "name": "Reviewer",
+        "description": "Reviews pull requests for correctness, tests, and style.",
+        "icon": "magnifier",
+        "instruction_file": "reviewer.md",
+        "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
+    },
+    {
+        "id": "qa",
+        "handle": "qa",
+        "name": "QA",
+        "description": "Checks out PR branches, runs the test suite, asks the human before merging.",
+        "icon": "shield",
+        "instruction_file": "qa.md",
+        "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
+    },
 )
 
 CATALOG_BY_ID = {entry["id"]: entry for entry in CATALOG}
