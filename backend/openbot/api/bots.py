@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openbot.api.actors import handle_taken
 from openbot.api.deps import get_services, get_session
 from openbot.api.schemas import (
+    BotCatalogEntryOut,
+    BotCatalogInstall,
     BotCreate,
     BotInboxItemOut,
     BotOut,
@@ -75,6 +77,51 @@ async def create_bot(body: BotCreate, session: AsyncSession = Depends(get_sessio
     actor = Actor(kind="bot", **{k: data.pop(k) for k in ACTOR_FIELDS}, bot=BotProfile(**data))
     session.add(actor)
     await session.commit()
+    await services.bus.publish("bots.updated", None, bot_out(actor).model_dump(mode="json"))
+    return bot_out(actor)
+
+
+@router.get("/catalog", response_model=list[BotCatalogEntryOut])
+async def list_catalog() -> list[BotCatalogEntryOut]:
+    from openbot.bots.catalog import CATALOG
+    return [
+        BotCatalogEntryOut(
+            **{
+                **entry,
+                "approval_tools": entry.get("approval_tools", []),
+                "model_settings": entry.get("model_settings", {}),
+            }
+        )
+        for entry in CATALOG
+    ]
+
+
+@router.post("/catalog/{entry_id}/install", response_model=BotOut, status_code=201)
+async def install_catalog_entry(entry_id: str, body: BotCatalogInstall | None = None,
+                                session: AsyncSession = Depends(get_session),
+                                services: Services = Depends(get_services)):
+    from openbot.bots.catalog import CATALOG_BY_ID, BotCatalogEntry, load_instructions
+    entry = CATALOG_BY_ID.get(entry_id)
+    if entry is None:
+        raise HTTPException(404, "unknown bot catalog entry")
+    item = BotCatalogEntry.model_validate(entry)
+    handle = (body.handle if body else None) or item.handle
+    if await handle_taken(session, handle):
+        raise HTTPException(409, "handle already exists")
+    instructions = load_instructions(item)
+    data = {"handle": handle, "name": item.name, "description": item.description, "icon": item.icon,
+            "instructions": instructions, "provider": "auto", "model": "", "model_settings": item.model_settings,
+            "tool_names": list(item.tool_names), "approval_tools": list(item.approval_tools),
+            "memory_enabled": True, "enabled": True}
+    _validate_tools(services, data["tool_names"], data["approval_tools"])
+    actor = Actor(kind="bot", **{k: data.pop(k) for k in ACTOR_FIELDS}, bot=BotProfile(**data))
+    session.add(actor)
+    try:
+        await session.flush()
+        await session.commit()
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(422, f"could not install bot catalog entry: {exc}") from exc
     await services.bus.publish("bots.updated", None, bot_out(actor).model_dump(mode="json"))
     return bot_out(actor)
 
