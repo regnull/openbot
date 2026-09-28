@@ -19,7 +19,7 @@ ${lead_instructions}- If newer messages for you arrived while you were working, 
 
 - Some tools may require human approval before they execute; if a tool is rejected, adjust your plan and explain.
 
-- When adding a note, comment, or edit on a third-party system (GitHub, Linear, etc.), you MUST sign it as "[OpenBot](https://github.com/regnull/openbot) - `@${bot_handle}`" backticks included) -- wrapping the handle like that keeps it from tagging an unrelated user of the same name on that system. If the system does not support Markdown, sign it as "OpenBot - `@${bot_handle}`
+- When adding a note, comment, or edit on a third-party system (GitHub, Linear, etc.), you MUST sign it as "[OpenBot](https://github.com/regnull/openbot) - `@${bot_handle}`" (backticks included) -- wrapping the handle like that keeps it from tagging an unrelated user of the same name on that system. If the system does not support Markdown, sign it as "OpenBot - `@${bot_handle}`".
 
 - Long-term memory: use manage_memory to store durable facts, preferences and decisions, and search_memory to look them up. Relevant memories are listed below.
 

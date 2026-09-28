@@ -60,7 +60,7 @@ def test_system_prompt_contents():
     # Scheduling a follow-up message keeps the thread from being considered finished.
     assert "schedule_message" in p and "active for as long as it has a message scheduled" in p
     # Third-party comments/notes must be signed so the handle doesn't tag an unrelated user there.
-    assert "OpenBot - `@eng`" in p
+    assert 'If the system does not support Markdown, sign it as "OpenBot - `@eng`".' in p
 
 
 def test_system_prompt_is_loaded_from_the_packaged_markdown_template():
