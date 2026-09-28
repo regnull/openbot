@@ -40,7 +40,7 @@ delivers new mail and can wake the next bot. This uniform model is what lets a h
 webhook-driven external system all participate in the same conversation the same way.
 
 <p align="center">
-  <img src="docs/images/openbot-demo.gif" alt="OpenBot demo of the engineer bot writing a file" width="1080">
+  <img src="docs/images/openbot-demo.gif" alt="OpenBot demo of the engineer bot writing a file" width="900">
 </p>
 
 <p align="center">
