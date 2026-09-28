@@ -465,6 +465,22 @@ class McpConnectOut(BaseModel):
     authorization_url: str | None = None
 
 
+class BotCatalogEntryOut(BaseModel):
+    id: str
+    handle: str
+    name: str
+    description: str
+    icon: str
+    instruction_file: str
+    tool_names: list[str]
+    approval_tools: list[str]
+    model_settings: dict[str, Any]
+
+
+class BotCatalogInstall(BaseModel):
+    handle: str | None = None
+
+
 class McpCatalogEntryOut(BaseModel):
     id: str
     name: str
