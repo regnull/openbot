@@ -8,9 +8,9 @@ def test_catalog_is_curated_and_complete():
         assert entry["id"] and entry["name"] and entry["description"]
         assert entry["provider"] and entry["source_url"].startswith("https://")
         assert entry["transport"] in ("stdio", "http")
-        if entry["transport"] == "stdio":
+        if entry["transport"] == "stdio" and entry["status"] == "template":
             assert entry["command"] and entry["args"]
-        else:
+        elif entry["transport"] == "http":
             assert entry["url"]
 
 
@@ -30,6 +30,8 @@ def test_catalog_commands_match_documented_runners():
     for entry in CATALOG:
         if entry["transport"] == "http":
             assert entry["url"].startswith("https://")
+        elif entry["id"] in {"duckdb", "vercel"}:
+            assert entry["status"] == "unverified" and not entry["command"] and not entry["args"]
         elif entry["command"] == "npx":
             assert entry["args"][:1] == ["-y"]
             assert len(entry["args"]) >= 2
@@ -63,7 +65,8 @@ async def test_catalog_install_is_disabled_and_rejects_unknown_or_duplicate(sett
         assert response.status_code == 201, response.text
         installed = response.json()
         assert installed["enabled"] is False
-        assert installed["command"] == "npx"
+        assert installed["command"] == "uvx"
+        assert installed["args"] == ["mcp-server-time"]
         assert (await client.post("/api/v1/mcp/catalog/time/install", json={"name": "catalog-time"})).status_code == 409
         assert (await client.post("/api/v1/mcp/catalog/no-such/install", json={"name": "nope"})).status_code == 404
 

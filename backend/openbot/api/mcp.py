@@ -53,17 +53,19 @@ async def list_servers(services: Services = Depends(get_services)):
 
 @router.get("/catalog", response_model=list[McpCatalogEntryOut])
 async def list_catalog() -> list[McpCatalogEntryOut]:
-    """Return metadata for the reviewed, opt-in catalog; no server is started by this endpoint."""
+    """Return catalog metadata, not runtime certification; no server is started."""
     return [McpCatalogEntryOut(**entry) for entry in CATALOG]
 
 
 @router.post("/catalog/{entry_id}/install", response_model=McpServerOut, status_code=201)
 async def install_catalog_entry(entry_id: str, body: McpCatalogInstall, services: Services = Depends(get_services)):
-    """Store a catalog command disabled by default; connecting remains an explicit user action."""
+    """Store a supported template disabled; enabling it can start a connection."""
     mgr = _mgr(services)
     entry = CATALOG_BY_ID.get(entry_id)
     if entry is None:
         raise HTTPException(404, "unknown MCP catalog entry")
+    if entry["status"] != "template":
+        raise HTTPException(422, entry["status_reason"])
     if mgr.has(body.name) or await mgr.store.raw(body.name) is not None:
         raise HTTPException(409, f"an MCP server named {body.name!r} already exists")
     if entry.get("url"):

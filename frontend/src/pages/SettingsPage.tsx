@@ -350,8 +350,32 @@ function McpCatalog({ installed, onInstalled }: { installed: McpServer[]; onInst
   return <div className="space-y-3">
     <Input aria-label="Search MCP catalog" placeholder="Search catalog" value={search} onChange={(e) => setSearch(e.target.value)} />
     <ErrorText error={catalog.error ?? install.error} />
-    <ul className="grid gap-2 sm:grid-cols-2">{rows.map((entry) => { const duplicate = installed.some((s) => s.name === entry.id); return <li key={entry.id} className="rounded-ui border border-line p-3 text-[13px]"><div className="flex items-start justify-between gap-2"><div><strong>{entry.name}</strong><p className="text-xs text-muted">{entry.description}</p><p className="mt-1 text-[11px] text-faint">{entry.provider}</p></div><Button variant="secondary" size="sm" disabled={duplicate} onClick={() => { setSelected(entry); setName(entry.id); }}>{duplicate ? "Installed" : "Details"}</Button></div></li>; })}</ul>
-    {selected && <Dialog as="form" title={`Add ${selected.name}`} titleId="mcp-catalog-dialog-title" onClose={() => setSelected(null)} onSubmit={(e) => { e.preventDefault(); install.mutate(); }}><p className="text-sm">{selected.description}</p><p className="text-xs text-muted">Provider: {selected.provider} · <a className="underline" href={selected.source_url} target="_blank" rel="noreferrer">Source</a></p><Field label="Server name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field><p className="text-xs text-muted">{selected.url ? <>Server: <Code>{selected.url}</Code></> : <>Command: <Code>{selected.command} {selected.args.join(" ")}</Code></>}</p><p className="text-xs text-muted">Credentials: {selected.required_credentials.join(", ") || "none"}</p>{selected.compatibility.map((note) => <p key={note} className="text-xs text-warn">{note}</p>)}<Hint>Added disabled. Review the command and credentials, then enable and connect it explicitly.</Hint><ErrorText error={install.error} /><div className="flex justify-end"><Button type="submit" disabled={install.isPending || !name.trim()}>{install.isPending ? "Adding…" : "Add disabled server"}</Button></div></Dialog>}
+    <Hint>Catalog templates are not runtime-certified. Versioned protocol checks and remaining limitations are documented in docs/mcp-catalog-results.md. Unavailable entries cannot be added from the catalog. Existing installs are not automatically updated.</Hint>
+    <ul className="grid gap-2 sm:grid-cols-2">{rows.map((entry) => {
+      const duplicate = installed.some((s) => s.name === entry.id);
+      return <li key={entry.id} className="rounded-ui border border-line p-3 text-[13px]">
+        <div className="flex items-start justify-between gap-2"><div>
+          <strong>{entry.name}</strong><p className="text-xs text-muted">{entry.description}</p>
+          <p className="mt-1 text-[11px] text-faint">{entry.provider}{duplicate ? " · Installed" : ""}</p>
+          <p className="text-xs text-warn">{entry.status === "template" ? "Template · review before enabling" : `Unavailable · ${entry.status}`}</p>
+        </div><Button variant="secondary" size="sm" onClick={() => { setSelected(entry); setName(entry.id); }}>Details</Button></div>
+      </li>;
+    })}</ul>
+    {selected && <Dialog as="form" title={`MCP: ${selected.name}`} titleId="mcp-catalog-dialog-title" onClose={() => setSelected(null)} onSubmit={(e) => {
+      e.preventDefault();
+      if (selected.status === "template" && name.trim() && !install.isPending) install.mutate();
+    }}>
+      <p className="text-sm">{selected.description}</p>
+      <p className="text-xs text-muted">Provider: {selected.provider} · <a className="underline" href={selected.source_url} target="_blank" rel="noreferrer">Source</a></p>
+      <p className="text-xs text-warn">{selected.status_reason}</p>
+      <Field label="Server name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>
+      <p className="text-xs text-muted">{selected.url ? <>Server: <Code>{selected.url}</Code></> : selected.command ? <>Command: <Code>{selected.command} {selected.args.join(" ")}</Code></> : "No verified launch command available."}</p>
+      <p className="text-xs text-muted">Credentials / account setup: {selected.required_credentials.join(", ") || "not declared; see compatibility notes"}</p>
+      {selected.compatibility.map((note) => <p key={note} className="text-xs text-warn">{note}</p>)}
+      <Hint>Added disabled. Edit configuration before enabling: Enable starts a connection automatically and may execute third-party code. Existing installs must be disabled and edited or explicitly removed and re-added; catalog changes do not migrate them.</Hint>
+      <ErrorText error={install.error} />
+      <div className="flex justify-end"><Button type="submit" disabled={selected.status !== "template" || install.isPending || !name.trim() || installed.some((s) => s.name === name.trim())}>{selected.status !== "template" ? "Unavailable" : install.isPending ? "Adding…" : "Add disabled server"}</Button></div>
+    </Dialog>}
   </div>;
 }
 
