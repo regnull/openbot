@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -10,6 +10,7 @@ from openbot.bot_icons import DEFAULT_BOT_ICON, validate_bot_icon
 
 Provider = Literal["auto", "openai", "anthropic", "openrouter", "xai", "ollama"]
 HANDLE_RE = r"^[a-z0-9_-]{2,32}$"
+Handle = Annotated[str, Field(pattern=HANDLE_RE)]
 # ~3.5 MB of decoded image bytes (base64 inflates by 4/3).
 MAX_IMAGE_CHARS = 4_700_000
 # Per-message aggregate cap across attachments (~14 MB decoded): keeps a full row of
@@ -30,7 +31,7 @@ class ActorOut(BaseModel):
 
 
 class ActorCreate(BaseModel):
-    handle: str = Field(pattern=HANDLE_RE)
+    handle: Handle
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
     webhook_url: str | None = None
@@ -56,7 +57,7 @@ def validate_model_settings(value: dict[str, Any] | None) -> dict[str, Any] | No
 
 
 class BotCreate(BaseModel):
-    handle: str = Field(pattern=HANDLE_RE)
+    handle: Handle
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
     icon: str = DEFAULT_BOT_ICON
@@ -146,7 +147,7 @@ class ThreadCreate(BaseModel):
 
 
 class ThreadUpdate(BaseModel):
-    default_bot_handle: str = Field(pattern=HANDLE_RE)
+    default_bot_handle: Handle
 
 
 class ThreadOut(BaseModel):
@@ -478,7 +479,7 @@ class BotCatalogEntryOut(BaseModel):
 
 
 class BotCatalogInstall(BaseModel):
-    handle: str | None = None
+    handle: Handle | None = None
 
 
 class McpCatalogEntryOut(BaseModel):

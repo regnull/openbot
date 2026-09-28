@@ -20,6 +20,16 @@ async def test_catalog_list_install_duplicate_and_unknown(client):
     assert (await client.post('/api/v1/bots/catalog/no-such/install')).status_code == 404
 
 
+async def test_catalog_install_rejects_invalid_handle(client):
+    response = await client.post(
+        '/api/v1/bots/catalog/engineer/install',
+        json={'handle': 'Invalid Handle!'},
+    )
+    assert response.status_code == 422
+    bots = (await client.get('/api/v1/bots')).json()
+    assert all(bot['handle'] != 'Invalid Handle!' for bot in bots)
+
+
 async def test_catalog_install_preserves_existing_bot(client):
     existing = await client.post('/api/v1/bots', json={
         'handle': 'custom', 'name': 'Custom', 'instructions': 'Keep me',
