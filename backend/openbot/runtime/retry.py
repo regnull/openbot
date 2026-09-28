@@ -18,8 +18,9 @@ Delay for attempt N is `min(base * 2^(N-1), cap) + uniform(0, jitter)` — expon
 and full jitter, so concurrent runs desynchronize. When retries are exhausted the last error is
 re-raised unchanged, so the run fails with the provider's own error message.
 
-Classification: only errors the providers expose as HTTP with a transient status (408/409/425/
-429/5xx), plus LangChain's `ModelHTTPError`, are retried; auth, permission and invalid-request
+Classification: errors the providers expose as HTTP with a transient status (408/409/425/
+429/5xx), plus LangChain's `ModelHTTPError`, and request timeouts (the SDKs' `APITimeoutError`
+and httpx's `TimeoutException`, which carry no status; see `model_call_timeout`) are retried; auth, permission and invalid-request
 failures (400/401/403/404/422) fail immediately. Some upstream failures (like the Relace one
 above) surface as a generic `APIError` without a status code; those are matched by the known
 message pattern "model stopped before completing" — the limitation is that a *generic* provider
@@ -32,6 +33,9 @@ import asyncio
 import logging
 import random
 
+import anthropic
+import httpx
+import openai
 from langchain.agents.middleware import AgentMiddleware, ModelRequest
 
 log = logging.getLogger(__name__)
@@ -41,6 +45,8 @@ RETRYABLE_STATUS = {408, 409, 425, 429, *range(500, 600)}
 
 # Generic APIError bodies seen from upstream model providers without an HTTP status attached.
 UPSTREAM_MESSAGE_PATTERNS = ("model stopped before completing",)
+# A call that hit model_call_timeout: no HTTP status, but as transient as a 5xx.
+TIMEOUT_ERRORS = (openai.APITimeoutError, anthropic.APITimeoutError, httpx.TimeoutException)
 
 
 def _error_status(err: Exception) -> int | None:
@@ -55,9 +61,11 @@ def _error_status(err: Exception) -> int | None:
 def is_retryable(err: Exception) -> bool:
     """True when `err` looks like a transient upstream model-provider failure.
 
-    Retries what the provider marked transient (429/5xx/timeout via `openai.APIStatusError` or
-    LangChain's `ModelHTTPError`) plus the known generic-upstream message pattern; never retries
+    Retries what the provider marked transient (429/5xx via `openai.APIStatusError` or LangChain's
+    `ModelHTTPError`), request timeouts, and the known generic-upstream message pattern; never retries
     auth, permission or invalid-request errors."""
+    if isinstance(err, TIMEOUT_ERRORS):
+        return True
     status = _error_status(err)
     if status is not None:
         return status in RETRYABLE_STATUS

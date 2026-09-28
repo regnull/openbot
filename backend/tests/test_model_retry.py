@@ -97,6 +97,20 @@ def test_is_retryable_classification():
     assert is_retryable(Exception("The model stopped before completing the response."))
 
 
+def test_timeouts_are_retryable():
+    """A request that hits model_call_timeout carries no HTTP status, so without this it would fail the run
+    on the first stall instead of getting the retries a 5xx gets."""
+    import anthropic
+    import httpx
+    import openai
+
+    req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    assert is_retryable(openai.APITimeoutError(request=req))
+    assert is_retryable(anthropic.APITimeoutError(request=req))
+    assert is_retryable(httpx.ReadTimeout("read timed out", request=req))
+    assert is_retryable(httpx.ConnectTimeout("connect timed out", request=req))
+
+
 def test_backoff_delay_is_exponential_with_cap_and_jitter():
     m = mw(max_attempts=10, base_delay=2.0, backoff_cap=60.0)
     for attempt in range(1, 6):
@@ -122,7 +136,8 @@ def test_config_parses_env_values(monkeypatch):
 def test_tunables_registered_and_coerced():
     for key, kind, minimum in (("model_retry_max_attempts", "int", None),
                                ("model_retry_base_delay", "float", 0.0),
-                               ("model_retry_backoff_cap", "float", 0.0)):
+                               ("model_retry_backoff_cap", "float", 0.0),
+                               ("model_call_timeout", "float", 0.0)):
         assert key in TUNABLES
         from openbot.runtime.app_settings import field_type
         assert field_type(key) == kind

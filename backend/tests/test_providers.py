@@ -12,6 +12,7 @@ from openbot.runtime.providers import (
     default_provider,
     effective_bot_profile,
     embeddings,
+    provider_chat_model,
     provider_status,
 )
 
@@ -252,3 +253,29 @@ def test_reasoning_effort_passes_through_to_anthropic():
     m = chat_model(BotProfile(provider="anthropic", model="claude-opus-5-5", model_settings={}), s(anthropic_api_key="k"))
     assert m.reasoning_effort is None
 
+
+
+def test_model_call_timeout_bounds_every_client_and_owns_retries():
+    """A hung OpenRouter call held a bot's worker for over half an hour: the SDK default is a 600s read
+    timeout with two silent retries, and the run's own retry middleware adds three more attempts on top.
+    One tunable bounds every client, and the SDK's retries are off so ModelRetryMiddleware is the single
+    retry layer and every attempt shows up in the log."""
+    st = s(openai_api_key="k", anthropic_api_key="k", openrouter_api_key="k", xai_api_key="k",
+           ollama_base_url="http://localhost:11434", model_call_timeout=45.0)
+    for provider, model in (("openai", "gpt-5.5"), ("openrouter", "z-ai/glm-5.3-flash"), ("xai", "grok-4.6")):
+        m = provider_chat_model(provider, model, st)
+        assert isinstance(m, ChatOpenAI) and m.request_timeout == 45.0 and m.max_retries == 0, provider
+    m = provider_chat_model("anthropic", "claude-opus-5-5", st)
+    assert isinstance(m, ChatAnthropic) and m.default_request_timeout == 45.0 and m.max_retries == 0
+    assert provider_chat_model("ollama", "qwen3", st).client_kwargs == {"timeout": 45.0}
+
+
+def test_model_call_timeout_zero_means_no_limit():
+    st = s(openai_api_key="k", anthropic_api_key="k", ollama_base_url="http://localhost:11434", model_call_timeout=0)
+    assert provider_chat_model("openai", "gpt-5.5", st).request_timeout is None
+    assert provider_chat_model("anthropic", "claude-opus-5-5", st).default_request_timeout is None
+    assert provider_chat_model("ollama", "qwen3", st).client_kwargs == {}
+
+
+def test_model_call_timeout_default_is_two_minutes():
+    assert s().model_call_timeout == 120.0

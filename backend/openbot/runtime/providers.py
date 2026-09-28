@@ -122,13 +122,24 @@ def provider_chat_model(
         kwargs["temperature"] = ms["temperature"]
     if "max_tokens" in ms:
         kwargs["max_tokens"] = ms["max_tokens"]
+    # One bound on every call, applied between streamed chunks too, so a stalled upstream becomes a
+    # retryable timeout instead of holding the bot's worker (the SDK default read timeout is 600s).
+    timeout = settings.model_call_timeout or None
 
     if provider == OLLAMA:
         from langchain_ollama import ChatOllama
 
         if "max_tokens" in kwargs:
             kwargs["num_predict"] = kwargs.pop("max_tokens")
+        if timeout is not None:
+            kwargs["client_kwargs"] = {"timeout": timeout}
         return ChatOllama(model=model, base_url=settings.ollama_base_url, **kwargs)
+
+    # The SDKs retry silently (two attempts by default) before an error ever reaches us; with them off,
+    # ModelRetryMiddleware in the runner is the only retry layer, so each attempt is logged and the worst
+    # case for a dead upstream is bounded by model_retry_max_attempts x model_call_timeout. Memory reflection
+    # and thread renaming share this factory without the middleware; both are best-effort and log failures.
+    kwargs["max_retries"] = 0
 
     key = api_key_for(settings, provider)
     if provider == "anthropic":
@@ -138,7 +149,7 @@ def provider_chat_model(
         if "reasoning_effort" in ms:
             # Same knob as the OpenAI-compatible path below; ChatAnthropic maps it to output_config.effort.
             kwargs["reasoning_effort"] = ms["reasoning_effort"]
-        return ChatAnthropic(model=model, api_key=key, **kwargs)
+        return ChatAnthropic(model=model, api_key=key, default_request_timeout=timeout, **kwargs)
 
     from langchain_openai import ChatOpenAI
 
@@ -161,7 +172,7 @@ def provider_chat_model(
             kwargs["extra_body"] = {"provider": {"order": list(settings.openrouter_provider_order), "allow_fallbacks": True}}
         if ms.get("web_search"):
             kwargs.setdefault("extra_body", {})["plugins"] = [{"id": "web"}]
-    return ChatOpenAI(model=model, api_key=key, **kwargs)
+    return ChatOpenAI(model=model, api_key=key, request_timeout=timeout, **kwargs)
 
 
 def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:

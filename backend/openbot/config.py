@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     model_retry_max_attempts: int = 3    # 0 or 1 turns retries off
     model_retry_base_delay: float = 2.0  # seconds before the first retry
     model_retry_backoff_cap: float = 60.0  # ceiling on any single retry delay
+    # Seconds a single model call may take (connect, and between streamed chunks) before it fails as a
+    # transient error the retries above handle; 0 means no limit. The SDK defaults were a 600s read
+    # timeout with two silent retries, which once held a bot's worker for over half an hour.
+    model_call_timeout: float = 120.0
 
     # NoDecode: these are plain CSV strings in .env (e.g. `CORS_ORIGINS=http://a,http://b`), not
     # JSON, so pydantic-settings must not try to json.loads() the raw env value before our

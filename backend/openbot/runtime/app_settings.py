@@ -108,6 +108,9 @@ TUNABLES: dict[str, Tunable] = {
         "Delay before the first retry of a failed model call; doubles each further retry.", 0.0),
     "model_retry_backoff_cap": Tunable("Model retries", "Retry delay cap (seconds)",
         "Maximum delay before any single model-call retry.", 0.0),
+    "model_call_timeout": Tunable("Model retries", "Model call timeout (seconds)",
+        "How long one model call may take, including gaps between streamed chunks, before it fails as a "
+        "transient error and is retried like a 5xx. 0 means no limit.", 0.0),
 }
 
 EMBEDDING_KEYS = ("embedding_model", "embedding_dims")
