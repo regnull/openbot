@@ -47,6 +47,9 @@ webhook-driven external system all participate in the same conversation the same
   The engineer bot writes a file in the workspace and replies in the thread.
 </p>
 
+> [!TIP]
+> The easiest way to try OpenBot is to download the desktop app from the [latest release](https://github.com/regnull/openbot/releases/latest). There are builds for macOS (Apple Silicon and Intel, as `.dmg` or `.zip`) and Linux (`.AppImage`). There is no Windows build yet, so on Windows follow the [Quick start](#quick-start) to run from source. The app needs [uv](https://docs.astral.sh/uv/) installed, and the first launch takes longer while it sets up Python. See [Running a packaged app](#running-a-packaged-app) for details.
+
 ## Features
 
 - **Actor model runtime**: bots, humans, and external systems are all actors with inboxes; one
