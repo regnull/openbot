@@ -15,7 +15,8 @@ def test_versioned_matrix_is_complete_and_honest():
     assert len(rows) == len(by_id) == 35
     assert set(by_id) == set(CATALOG_BY_ID)
     assert matrix["summary"]["protocol_pass"] == sum(row["status"] == "pass" for row in rows)
-    assert matrix["summary"]["blocked_unrun"] == sum(row["status"] == "blocked" for row in rows)
+    assert matrix["summary"]["blocked_unrun"] == sum(row["status"] == "blocked" and not row["initialize"]["ok"] for row in rows)
+    assert matrix["summary"]["incomplete_identity"] == 1
     assert sum(row["original_no_declared_credentials"] for row in rows) == 15
     assert all(by_id[key]["status"] == "pass" for key in ("filesystem", "git", "memory", "sequential-thinking", "time", "fetch"))
     text = (DOCS / "mcp-catalog-results.md").read_text()
@@ -24,7 +25,9 @@ def test_versioned_matrix_is_complete_and_honest():
         assert row["package_metadata"]["source"] and row["package_metadata"]["provenance"]
         assert row["tool_calls"] == "not-run"
         if row["status"] == "blocked":
-            assert row["blocker"] and not row["initialize"]["ok"] and not row["tools_list"]["ok"]
+            assert row["blocker"]
+        if not row["initialize"]["ok"]:
+            assert row["status"] == "blocked" and not row["tools_list"]["ok"]
             continue
         assert row["initialize"]["ok"] and row["tools_list"]["ok"]
         assert row["tools_list"]["count"] == len(row["tools_list"]["names"]) > 0
@@ -36,6 +39,11 @@ def test_versioned_matrix_is_complete_and_honest():
         assert receipt["initialize"] == row["initialize"]
         assert receipt["tools_list"] == row["tools_list"]
         assert receipt["sandbox_probe"]["outbound"] not in ("ALLOWED", "VISIBLE")
+    # Preserve the empty upstream value; neither fabricate a version nor hide
+    # successful protocol stages to satisfy a stricter identity requirement.
+    assert by_id["aws"]["status"] == "blocked"
+    assert by_id["aws"]["initialize"]["response"]["serverInfo"]["version"] == ""
+    assert by_id["aws"]["initialize"]["ok"] and by_id["aws"]["tools_list"]["ok"]
 
 
 def test_sqlite_failure_and_constraint_evidence_are_retained():

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-09-28T21:45:30.279986+00:00",
+  "checked_at": "2026-09-28T21:52:36.992449+00:00",
   "scope": "Real isolated initialize/tools-list; not functional certification or closure of #205",
   "runtime_platform": {
     "os": "Linux x86_64",
@@ -10,7 +10,8 @@
   },
   "summary": {
     "total": 35,
-    "protocol_pass": 13,
+    "protocol_pass": 12,
+    "incomplete_identity": 1,
     "blocked_unrun": 22,
     "original_no_declared_credentials": 15
   },
@@ -5544,7 +5545,7 @@
         ]
       },
       "checked_at": "2026-09-28T21:19:18.865423+00:00",
-      "status": "pass",
+      "status": "blocked",
       "initialize": {
         "ok": true,
         "server_name": "awslabs.aws-documentation-mcp-server",
@@ -5966,6 +5967,7 @@
         "uvx",
         "awslabs.aws-documentation-mcp-server@latest"
       ],
+      "blocker": "Protocol initialize and tools/list succeeded (5 tools), but AWS package 1.2.1 returned an empty serverInfo.version. The strict identity-completeness gate cannot accept this as a fully identified pass. Raw response is retained unchanged; no server version is invented and no functional request was made.",
       "catalog_status": "template",
       "catalog_status_reason": "Not runtime-certified; see versioned test results and review configuration before enabling.",
       "package_metadata": {
