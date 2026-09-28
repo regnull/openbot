@@ -103,7 +103,11 @@ it("drops an effort the model does not accept on save and removes the key when D
   const update = vi.spyOn(Api, "updateBot").mockImplementation(async (id, b) => ({ ...bot(id, "Stale"), ...b } as Bot));
   await show("/edit/b1");
   await until(() => nameInput() === "Stale");
-  await until(() => !el.textContent?.includes("Not in the catalog"));
+  // Save reconciles the effort against the catalog the editor last rendered with, so wait until the
+  // catalog is cached, then flush React Query's batched (setTimeout 0) update to the editor. Waiting
+  // for "Not in the catalog" to be absent raced the fetch: that text is also hidden while loading.
+  await until(() => qc.getQueryData(["models", "anthropic"]) !== undefined);
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   await submit();
   await until(() => update.mock.calls.length > 0);
   expect(update.mock.calls[0][1].model_settings).toEqual({ web_search: true });
