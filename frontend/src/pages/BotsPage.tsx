@@ -27,7 +27,7 @@ export default function BotsPage() {
         <h2 className="text-sm font-medium">Bot catalog</h2>
         <p className="text-xs text-muted">Repository-backed bots include reviewed instructions and tool grants. Installing adds a disabled? No—catalog bots follow the normal enabled bot lifecycle and never starts external services.</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {catalog.data?.map((entry) => { const added = existing.has(entry.handle); return <Card key={entry.id} className="flex flex-col gap-2"><div className="flex items-center gap-2"><BotIcon icon={entry.icon} /><div><div className="text-[13px] font-medium">{entry.name}</div><div className="text-xs text-muted">@{entry.handle}</div></div></div><p className="flex-1 text-xs leading-relaxed text-muted">{entry.description}</p><Button type="button" variant="secondary" disabled={added || install.isPending} onClick={() => install.mutate(entry.id)}>{added ? "Already added" : install.isPending ? "Adding…" : "Add bot"}</Button></Card>; })}
+          {catalog.data?.map((entry) => { const added = existing.has(entry.handle); return <Card key={entry.id} className="flex flex-col gap-2"><div className="flex items-center gap-2"><BotIcon icon={entry.icon} /><div><div className="text-[13px] font-medium">{entry.name}</div><div className="text-xs text-muted">@{entry.handle}</div></div></div><p className="flex-1 text-xs leading-relaxed text-muted">{entry.description}</p><Button type="button" variant="secondary" disabled={added || install.isPending} onClick={() => install.mutate({ id: entry.id })}>{added ? "Already added" : install.isPending ? "Adding…" : "Add bot"}</Button></Card>; })}
         </div>
       </section>
     </div>
