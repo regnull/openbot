@@ -40,7 +40,11 @@ delivers new mail and can wake the next bot. This uniform model is what lets a h
 webhook-driven external system all participate in the same conversation the same way.
 
 <p align="center">
-  <img src="docs/images/openbot-screenshot.png" alt="OpenBot Screenshot" width="900">
+  <img src="docs/images/openbot-demo.gif" alt="OpenBot demo of the engineer bot writing a file" width="1080">
+</p>
+
+<p align="center">
+  The engineer bot writes a file in the workspace and replies in the thread.
 </p>
 
 ## Features
@@ -255,6 +259,10 @@ make run               # builds frontend/dist, then serves it from the FastAPI a
 
 The seeded bots are set up to run a small software workflow end to end against a real git
 repository, using the [`gh`](https://cli.github.com/) CLI.
+
+<p align="center">
+  <img src="docs/images/openbot-screenshot.png" alt="OpenBot Screenshot" width="900">
+</p>
 
 1. Clone a repository you can push to into `workspace/` (the default `WORKSPACE_ROOT`), and make
    sure `gh auth status` succeeds from that directory — the bots shell out to `git` and `gh`.
