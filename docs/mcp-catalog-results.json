@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-09-28T21:33:31.876416+00:00",
+  "checked_at": "2026-09-28T21:45:30.279986+00:00",
   "scope": "Real isolated initialize/tools-list; not functional certification or closure of #205",
   "runtime_platform": {
     "os": "Linux x86_64",
@@ -2388,16 +2388,8 @@
           "version": "1.0.9"
         },
         {
-          "name": "httpcore2",
-          "version": "2.13.1"
-        },
-        {
           "name": "httpx",
           "version": "0.28.1"
-        },
-        {
-          "name": "httpx2",
-          "version": "2.13.1"
         },
         {
           "name": "httpx-sse",
@@ -2428,16 +2420,8 @@
           "version": "2025.4.25"
         },
         {
-          "name": "mcp-types",
-          "version": "2.2.0"
-        },
-        {
           "name": "mdurl",
           "version": "0.1.2"
-        },
-        {
-          "name": "opentelemetry-api",
-          "version": "1.45.0"
         },
         {
           "name": "pycparser",
@@ -2461,7 +2445,7 @@
         },
         {
           "name": "PyJWT",
-          "version": "2.15.0"
+          "version": "2.15.1"
         },
         {
           "name": "python-dotenv",
@@ -2494,10 +2478,6 @@
         {
           "name": "starlette",
           "version": "1.7.0"
-        },
-        {
-          "name": "truststore",
-          "version": "0.10.4"
         },
         {
           "name": "typer",
