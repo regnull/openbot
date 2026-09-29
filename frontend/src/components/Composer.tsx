@@ -4,6 +4,7 @@ import type { AttachmentIn } from "../api/client";
 import { Button, Kbd } from "./ui";
 import { CloseIcon } from "./icons";
 import { modKey } from "../lib/shortcuts";
+import { clearThreadDraft, getThreadDraft, setThreadDraft } from "../lib/threadDrafts";
 
 // Paste constraints for attached images (client-side guard; the API re-validates).
 const MAX_IMAGES = 4;
@@ -54,8 +55,8 @@ async function decodeImages(files: File[]): Promise<{ attachments: AttachmentIn[
  * The prompt. A `❯` in the gutter, the text you type, and the keys that send it — the one place
  * the interface is allowed to look like a terminal on purpose.
  */
-export default function Composer({ handles, onSend, disabled, hint, autoFocus, running }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean; running?: boolean }) {
-  const [text, setText] = useState("");
+export default function Composer({ threadId, handles, onSend, disabled, hint, autoFocus, running }: { threadId: string; handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean; running?: boolean }) {
+  const [text, setText] = useState(() => getThreadDraft(threadId));
   const [caret, setCaret] = useState(0);
   const [sel, setSel] = useState(0);
   const [sending, setSending] = useState(false);
@@ -92,6 +93,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus, r
     try {
       await onSend(t, attachments);
       setText("");
+      clearThreadDraft(threadId);
       setCaret(0);
       setSel(0);
       setDismissedAt(null);
@@ -152,7 +154,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus, r
             placeholder={hint ?? "Type a message. @handle addresses a bot."}
             className="min-h-[4.25rem] flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed text-fg outline-none placeholder:text-faint disabled:cursor-not-allowed"
             onChange={(e) => {
-              setText(e.target.value); setCaret(e.target.selectionStart); setSel(0);
+              setText(e.target.value); setThreadDraft(threadId, e.target.value); setCaret(e.target.selectionStart); setSel(0);
               setDismissedAt((d) => (mentionQuery(e.target.value, e.target.selectionStart)?.start === d ? d : null));
             }}
             onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
