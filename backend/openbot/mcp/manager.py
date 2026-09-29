@@ -73,12 +73,30 @@ def _flatten(content: Any) -> str:
     return str(content)
 
 
+OPTIONAL_ARGS_NOTE = ("\n\nRequired arguments: {required}. Leave out every other argument unless you need it; "
+                      "do not send empty strings or placeholder values for arguments you are not using.")
+
+
+def _drop_unset(args: dict[str, Any], required: set[str]) -> dict[str, Any]:
+    """Optional arguments sent as "" or null mean "not provided": some models fill every property of a
+    schema that way (gpt-5.6-luna padded Linear calls with `"projectId": ""` and the like). A server may
+    read a blank as a real value, so they are dropped; required arguments always go through as sent."""
+    return {k: v for k, v in args.items() if k in required or (v is not None and v != "")}
+
+
 def _wrap(tool: BaseTool, name: str, cap_chars: int) -> BaseTool:
     """The registered face of an MCP tool: same schema, capped text output, and every failure (the
     server's isError, a dead transport, a lapsed authorization) returned as an "error: ..." result
-    the model can react to, instead of an exception that fails the whole run."""
+    the model can react to, instead of an exception that fails the whole run. Optional arguments left
+    blank are dropped, and a description for a tool with optional arguments says which ones are required."""
+    schema = tool.args_schema if isinstance(tool.args_schema, dict) else {}
+    required = set(schema.get("required") or ())
+    description = tool.description or name
+    if set(schema.get("properties") or {}) - required:
+        description += OPTIONAL_ARGS_NOTE.format(required=", ".join(f"`{r}`" for r in sorted(required)) or "none")
 
     async def run(**kwargs: Any) -> str:
+        kwargs = _drop_unset(kwargs, required)
         try:
             # Invoking with a tool call (not a bare dict) yields a ToolMessage, which is the only place
             # the adapter surfaces the server's isError status.
@@ -90,7 +108,7 @@ def _wrap(tool: BaseTool, name: str, cap_chars: int) -> BaseTool:
             text = f"error: {text}"
         return cap(text, cap_chars, hint="ask the tool for less, or page through results")
 
-    return StructuredTool.from_function(coroutine=run, name=name, description=tool.description or name,
+    return StructuredTool.from_function(coroutine=run, name=name, description=description,
                                         args_schema=tool.args_schema)
 
 

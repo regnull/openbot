@@ -5,6 +5,7 @@ from typing import Annotated
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 # PUBLIC_URL's local default; a value equal to it is treated as unset (see the validators below).
 LOCAL_PUBLIC_URL = "http://127.0.0.1:8000"
@@ -73,6 +74,7 @@ class Settings(BaseSettings):
     summary_trigger_tokens: int = 60000  # summarize older history into one message once a run's messages exceed this
     summary_keep_messages: int = 24      # ...keeping this many recent messages verbatim (two turns of ~10 tool calls)
     max_model_calls_per_run: int = 60    # model turns per run before the agent is stopped (bots can lower it)
+    max_repeated_tool_failures: int = 3  # identical failed tool calls (same args, same error) before a run is stopped; 0 = off
     history_token_budget: int = 24000
     history_max_messages: int = 80
     memory_reflection_delay: float = 30.0
@@ -92,7 +94,9 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     frontend_dist: Path | None = Path("frontend/dist")
     log_level: str = "INFO"
-    log_file: Path = Path("logs/openbot.log")
+    # None until resolved: <database directory>/logs/openbot.log for a SQLite file database (so each
+    # instance, with its own database, keeps its own log), else logs/openbot.log. See _default_log_file.
+    log_file: Path | None = None
     # Days of per-thread/per-bot activity history kept in the database (see runtime/activity.py); 0 keeps everything.
     activity_log_retention_days: int = 14
     webhook_retry_delays: Annotated[list[float], NoDecode] = [5.0, 30.0, 120.0]
@@ -125,6 +129,21 @@ class Settings(BaseSettings):
             self.workspace_root = root
         if "database_url" not in self.model_fields_set:
             self.database_url = f"sqlite+aiosqlite:///{root / '.openbot' / 'openbot.db'}"
+        if "secret_key_file" not in self.model_fields_set:
+            # With the database it protects, and inside the state directory tools may not touch.
+            self.secret_key_file = root / ".openbot" / "secret.key"
+        return self
+
+    @model_validator(mode="after")
+    def _default_log_file(self):
+        """Without an explicit LOG_FILE, log beside the database (after the root-directory defaults, which
+        may have moved it): two instances with different databases then never share, or rotate, one file."""
+        if self.log_file is None:
+            database = make_url(self.database_url).database if self.database_url.startswith("sqlite") else None
+            if database and database != ":memory:":
+                self.log_file = Path(database).parent / "logs" / "openbot.log"
+            else:
+                self.log_file = Path("logs/openbot.log")
         return self
 
 
@@ -172,7 +191,7 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_log_file_means_default(cls, v):
         if v == "":
-            return cls.model_fields["log_file"].default
+            return None
         return v
 
     @field_validator("frontend_dist", mode="before")

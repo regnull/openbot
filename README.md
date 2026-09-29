@@ -105,9 +105,12 @@ make app -- --include-llm-call-details  # opt in to detailed model-call token da
 make electron ROOT_DIRECTORY=~/src/myproject  # workspace ~/src/myproject, DB in ~/src/myproject/.openbot/
 ```
 
-The development launcher (`scripts/electron-dev.sh`) runs its own backend on port **8001**
-(override with `ELECTRON_BACKEND_PORT`) so it can run alongside `make run` on port **8000**, and
-points Electron at it. It runs without backend reload or Vite file watching, so restart the app to
+The development launcher (`scripts/electron-dev.sh`) runs its own backend on the first free port
+from **8001** and its Vite server on the first free port from **5173** (override with
+`ELECTRON_BACKEND_PORT` / `FRONTEND_PORT`; an explicit port that is taken is an error), so it can
+run alongside `make run` on port **8000**, and points Electron at them. Because the ports are picked
+per launch, several instances can run at once, each with its own database:
+`./openbot --root ~/src/a` in one terminal and `./openbot --root ~/src/b` in another. It runs without backend reload or Vite file watching, so restart the app to
 pick up changes. The repository-root `openbot` launcher accepts the same
 `--include-llm-call-details` flag. Electron and `./openbot` omit detailed per-LLM-call token data
 by default; `make run` and the browser workflows keep it. The backend CLI itself takes
@@ -174,6 +177,7 @@ so a fresh install runs the setup wizard:
 |---|---|---|
 | Data directory | `~/Library/Application Support/OpenBot/` | `~/.config/OpenBot/` |
 | Database | `<data>/openbot.db` (+ `openbot.langgraph.db`) | same |
+| Secret key | `<data>/secret.key`, created once a secret (provider key, MCP token) is stored | same |
 | Workspace | `<data>/workspace/` | same |
 | Logs | `<data>/logs/openbot.log`, `<data>/logs/backend-launcher.log` | same |
 | Python venv | `<data>/venv/` | same |
@@ -524,7 +528,9 @@ Configuration lives in two places, by design:
 Every bot's model defaults to `auto`: it uses whichever provider is configured (OpenRouter with the
 default bot model if an OpenRouter key is set, else the first configured provider), so it keeps working
 as keys are added, removed, or changed. Pick an explicit provider/model per bot in the bot editor to
-opt out for that bot.
+opt out for that bot: it then runs on exactly that model, including a different OpenRouter model per
+bot. The one exception keeps a bot working when its provider has no key: a cloud bot whose provider is
+not configured runs on OpenRouter with the default bot model, if an OpenRouter key is set.
 
 The model pickers in the bot editor and in Settings list a catalog fetched from
 [models.dev](https://models.dev) for OpenAI, Anthropic, OpenRouter and Ollama (for Ollama: the models
@@ -548,7 +554,7 @@ as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///./.openbot/openbot.db` | Any SQLAlchemy async URL. `postgresql+asyncpg://...` is supported by the same schema and Alembic migrations, but is untested in v1. |
 | `SECRET_KEY` | *(unset)* | Fernet key protecting every secret stored in the database (provider keys, MCP headers/env, OAuth tokens). Unset: generated once into `SECRET_KEY_FILE`. `MCP_TOKEN_KEY` is accepted as an older name. |
-| `SECRET_KEY_FILE` | `./secret.key` | Where the generated key lives (owner-only permissions). An existing `mcp_token.key` is picked up. |
+| `SECRET_KEY_FILE` | `./secret.key` | Where the generated key lives (owner-only permissions). With a root directory it defaults to `<root>/.openbot/secret.key`, and in the desktop app to `<data>/secret.key`, next to the database. An existing `mcp_token.key` is picked up. |
 | `OPENBOT_API_KEY` | *(unset)* | When set, every API route except `/health` and the MCP OAuth callback requires header `X-API-Key: <value>`. |
 | `PUBLIC_URL` | `http://127.0.0.1:8000` | Where browsers reach this server; builds the OAuth redirect URI for remote MCP servers. While it is this local default, it follows the port the backend CLI was started on (e.g. `:8001` under `make app`); set it explicitly for any other address. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed origins. |
@@ -561,7 +567,7 @@ as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and
 | `SEED_DEMO_BOTS` | `true` | Seed the demo team when the bot table is empty and a provider is configured (at startup, or when the setup wizard completes). |
 | `WEBHOOK_RETRY_DELAYS` | `5,30,120` | Seconds between webhook delivery retries before an item is marked `failed`. |
 | `LOG_LEVEL` | `INFO` | Console verbosity. The log file always records `DEBUG` detail. |
-| `LOG_FILE` | `logs/openbot.log` | Rotating diagnostic log (10 MB x 5). See [Troubleshooting](#troubleshooting). |
+| `LOG_FILE` | `logs/openbot.log` beside the SQLite database (e.g. `.openbot/logs/openbot.log`) | Rotating diagnostic log (10 MB x 5), one per database so separate instances keep separate logs. `./openbot` sets it to `<db-root>/logs/openbot.log` even when `.env` pins it. See [Troubleshooting](#troubleshooting). |
 | `ACTIVITY_LOG_RETENTION_DAYS` | `14` | Days of activity-log rows (`activity_log` table) kept; pruned at startup. `0` keeps everything. |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | `false`, unset, `openbot`, unset | LangSmith tracing; the SDK reads these from the environment. |
 
@@ -580,13 +586,13 @@ name, if set, is the default the page shows and the value a reset returns to.
 | Providers | `openrouter_api_key`, `openai_api_key`, `anthropic_api_key`, `xai_api_key` | Enable the respective provider. Secret: encrypted at rest, masked in the API. |
 | Providers | `ollama_base_url`, `ollama_model` | A local Ollama server (e.g. `http://localhost:11434`) enables the `ollama` provider; the bot editor lists the models installed there. Bots on `ollama` keep their model even when an OpenRouter key is set. |
 | Embeddings | `embedding_model`, `embedding_dims` | `provider:model` for semantic memory search (`openrouter:openai/text-embedding-3-small`/1536 using the OpenRouter key, `openai:text-embedding-3-small`/1536, `ollama:nomic-embed-text`/768). Empty turns semantic search off. Applies immediately: the memory store is reopened. |
-| Run limits | `max_model_calls_per_run` (60), `max_bot_hops` (20) | Model turns per run before the agent stops with a notice (a bot can lower it in `model_settings.max_model_calls`; the seeded Chief of Staff uses 6); bot-to-bot mention chain limit per thread. `model_settings` also accepts `reasoning_effort` (set from the Effort select for models that declare levels), `temperature`, `max_tokens`. |
+| Run limits | `max_model_calls_per_run` (60), `max_repeated_tool_failures` (3), `max_bot_hops` (20) | Model turns per run before the agent stops with a notice (a bot can lower it in `model_settings.max_model_calls`; the seeded Chief of Staff uses 6); how many times one tool call may fail with the same arguments and error before the run stops with that error as the reply (0 = off); bot-to-bot mention chain limit per thread. `model_settings` also accepts `reasoning_effort` (set from the Effort select for models that declare levels), `temperature`, `max_tokens`. |
 | Context | `tool_output_cap` (8000), `shell_output_cap` (4000) | Longest single tool result the model sees; shorter cap for `run_shell` so dumping files through the shell loses to `read_file` ranges. |
 | Context | `context_trigger_tokens` (40000), `context_clear_at_least` (10000) | Once a run's messages pass the trigger, tool results from turns before the last two, and their call arguments, become a placeholder, oldest first; each clearing reclaims at least the second value so clearings are rare and the prompt cache stays warm. What the last two model turns fetched is never cleared. |
 | Context | `summary_trigger_tokens` (60000), `summary_keep_messages` (24) | Older history folds into one structured summary by the bot's own model once the run's messages pass the trigger. Measured on the messages alone: the system prompt and tool schemas are not counted. |
 | Context | `history_token_budget` (24000), `history_max_messages` (80) | Thread history included in a run's prompt. |
 | Memory | `memory_reflection_delay` (30) | Seconds to debounce background memory reflection after a run. |
-| Model routing | `bot_model` | OpenRouter model for bots on `auto` (default `openai/gpt-4o-mini`). |
+| Model routing | `bot_model` | OpenRouter model for bots on `auto`, `openrouter` bots with no model, and cloud bots whose provider has no key (default `openai/gpt-4o-mini`). |
 | Model routing | `openrouter_provider_order` | Preferred OpenRouter upstream slugs (e.g. `z-ai`); each upstream has its own prompt cache. |
 | Model routing | `prompt_caching` (true), `direct_anthropic` (true) | Anthropic cache breakpoints on every call; send OpenRouter `anthropic/...` models straight to Anthropic when a key exists so caching covers tool results. |
 | Model retries | `model_retry_max_attempts` (3), `model_retry_base_delay` (2.0), `model_retry_backoff_cap` (60.0) | Retries a model call that failed with a transient upstream provider error (rate limit, 5xx, timeout, "model stopped before completing"); 0 or 1 attempts disables retries. Delays double from the base with jitter up to the cap. Auth/permission/invalid-request errors fail immediately. |
@@ -605,7 +611,8 @@ automatically at startup against any non-`:memory:` database; nothing to run by 
 
 ## Troubleshooting
 
-Every process writes a timestamped diagnostic log to `LOG_FILE` (`logs/openbot.log` by default,
+Every process writes a timestamped diagnostic log to `LOG_FILE` (`logs/openbot.log` in the database's
+directory by default, e.g. `.openbot/logs/openbot.log`,
 rotating at 10 MB, five backups kept). It always contains `DEBUG` detail regardless of `LOG_LEVEL`,
 so it is the place to look when a bot misbehaves:
 

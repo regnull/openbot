@@ -52,6 +52,7 @@ describe("backendLaunch", () => {
     expect(launch.cwd).toBe("/opt/OpenBot/resources");
     expect(launch.env.DATABASE_URL).toBe("sqlite+aiosqlite:////home/ada/.config/OpenBot/openbot.db");
     expect(launch.env.WORKSPACE_ROOT).toBe("/home/ada/.config/OpenBot/workspace");
+    expect(launch.env.SECRET_KEY_FILE).toBe("/home/ada/.config/OpenBot/secret.key");
     expect(launch.env.TOOLS_DIR).toBe("/opt/OpenBot/resources/tools");
     expect(launch.env.LOG_FILE).toBe("/home/ada/.config/OpenBot/logs/openbot.log");
     expect(launch.env.UV_PROJECT_ENVIRONMENT).toBe("/home/ada/.config/OpenBot/venv");
@@ -62,10 +63,11 @@ describe("backendLaunch", () => {
   });
 
   it("lets values from the environment win, except the venv location", () => {
-    const env = { DATABASE_URL: "postgresql://db/openbot", WORKSPACE_ROOT: "/srv/ws", TOOLS_DIR: "/srv/tools", LOG_FILE: "/var/log/openbot.log", UV_PROJECT_ENVIRONMENT: "/tmp/elsewhere" };
+    const env = { DATABASE_URL: "postgresql://db/openbot", WORKSPACE_ROOT: "/srv/ws", SECRET_KEY_FILE: "/etc/openbot/secret.key", TOOLS_DIR: "/srv/tools", LOG_FILE: "/var/log/openbot.log", UV_PROJECT_ENVIRONMENT: "/tmp/elsewhere" };
     const launch = backendLaunch({ ...unix, env });
     expect(launch.env.DATABASE_URL).toBe("postgresql://db/openbot");
     expect(launch.env.WORKSPACE_ROOT).toBe("/srv/ws");
+    expect(launch.env.SECRET_KEY_FILE).toBe("/etc/openbot/secret.key");
     expect(launch.env.TOOLS_DIR).toBe("/srv/tools");
     expect(launch.env.LOG_FILE).toBe("/var/log/openbot.log");
     // The app's resources are not reliably writable once installed, so the venv always goes to app data.
@@ -76,6 +78,7 @@ describe("backendLaunch", () => {
     const launch = backendLaunch({ ...unix, env: { OPENBOT_ROOT_DIRECTORY: "/home/ada/bots" } });
     expect(launch.env.DATABASE_URL).toBeUndefined();
     expect(launch.env.WORKSPACE_ROOT).toBeUndefined();
+    expect(launch.env.SECRET_KEY_FILE).toBeUndefined();          // the backend puts it under <root>/.openbot
     expect(launch.dirs).toEqual(["/home/ada/.config/OpenBot/logs", "/home/ada/bots", "/home/ada/bots/.openbot"]);
     expect(launch.args).toContain("--root-directory");
     expect(launch.args[launch.args.indexOf("--root-directory") + 1]).toBe("/home/ada/bots");
@@ -92,6 +95,7 @@ describe("backendLaunch", () => {
     });
     expect(launch.env.DATABASE_URL).toBe("sqlite+aiosqlite:///C:/Users/ada/AppData/Roaming/OpenBot/openbot.db");
     expect(launch.env.UV_PROJECT_ENVIRONMENT).toBe("C:\\Users\\ada\\AppData\\Roaming\\OpenBot\\venv");
+    expect(launch.env.SECRET_KEY_FILE).toBe("C:\\Users\\ada\\AppData\\Roaming\\OpenBot\\secret.key");
     expect(launch.args[2]).toBe("C:\\Program Files\\OpenBot\\resources\\backend");
   });
 

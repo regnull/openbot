@@ -1,0 +1,550 @@
+{
+  "checked_at": "2026-09-28T16:11:07.166024+00:00",
+  "scope": "Reused read-only original catalog metadata, not runtime evidence",
+  "entries": [
+    {
+      "id": "filesystem",
+      "package": "@modelcontextprotocol/server-filesystem",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-filesystem",
+      "status": 200,
+      "latest": "2026.8.31",
+      "deprecated": null,
+      "bin": {
+        "mcp-server-filesystem": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/modelcontextprotocol/servers.git",
+        "type": "git"
+      },
+      "engines": null
+    },
+    {
+      "id": "git",
+      "package": "@modelcontextprotocol/server-git",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-git",
+      "status": 404,
+      "latest": null,
+      "deprecated": null,
+      "bin": null,
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "memory",
+      "package": "@modelcontextprotocol/server-memory",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-memory",
+      "status": 200,
+      "latest": "2026.8.31",
+      "deprecated": null,
+      "bin": {
+        "mcp-server-memory": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/modelcontextprotocol/servers.git",
+        "type": "git"
+      },
+      "engines": null
+    },
+    {
+      "id": "sequential-thinking",
+      "package": "@modelcontextprotocol/server-sequential-thinking",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-sequential-thinking",
+      "status": 200,
+      "latest": "2026.8.31",
+      "deprecated": null,
+      "bin": {
+        "mcp-server-sequential-thinking": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/modelcontextprotocol/servers.git",
+        "type": "git"
+      },
+      "engines": null
+    },
+    {
+      "id": "time",
+      "package": "@modelcontextprotocol/server-time",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-time",
+      "status": 404,
+      "latest": null,
+      "deprecated": null,
+      "bin": null,
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "fetch",
+      "package": "@modelcontextprotocol/server-fetch",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-fetch",
+      "status": 404,
+      "latest": null,
+      "deprecated": null,
+      "bin": null,
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "github",
+      "package": "@modelcontextprotocol/server-github",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-github",
+      "status": 200,
+      "latest": "2025.4.8",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-github": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "gitlab",
+      "package": "@modelcontextprotocol/server-gitlab",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-gitlab",
+      "status": 200,
+      "latest": "2025.4.25",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-gitlab": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "postgres",
+      "package": "@modelcontextprotocol/server-postgres",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-postgres",
+      "status": 200,
+      "latest": "0.6.2",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-postgres": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "sqlite",
+      "package": "@modelcontextprotocol/server-sqlite",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-sqlite",
+      "status": 404,
+      "latest": null,
+      "deprecated": null,
+      "bin": null,
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "puppeteer",
+      "package": "@modelcontextprotocol/server-puppeteer",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-puppeteer",
+      "status": 200,
+      "latest": "2025.5.12",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-puppeteer": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "brave-search",
+      "package": "@modelcontextprotocol/server-brave-search",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-brave-search",
+      "status": 200,
+      "latest": "0.6.2",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-brave-search": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "slack",
+      "package": "@modelcontextprotocol/server-slack",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-slack",
+      "status": 200,
+      "latest": "2025.4.25",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-slack": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "google-drive",
+      "package": "@modelcontextprotocol/server-gdrive",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-gdrive",
+      "status": 200,
+      "latest": "2025.1.14",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-gdrive": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "everart",
+      "package": "@modelcontextprotocol/server-everart",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-everart",
+      "status": 200,
+      "latest": "0.6.2",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-everart": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "serena",
+      "package": "serena-agent",
+      "registry": "PyPI",
+      "url": "https://pypi.org/pypi/serena-agent/json",
+      "status": 200,
+      "latest": "1.7.0",
+      "deprecated": null,
+      "bin": null,
+      "repository": {
+        "Homepage": "https://github.com/oraios/serena"
+      },
+      "engines": "<3.15,>=3.11"
+    },
+    {
+      "id": "context7",
+      "package": "@upstash/context7-mcp",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40upstash%2Fcontext7-mcp",
+      "status": 200,
+      "latest": "4.1.1",
+      "deprecated": null,
+      "bin": {
+        "context7-mcp": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/upstash/context7.git",
+        "type": "git",
+        "directory": "packages/mcp"
+      },
+      "engines": {
+        "node": ">=20.18.1"
+      }
+    },
+    {
+      "id": "delimit",
+      "package": "delimit-cli",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/delimit-cli",
+      "status": 200,
+      "latest": "4.21.0",
+      "deprecated": null,
+      "bin": {
+        "delimit": "bin/delimit-cli.js",
+        "delimit-cli": "bin/delimit-cli.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/delimit-ai/delimit-mcp-server.git",
+        "type": "git"
+      },
+      "engines": {
+        "node": ">=14.0.0"
+      }
+    },
+    {
+      "id": "playwright",
+      "package": "@playwright/mcp",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40playwright%2Fmcp",
+      "status": 200,
+      "latest": "0.0.82",
+      "deprecated": null,
+      "bin": {
+        "playwright-mcp": "cli.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/microsoft/playwright-mcp.git",
+        "type": "git"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    {
+      "id": "notion",
+      "package": "@notionhq/notion-mcp-server",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40notionhq%2Fnotion-mcp-server",
+      "status": 200,
+      "latest": "2.5.2",
+      "deprecated": null,
+      "bin": {
+        "notion-mcp-server": "bin/cli.mjs"
+      },
+      "repository": {
+        "url": "git+ssh://git@github.com/makenotion/notion-mcp-server.git",
+        "type": "git"
+      },
+      "engines": null
+    },
+    {
+      "id": "sentry",
+      "package": "@sentry/mcp-server",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40sentry%2Fmcp-server",
+      "status": 200,
+      "latest": "0.42.0",
+      "deprecated": null,
+      "bin": {
+        "sentry-mcp": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+ssh://git@github.com/getsentry/sentry-mcp.git",
+        "type": "git"
+      },
+      "engines": {
+        "node": ">=22.13"
+      }
+    },
+    {
+      "id": "stripe",
+      "package": "@stripe/mcp",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40stripe%2Fmcp",
+      "status": 200,
+      "latest": "0.3.3",
+      "deprecated": null,
+      "bin": {
+        "mcp": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/stripe/ai.git",
+        "type": "git"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    {
+      "id": "supabase",
+      "package": "@supabase/mcp-server-supabase",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40supabase%2Fmcp-server-supabase",
+      "status": 200,
+      "latest": "0.13.0",
+      "deprecated": null,
+      "bin": {
+        "mcp-server-supabase": "dist/cli.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/supabase/mcp.git",
+        "type": "git"
+      },
+      "engines": null
+    },
+    {
+      "id": "vercel",
+      "package": "vercel-mcp",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/vercel-mcp",
+      "status": 200,
+      "latest": "0.0.7",
+      "deprecated": null,
+      "bin": {
+        "vercel-mcp": "build/index.js"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/zueai/vercel-api-mcp.git"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    {
+      "id": "aws",
+      "package": "awslabs.aws-documentation-mcp-server",
+      "registry": "PyPI",
+      "url": "https://pypi.org/pypi/awslabs.aws-documentation-mcp-server/json",
+      "status": 200,
+      "latest": "1.2.1",
+      "deprecated": null,
+      "bin": null,
+      "repository": {
+        "Bug Tracker": "https://github.com/awslabs/mcp/issues",
+        "Changelog": "https://github.com/awslabs/mcp/blob/main/src/aws-documentation-mcp-server/CHANGELOG.md",
+        "Documentation": "https://awslabs.github.io/mcp/servers/aws-documentation-mcp-server/",
+        "Homepage": "https://awslabs.github.io/mcp/",
+        "Source": "https://github.com/awslabs/mcp.git"
+      },
+      "engines": ">=3.10"
+    },
+    {
+      "id": "cloudflare",
+      "package": "@cloudflare/mcp-server-cloudflare",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40cloudflare%2Fmcp-server-cloudflare",
+      "status": 200,
+      "latest": "0.2.0",
+      "deprecated": null,
+      "bin": {
+        "mcp-server-cloudflare": "dist/index.js"
+      },
+      "repository": null,
+      "engines": {
+        "node": ">=16.17.0"
+      }
+    },
+    {
+      "id": "mongodb",
+      "package": "@mongodb-js/mongodb-mcp-server",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40mongodb-js%2Fmongodb-mcp-server",
+      "status": 200,
+      "latest": "0.0.3",
+      "deprecated": "Package has been renamed to mongodb-mcp-server",
+      "bin": {
+        "mongodb-mcp-server": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/mongodb-js/mongodb-mcp-server.git"
+      },
+      "engines": {
+        "node": ">=20.0.0"
+      }
+    },
+    {
+      "id": "redis",
+      "package": "@modelcontextprotocol/server-redis",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-redis",
+      "status": 200,
+      "latest": "2025.4.25",
+      "deprecated": "Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.",
+      "bin": {
+        "mcp-server-redis": "dist/index.js"
+      },
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "duckdb",
+      "package": "duckdb-mcp-server",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/duckdb-mcp-server",
+      "status": 404,
+      "latest": null,
+      "deprecated": null,
+      "bin": null,
+      "repository": null,
+      "engines": null
+    },
+    {
+      "id": "docker",
+      "package": "mcp-server-docker",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/mcp-server-docker",
+      "status": 200,
+      "latest": "1.0.0",
+      "deprecated": null,
+      "bin": {
+        "mcp-server-docker": "dist/index.js"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/adamdude828/mcp-server-docker.git"
+      },
+      "engines": null
+    },
+    {
+      "id": "tavily",
+      "package": "tavily-mcp",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/tavily-mcp",
+      "status": 200,
+      "latest": "0.2.22",
+      "deprecated": null,
+      "bin": {
+        "tavily-mcp": "build/index.js"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/tavily-ai/tavily-mcp.git"
+      },
+      "engines": null
+    },
+    {
+      "id": "firecrawl",
+      "package": "firecrawl-mcp",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/firecrawl-mcp",
+      "status": 200,
+      "latest": "3.25.5",
+      "deprecated": null,
+      "bin": {
+        "firecrawl-mcp": "dist/index.js"
+      },
+      "repository": {
+        "url": "git+https://github.com/firecrawl/firecrawl-mcp-server.git",
+        "type": "git"
+      },
+      "engines": {
+        "node": ">=22.0.0"
+      }
+    },
+    {
+      "id": "exa",
+      "package": "exa-mcp-server",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/exa-mcp-server",
+      "status": 200,
+      "latest": "3.4.1",
+      "deprecated": null,
+      "bin": {
+        "exa-mcp-server": "dist/stdio.cjs"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/exa-labs/exa-mcp-server.git"
+      },
+      "engines": {
+        "node": ">=20.0.0"
+      }
+    },
+    {
+      "id": "perplexity",
+      "package": "perplexity-mcp",
+      "registry": "npm",
+      "url": "https://registry.npmjs.org/perplexity-mcp",
+      "status": 200,
+      "latest": "0.2.3",
+      "deprecated": null,
+      "bin": {
+        "perplexity-mcp": "build/index.js"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/DaInfernalCoder/researcher-mcp.git"
+      },
+      "engines": {
+        "node": ">=18.0.0"
+      }
+    }
+  ]
+}

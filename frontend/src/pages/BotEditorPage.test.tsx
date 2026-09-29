@@ -124,11 +124,29 @@ it("drops an effort the model does not accept on save and removes the key when D
   expect(update.mock.calls[1][1].model_settings).toEqual({});
 });
 
-it("uses the catalog picker for catalog providers and warns when OpenRouter reroutes cloud bots", async () => {
-  vi.mocked(Api.getProviders).mockResolvedValue({ ...providers, providers: providers.providers.map((p) => (p.id === "openrouter" ? { ...p, configured: true } : p)) });
+it("uses the catalog picker for catalog providers and warns only when the bot's provider has no key", async () => {
+  const withOpenRouter = (anthropic: boolean) => ({ ...providers, providers: providers.providers.map((p) =>
+    p.id === "openrouter" ? { ...p, configured: true } : p.id === "anthropic" ? { ...p, configured: anthropic } : p) });
+  vi.mocked(Api.getProviders).mockResolvedValue(withOpenRouter(true));
   vi.spyOn(Api, "getBot").mockResolvedValue({ ...bot("b1", "Opus"), provider: "anthropic", model: "claude-opus-5-5" });
   await show("/edit/b1");
   await until(() => el.querySelector("input[role=combobox]") !== null);
   expect(el.querySelector<HTMLInputElement>("input[role=combobox]")!.value).toBe("claude-opus-5-5");
-  expect(el.textContent).toContain("With an OpenRouter key configured");
+  await until(() => qc.getQueryData(["providers"]) !== undefined);
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect(el.textContent).not.toContain("default OpenRouter model");
+
+  vi.mocked(Api.getProviders).mockResolvedValue(withOpenRouter(false));
+  qc.clear();
+  await show("/edit/b1");
+  await until(() => el.textContent!.includes("No anthropic key is configured"));
+});
+
+it("never warns for a bot on its own OpenRouter model", async () => {
+  vi.mocked(Api.getProviders).mockResolvedValue({ ...providers, providers: providers.providers.map((p) => (p.id === "openrouter" ? { ...p, configured: true } : p)) });
+  vi.spyOn(Api, "getBot").mockResolvedValue({ ...bot("b1", "Router"), provider: "openrouter", model: "z-ai/glm-5.3-flash" });
+  await show("/edit/b1");
+  await until(() => nameInput() === "Router" && qc.getQueryData(["providers"]) !== undefined);
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect(el.textContent).not.toContain("default OpenRouter model");
 });

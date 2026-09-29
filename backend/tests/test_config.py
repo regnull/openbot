@@ -10,6 +10,7 @@ from pathlib import Path
 
 from openbot.cli import _apply_detail_setting, _apply_listen_port, _parse_args, _uvicorn_options
 from openbot.config import Settings
+from openbot.runtime.secrets import resolve_secret_key
 
 
 def test_cli_defaults_to_environment_behavior(monkeypatch):
@@ -113,11 +114,23 @@ def test_root_directory_preserves_explicit_database_equal_to_default(monkeypatch
 
 def test_without_root_directory_defaults_are_unchanged(monkeypatch):
     monkeypatch.delenv("OPENBOT_ROOT_DIRECTORY", raising=False)
+    monkeypatch.delenv("SECRET_KEY_FILE", raising=False)
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     settings = Settings(_env_file=None)
     assert settings.workspace_root == Path("./workspace")
     assert settings.database_url == "sqlite+aiosqlite:///./.openbot/openbot.db"
+    assert settings.secret_key_file == Path("./secret.key")
+
+
+def test_root_directory_keeps_the_secret_key_with_its_database(monkeypatch, tmp_path):
+    """The key belongs next to the database it protects, not in whatever directory the process
+    happens to start in (for the packaged app, the install's resources, which updates replace)."""
+    monkeypatch.setenv("OPENBOT_ROOT_DIRECTORY", str(tmp_path))
+    monkeypatch.delenv("SECRET_KEY_FILE", raising=False)
+    assert Settings(_env_file=None).secret_key_file == tmp_path / ".openbot" / "secret.key"
+    monkeypatch.setenv("SECRET_KEY_FILE", str(tmp_path / "elsewhere.key"))
+    assert Settings(_env_file=None).secret_key_file == tmp_path / "elsewhere.key"
 
 
 
@@ -258,6 +271,19 @@ def test_telegram_bot_token_not_set_is_none(monkeypatch):
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     settings = Settings(_env_file=None)
     assert settings.telegram_bot_token is None
+
+
+def test_an_existing_key_in_the_old_default_location_is_carried_over(monkeypatch, tmp_path):
+    """Moving the default must not mint a new key: secrets stored with the old one would be unreadable."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "secret.key").write_text("old-key\n", encoding="utf-8")
+    monkeypatch.setenv("OPENBOT_ROOT_DIRECTORY", str(tmp_path / "bots"))
+    for name in ("SECRET_KEY", "SECRET_KEY_FILE", "MCP_TOKEN_KEY", "MCP_TOKEN_KEY_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(_env_file=None)
+    assert resolve_secret_key(settings) == "old-key"
+    assert (tmp_path / "bots" / ".openbot" / "secret.key").read_text(encoding="utf-8") == "old-key"
+    assert (tmp_path / "secret.key").is_file()                      # copied, never removed
 
 
 def test_shell_user_needs_an_api_key(monkeypatch):

@@ -32,6 +32,7 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
   // Events arrive sorted by seq; group contiguous text events and build a chronological list of content blocks.
   const results = new Map<unknown, RunEvent>(events.filter((e) => e.type === "tool_result").map((e) => [e.payload.tool_call_id, e] as const));
   const toolCalls = events.filter((e) => e.type === "tool_call").length;
+  const failed = [...results.values()].filter((r) => r.payload.status === "error").length;
   /** Render a chronological transcript: text blocks interleaved with tool calls. */
   const body: React.ReactNode[] = [];
   for (const e of events) {
@@ -51,7 +52,7 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
               <span className="font-medium text-fg">{e.payload.name}</span>
               <span className="whitespace-pre-wrap text-muted">({JSON.stringify(e.payload.args)})</span>
             </span>
-            <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 self-center rounded-full ${r ? "bg-ok" : "animate-pulse bg-warn"}`} title={r ? "returned" : "running"} aria-hidden />
+            <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 self-center rounded-full ${!r ? "animate-pulse bg-warn" : r.payload.status === "error" ? "bg-danger" : "bg-ok"}`} title={!r ? "running" : r.payload.status === "error" ? "failed" : "returned"} aria-hidden />
           </summary>
           <pre className="ml-3.5 mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-ui border border-line bg-canvas p-2 text-[11px] leading-relaxed text-muted scrollbar-subtle">{r ? String(r.payload.content) : "…"}</pre>
         </details>
@@ -64,7 +65,7 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
         <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={toggle} aria-expanded={open}>
           {open ? <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-faint" /> : <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-faint" />}
           <Badge tone={tone(run.status)} pulse={run.status === "running"}>{run.status.replace("_", " ")}</Badge>
-          <span className="whitespace-nowrap text-muted">{toolCalls} tool call{toolCalls === 1 ? "" : "s"}</span>
+          <span className="whitespace-nowrap text-muted">{toolCalls} tool call{toolCalls === 1 ? "" : "s"}{failed > 0 && <span className="text-danger"> · {failed} failed</span>}</span>
           {usageLabel(run) && <span className="hidden truncate text-faint sm:inline" title="prompt + completion tokens for this run">{usageLabel(run)}</span>}
         </button>
         {run.langsmith_run_id && (

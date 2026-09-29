@@ -132,7 +132,7 @@ it.each([true, false])("MCP add confirms only persistence, not connection (succe
 
 it.each([true, false])("MCP catalog Add submits and reports persistence failures (success=%s)", async (success) => {
   vi.spyOn(Api, "listMcpCatalog").mockResolvedValue([{
-    id: "github", name: "GitHub", description: "GitHub tools", provider: "Example", source_url: "https://example.com", transport: "stdio", command: "npx", args: ["github-mcp"], url: "", required_credentials: ["GITHUB_TOKEN"], compatibility: [],
+    id: "time", name: "Time", description: "Time tools", provider: "Example", source_url: "https://example.com", transport: "stdio", command: "uvx", args: ["mcp-server-time"], url: "", required_credentials: [], compatibility: [], status: "template", status_reason: "Runtime not tested",
   }]);
   const pending = deferred<McpServer>();
   const install = vi.spyOn(Api, "installMcpCatalogEntry").mockReturnValue(pending.promise);
@@ -142,7 +142,7 @@ it.each([true, false])("MCP catalog Add submits and reports persistence failures
   const dialog = el.querySelector('[role="dialog"]')!;
   expect(dialog.querySelector('button[type="submit"]')).not.toBeNull();
   await click(button("Add disabled server", dialog));
-  expect(install).toHaveBeenCalledExactlyOnceWith("github", { name: "github", enabled: false });
+  expect(install).toHaveBeenCalledExactlyOnceWith("time", { name: "time", enabled: false });
   await act(async () => { if (success) pending.resolve({ status: "disabled" } as McpServer); else pending.reject(new Error("Catalog install failed")); });
   await until(() => success ? !!notice() : !!el.querySelector('[role="alert"]'));
   if (success) {
@@ -152,6 +152,31 @@ it.each([true, false])("MCP catalog Add submits and reports persistence failures
     expect(notice()).toContain("Could not save changes");
     expect(el.querySelector('[role="alert"]')?.textContent).toContain("Catalog install failed");
   }
+});
+
+it.each(["deprecated", "unverified"] as const)("catalog %s entries show reasons and reject form submission", async (status) => {
+  vi.spyOn(Api, "listMcpCatalog").mockResolvedValue([{
+    id: "blocked", name: "Blocked server", description: "Unavailable example", provider: "Example", source_url: "https://example.com", transport: "stdio", command: "", args: [], url: "", required_credentials: [], compatibility: [], status, status_reason: "Identity or support needs review",
+  }]);
+  const install = vi.spyOn(Api, "installMcpCatalogEntry");
+  await mount(); await until(() => !!button("Details")); await click(button("Details"));
+  const dialog = el.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("Identity or support needs review");
+  expect(dialog.textContent).toContain("No verified launch command");
+  expect(button("Unavailable", dialog).disabled).toBe(true);
+  await act(async () => dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  expect(install).not.toHaveBeenCalled();
+});
+
+it("catalog shows OAuth requirements and automatic connection warning", async () => {
+  vi.spyOn(Api, "listMcpCatalog").mockResolvedValue([{
+    id: "linear", name: "Linear", description: "Issues", provider: "Linear", source_url: "https://linear.app/docs/mcp", transport: "http", command: "", args: [], url: "https://mcp.linear.app/mcp", required_credentials: ["Linear account authorization (OAuth or bearer token)"], compatibility: [], status: "template", status_reason: "Runtime not tested",
+  }]);
+  await mount(); await until(() => !!button("Details")); await click(button("Details"));
+  const dialog = el.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("OAuth or bearer token");
+  expect(dialog.textContent).toContain("Enable starts a connection automatically");
+  expect(dialog.textContent).toContain("catalog changes do not migrate them");
 });
 
 it.each([true, false])("browser API key persistence reports storage failures (success=%s)", async (success) => {

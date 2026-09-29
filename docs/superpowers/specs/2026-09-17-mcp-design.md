@@ -24,9 +24,12 @@ the runner, per-bot tool selection, approvals or the output cap changes.
 ```
 
 - `command` selects stdio; `url` selects streamable HTTP. `env`, `cwd`, `headers` are optional.
-- `${VAR}` in `args`, `env`, `headers` and `url` expands from the server environment (`.env` is
-  loaded there), so secrets never sit in the config file. An unset variable is an error for that
-  server, not a silent empty string.
+- `${VAR}` in `args`, `env`, `headers` and `url` expands from OpenBot's process environment (`.env`
+  is loaded there), so secrets never sit in the config file. The special `$CWD` and `${CWD}` forms
+  expand to the directory where OpenBot was started. Expansion replaces text within one argv element;
+  no shell splitting or evaluation occurs, so paths containing spaces remain one argument. An unset
+  `${VAR}` is an error for that server, while unknown unbraced `$VAR` forms remain literal for
+  backward compatibility.
 - A remote server with no static `Authorization` header uses OAuth when the server demands it.
 - `enabled: false` keeps a server in the file but skips it.
 

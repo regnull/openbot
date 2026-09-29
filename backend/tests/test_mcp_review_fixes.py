@@ -238,3 +238,27 @@ async def test_bot_referencing_a_disconnected_mcp_tool_can_still_be_edited_and_r
         r = await c.patch(f"/api/v1/bots/{r.json()['id']}", json={"name": "E2"})
         assert r.status_code == 200, r.text
         assert (await c.post("/api/v1/bots", json={**body, "handle": "x", "tool_names": ["nope__tool"]})).status_code == 422
+
+
+# --- 9. blank optional arguments are dropped, and the description names the required ones -------------------
+
+async def test_wrapper_drops_blank_optional_arguments_and_names_required_ones():
+    seen = {}
+
+    async def save_comment(**kwargs):
+        seen.update(kwargs)
+        return "ok"
+
+    schema = {"type": "object", "required": ["body"], "additionalProperties": False,
+              "properties": {"body": {"type": "string"}, "issueId": {"type": "string"}, "projectId": {"type": "string"},
+                             "parentId": {"type": "string"}}}
+    tool = _wrap(StructuredTool.from_function(coroutine=save_comment, name="save_comment", description="Comment.",
+                                              args_schema=schema), "linear__save_comment", 400)
+    assert await tool.ainvoke({"body": "", "issueId": "STO-1", "projectId": "", "parentId": None}) == "ok"
+    assert seen == {"body": "", "issueId": "STO-1"}
+    assert tool.description.startswith("Comment.") and "Required arguments: `body`." in tool.description
+
+    all_required = {"type": "object", "required": ["q"], "properties": {"q": {"type": "string"}}}
+    plain = _wrap(StructuredTool.from_function(coroutine=save_comment, name="s", description="Search.",
+                                               args_schema=all_required), "x__s", 400)
+    assert plain.description == "Search."

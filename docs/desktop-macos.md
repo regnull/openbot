@@ -19,7 +19,7 @@ The backend resource is launched with `uv`; therefore users must have `uv` insta
 ## Development
 
 ```bash
-make app       # backend :8001 + Vite + Electron, with cleanup on Ctrl-C
+make app       # backend (first free port from 8001) + Vite (from 5173) + Electron, with cleanup on Ctrl-C
 ```
 
 To check the status page, start Electron with `OPENBOT_URL` pointing at a port with nothing on it (for example `OPENBOT_URL=http://127.0.0.1:5999 pnpm --dir frontend electron`): the window shows the retry message, and loads the UI once something serves that URL.

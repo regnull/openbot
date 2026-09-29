@@ -67,6 +67,9 @@ function backendLaunch({ resourcesPath, userDataDir, port = "8000", env = proces
     dirs.push(p.join(userDataDir, "workspace"));
     launchEnv.DATABASE_URL = env.DATABASE_URL || sqliteUrl(p.join(userDataDir, "openbot.db"));
     launchEnv.WORKSPACE_ROOT = env.WORKSPACE_ROOT || p.join(userDataDir, "workspace");
+    // Next to the database it protects. The backend runs with the install's resources as its working
+    // directory, so the default ./secret.key landed there, and every update replaced that folder.
+    launchEnv.SECRET_KEY_FILE = env.SECRET_KEY_FILE || p.join(userDataDir, "secret.key");
   }
   launchEnv.TOOLS_DIR = env.TOOLS_DIR || p.join(resourcesPath, "tools");
   launchEnv.LOG_FILE = env.LOG_FILE || p.join(userDataDir, "logs", "openbot.log");

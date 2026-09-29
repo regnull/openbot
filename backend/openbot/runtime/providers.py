@@ -66,15 +66,13 @@ def effective_bot_profile(bot: BotProfile, settings: Settings) -> tuple[str, str
 
     A bot with provider "auto" (the default for new bots) always resolves to whichever provider is
     configured (see `default_provider`), so it keeps working as keys are added, removed, or changed
-    without ever needing to be edited.
+    without ever needing to be edited; with an OpenRouter key that is the Settings bot model.
 
-    For bots with an explicit cloud provider, a configured OpenRouter key makes OpenRouter the
-    runtime provider for every bot, so the team can be moved to another OpenRouter model from `.env`
-    without editing persisted bot rows one by one. Installations without OpenRouter configured keep
-    using each bot's stored provider/model, even if BOT_MODEL/OPENROUTER_MODEL is set.
-
-    A bot on a local Ollama model is an explicit choice to keep that bot off the cloud, so it is
-    never rerouted through OpenRouter.
+    A bot with an explicit provider runs on exactly the model it names: an `openrouter` bot on its
+    own OpenRouter model (the Settings bot model only when it names none), a local Ollama model
+    always. The one exception keeps a bot working when its provider's key is missing: a cloud bot
+    whose provider has no key falls back to OpenRouter with the Settings bot model, when OpenRouter
+    is configured; otherwise it keeps its provider and fails with a clear "not configured" error.
     """
     if bot.provider == AUTO_PROVIDER:
         dp = default_provider(settings)
@@ -83,7 +81,9 @@ def effective_bot_profile(bot: BotProfile, settings: Settings) -> tuple[str, str
         return prefer_direct_anthropic(dp[0], dp[1], settings)
     if bot.provider == OLLAMA:
         return bot.provider, bot.model
-    if api_key_for(settings, DEFAULT_BOT_PROVIDER):
+    if bot.provider == DEFAULT_BOT_PROVIDER:
+        return prefer_direct_anthropic(DEFAULT_BOT_PROVIDER, bot.model or configured_bot_model(settings), settings)
+    if not provider_configured(settings, bot.provider) and api_key_for(settings, DEFAULT_BOT_PROVIDER):
         return prefer_direct_anthropic(DEFAULT_BOT_PROVIDER, configured_bot_model(settings), settings)
     return bot.provider, bot.model
 

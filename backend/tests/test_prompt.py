@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from openbot.db.models import Message
@@ -59,7 +60,36 @@ def test_system_prompt_contents():
     # Scheduling a follow-up message keeps the thread from being considered finished.
     assert "schedule_message" in p and "active for as long as it has a message scheduled" in p
     # Third-party comments/notes must be signed so the handle doesn't tag an unrelated user there.
-    assert "OpenBot - `@eng`" in p
+    assert 'If the system does not support Markdown, sign it as "OpenBot - `@eng`".' in p
+
+
+def test_system_prompt_is_loaded_from_the_packaged_markdown_template():
+    from openbot.runtime import prompt as prompt_module
+
+    assert prompt_module.SYSTEM_PROMPT_FILE.name == "system_prompt.md"
+    assert prompt_module.SYSTEM_PROMPT_FILE.is_file()
+    assert build_system_prompt(
+        bot=bot_actor("eng", name="Engineer", instructions="Be terse."), all_bots=[], participants=[],
+        memories=[], workspace_root="/w", older_count=0, tool_names=[]
+    ).startswith("You are Engineer (@eng), a persistent AI bot on the OpenBot platform.")
+
+
+def test_system_prompt_rejects_missing_template(monkeypatch, tmp_path):
+    from openbot.runtime import prompt as prompt_module
+
+    monkeypatch.setattr(prompt_module, "SYSTEM_PROMPT_FILE", tmp_path / "missing.md")
+    with pytest.raises(RuntimeError, match="Unable to load shared system prompt"):
+        prompt_module._load_system_prompt_template()
+
+
+def test_system_prompt_rejects_invalid_template(monkeypatch, tmp_path):
+    from openbot.runtime import prompt as prompt_module
+
+    invalid = tmp_path / "invalid.md"
+    invalid.write_text("${bot_name} ${unknown}", encoding="utf-8")
+    monkeypatch.setattr(prompt_module, "SYSTEM_PROMPT_FILE", invalid)
+    with pytest.raises(RuntimeError, match="unexpected placeholders: unknown"):
+        prompt_module._load_system_prompt_template()
 
 
 def test_system_prompt_lead_note_omitted_without_a_default_bot():

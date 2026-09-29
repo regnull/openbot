@@ -70,8 +70,11 @@ def test_openrouter_anthropic_models_go_direct_when_key_present():
     bot = BotProfile(provider="auto", model="", model_settings={})
     assert effective_bot_profile(bot, st) == ("anthropic", "claude-sonnet-5")
     assert isinstance(chat_model(bot, st), ChatAnthropic)
-    # explicit openrouter bots follow the same rule (the env model wins, as before)
-    assert effective_bot_profile(BotProfile(provider="openrouter", model="x", model_settings={}), st) == ("anthropic", "claude-sonnet-5")
+    # an explicit openrouter bot keeps its own model; an Anthropic one still goes direct
+    assert effective_bot_profile(BotProfile(provider="openrouter", model="anthropic/claude-opus-5", model_settings={}), st) == (
+        "anthropic", "claude-opus-5")
+    assert effective_bot_profile(BotProfile(provider="openrouter", model="openai/gpt-5.5", model_settings={}), st) == (
+        "openrouter", "openai/gpt-5.5")
     # no Anthropic key: stays on OpenRouter
     assert effective_bot_profile(bot, s(openrouter_api_key="k", bot_model="anthropic/claude-sonnet-5")) == ("openrouter", "anthropic/claude-sonnet-5")
     # opt out

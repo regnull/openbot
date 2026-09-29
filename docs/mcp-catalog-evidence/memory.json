@@ -1,0 +1,191 @@
+{
+  "normalization": "$SANDBOX/$AUDIT/$CODEX_HOME/$PRIVATE_HOME replace local absolute roots only; traffic otherwise retained",
+  "original_log_sha256": "6cd43f7248e587bfea604ce0f76d405d4f61845ed510e8d4b636bc57d4e63a4e",
+  "receipt": {
+    "id": "memory",
+    "package": "@modelcontextprotocol/server-memory",
+    "version": "2026.8.31",
+    "metadata_source": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-memory/latest",
+    "catalog_argv": [
+      "npx",
+      "-y",
+      "@modelcontextprotocol/server-memory"
+    ],
+    "launch_argv": [
+      "/usr/bin/node",
+      "$SANDBOX/npm/memory/node_modules/@modelcontextprotocol/server-memory/dist/index.js"
+    ],
+    "sandbox_launcher": [
+      "$CODEX_HOME/bin/codex",
+      "sandbox",
+      "-c",
+      "default_permissions=\"sandbox\"",
+      "-c",
+      "permissions.sandbox.extends=\":workspace\"",
+      "-c",
+      "permissions.sandbox.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"={\".\"=\"write\"},\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\",\"$CODEX_HOME\"=\"read\"}",
+      "-c",
+      "permissions.sandbox.network.enabled=false",
+      "-P",
+      "sandbox",
+      "-C",
+      "$SANDBOX",
+      "--",
+      "/usr/bin/env",
+      "-i",
+      "HOME=$SANDBOX/home",
+      "PATH=$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR=$SANDBOX/tmp",
+      "XDG_CACHE_HOME=$SANDBOX/cache",
+      "LANG=C.UTF-8",
+      "PYTHONNOUSERSITE=1",
+      "UV_OFFLINE=true",
+      "PIP_NO_INDEX=1",
+      "PIP_FIND_LINKS=$SANDBOX/wheels",
+      "npm_config_offline=true",
+      "npm_config_ignore_scripts=true",
+      "MEMORY_FILE_PATH=$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM=1",
+      "/bin/sh",
+      "-c",
+      "cd \"$1\" && shift && exec \"$@\"",
+      "sandbox-cwd",
+      "$SANDBOX/fixtures",
+      "/usr/bin/node",
+      "$SANDBOX/npm/memory/node_modules/@modelcontextprotocol/server-memory/dist/index.js"
+    ],
+    "environment": {
+      "HOME": "$SANDBOX/home",
+      "PATH": "$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR": "$SANDBOX/tmp",
+      "XDG_CACHE_HOME": "$SANDBOX/cache",
+      "LANG": "C.UTF-8",
+      "PYTHONNOUSERSITE": "1",
+      "UV_OFFLINE": "true",
+      "PIP_NO_INDEX": "1",
+      "PIP_FIND_LINKS": "$SANDBOX/wheels",
+      "npm_config_offline": "true",
+      "npm_config_ignore_scripts": "true",
+      "MEMORY_FILE_PATH": "$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM": "1"
+    },
+    "cwd": "$SANDBOX/fixtures",
+    "sandbox_probe": {
+      "$PRIVATE_HOME/.ssh": "FileNotFoundError",
+      "$PRIVATE_HOME/.hermes": "FileNotFoundError",
+      "$AUDIT/openbot": "FileNotFoundError",
+      "/run/user/1000": "FileNotFoundError",
+      "/var/run/docker.sock": "FileNotFoundError",
+      "outbound": "PermissionError",
+      "workspace": true,
+      "env_keys": [
+        "GIT_CONFIG_NOSYSTEM",
+        "HOME",
+        "LANG",
+        "MEMORY_FILE_PATH",
+        "PATH",
+        "PIP_FIND_LINKS",
+        "PIP_NO_INDEX",
+        "PYTHONNOUSERSITE",
+        "TMPDIR",
+        "UV_OFFLINE",
+        "XDG_CACHE_HOME",
+        "npm_config_ignore_scripts",
+        "npm_config_offline"
+      ]
+    },
+    "checked_at": "2026-09-28T18:25:42.058534+00:00",
+    "status": "pass",
+    "initialize": {
+      "ok": true,
+      "server_name": "memory-server",
+      "server_version": "0.6.3",
+      "protocol": "2025-11-25",
+      "response": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          },
+          "resources": {
+            "listChanged": true,
+            "subscribe": true
+          }
+        },
+        "serverInfo": {
+          "name": "memory-server",
+          "version": "0.6.3"
+        }
+      }
+    },
+    "tools_list": {
+      "ok": true,
+      "names": [
+        "create_entities",
+        "create_relations",
+        "add_observations",
+        "delete_entities",
+        "delete_observations",
+        "delete_relations",
+        "read_graph",
+        "search_nodes",
+        "open_nodes"
+      ],
+      "count": 9,
+      "pages": 1
+    },
+    "tool_calls": "not-run",
+    "startup_seconds": 0.131,
+    "cleanup": {
+      "method": "stdin closed; process exited",
+      "exit_code": 0,
+      "process_group_gone": true
+    }
+  },
+  "events": [
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-11-25",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "openbot-catalog-audit",
+            "version": "1.0"
+          }
+        }
+      }
+    },
+    {
+      "direction": "stderr",
+      "text": "Knowledge Graph MCP Server running on stdio\n"
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"result\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"tools\":{\"listChanged\":true},\"resources\":{\"listChanged\":true,\"subscribe\":true}},\"serverInfo\":{\"name\":\"memory-server\",\"version\":\"0.6.3\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n"
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      }
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+      }
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"result\":{\"tools\":[{\"name\":\"create_entities\",\"title\":\"Create Entities\",\"description\":\"Create multiple new entities in the knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"]}}},\"required\":[\"entities\"]},\"annotations\":{\"readOnlyHint\":false,\"destructiveHint\":false,\"idempotentHint\":false,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"],\"additionalProperties\":false}}},\"required\":[\"entities\"],\"additionalProperties\":false}},{\"name\":\"create_relations\",\"title\":\"Create Relations\",\"description\":\"Create multiple new relations between entities in the knowledge graph. Relations should be in active voice\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of the relation\"}},\"required\":[\"from\",\"to\",\"relationType\"]}}},\"required\":[\"relations\"]},\"annotations\":{\"readOnlyHint\":false,\"destructiveHint\":false,\"idempotentHint\":false,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of the relation\"}},\"required\":[\"from\",\"to\",\"relationType\"],\"additionalProperties\":false}}},\"required\":[\"relations\"],\"additionalProperties\":false}},{\"name\":\"add_observations\",\"title\":\"Add Observations\",\"description\":\"Add new observations to existing entities in the knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"entityName\":{\"type\":\"string\",\"description\":\"The name of the entity to add the observations to\"},\"contents\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents to add\"}},\"required\":[\"entityName\",\"contents\"]}}},\"required\":[\"observations\"]},\"annotations\":{\"readOnlyHint\":false,\"destructiveHint\":false,\"idempotentHint\":false,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"results\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"entityName\":{\"type\":\"string\"},\"addedObservations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"entityName\",\"addedObservations\"],\"additionalProperties\":false}}},\"required\":[\"results\"],\"additionalProperties\":false}},{\"name\":\"delete_entities\",\"title\":\"Delete Entities\",\"description\":\"Delete multiple entities and their associated relations from the knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entityNames\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of entity names to delete\"}},\"required\":[\"entityNames\"]},\"annotations\":{\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":true,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"success\":{\"type\":\"boolean\"},\"message\":{\"type\":\"string\"}},\"required\":[\"success\",\"message\"],\"additionalProperties\":false}},{\"name\":\"delete_observations\",\"title\":\"Delete Observations\",\"description\":\"Delete specific observations from entities in the knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"deletions\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"entityName\":{\"type\":\"string\",\"description\":\"The name of the entity containing the observations\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observations to delete\"}},\"required\":[\"entityName\",\"observations\"]}}},\"required\":[\"deletions\"]},\"annotations\":{\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":true,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"success\":{\"type\":\"boolean\"},\"message\":{\"type\":\"string\"}},\"required\":[\"success\",\"message\"],\"additionalProperties\":false}},{\"name\":\"delete_relations\",\"title\":\"Delete Relations\",\"description\":\"Delete multiple relations from the knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of the relation\"}},\"required\":[\"from\",\"to\",\"relationType\"]},\"description\":\"An array of relations to delete\"}},\"required\":[\"relations\"]},\"annotations\":{\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":true,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"success\":{\"type\":\"boolean\"},\"message\":{\"type\":\"string\"}},\"required\":[\"success\",\"message\"],\"additionalProperties\":false}},{\"name\":\"read_graph\",\"title\":\"Read Graph\",\"description\":\"Read the entire knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{}},\"annotations\":{\"readOnlyHint\":true,\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"],\"additionalProperties\":false}},\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of the relation\"}},\"required\":[\"from\",\"to\",\"relationType\"],\"additionalProperties\":false}}},\"required\":[\"entities\",\"relations\"],\"additionalProperties\":false}},{\"name\":\"search_nodes\",\"title\":\"Search Nodes\",\"description\":\"Search for nodes in the knowledge graph based on a query\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"The search query to match against entity names, types, and observation content\"}},\"required\":[\"query\"]},\"annotations\":{\"readOnlyHint\":true,\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"],\"additionalProperties\":false}},\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of the relation\"}},\"required\":[\"from\",\"to\",\"relationType\"],\"additionalProperties\":false}}},\"required\":[\"entities\",\"relations\"],\"additionalProperties\":false}},{\"name\":\"open_nodes\",\"title\":\"Open Nodes\",\"description\":\"Open specific nodes in the knowledge graph by their names\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of entity names to retrieve\"}},\"required\":[\"names\"]},\"annotations\":{\"readOnlyHint\":true,\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"],\"additionalProperties\":false}},\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of the relation\"}},\"required\":[\"from\",\"to\",\"relationType\"],\"additionalProperties\":false}}},\"required\":[\"entities\",\"relations\"],\"additionalProperties\":false}}]},\"jsonrpc\":\"2.0\",\"id\":2}\n"
+    }
+  ]
+}

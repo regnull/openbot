@@ -1,0 +1,265 @@
+[
+  {
+    "id": "git-manifest",
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/git/pyproject.toml",
+    "checked_at": "2026-09-28T16:26:34.040132+00:00",
+    "status": 200,
+    "content_sha256": "4f7836331abed9aa3c243a7d34e8a0dc2bc8564852bf8808b727f4711d346255"
+  },
+  {
+    "id": "time-manifest",
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/time/pyproject.toml",
+    "checked_at": "2026-09-28T16:26:34.171620+00:00",
+    "status": 200,
+    "content_sha256": "f82ebcd87b21b8138b8bad6a850918804a13ce57d9f1196dae87b6ed2c00de58"
+  },
+  {
+    "id": "fetch-manifest",
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/fetch/pyproject.toml",
+    "checked_at": "2026-09-28T16:26:34.275989+00:00",
+    "status": 200,
+    "content_sha256": "d6be5ea069be22c5b7ae6922bf6c9d8483c1f02f44e53584578bea607b279069"
+  },
+  {
+    "id": "git-pypi",
+    "url": "https://pypi.org/pypi/mcp-server-git/json",
+    "checked_at": "2026-09-28T16:26:34.398094+00:00",
+    "status": 200,
+    "metadata": {
+      "name": "mcp-server-git",
+      "version": "2026.8.18",
+      "project_urls": {
+        "Issues": "https://github.com/modelcontextprotocol/servers/issues",
+        "Repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+      },
+      "repository": null,
+      "bin": null,
+      "engines": null,
+      "requires_python": ">=3.10",
+      "deprecated": null
+    },
+    "content_sha256": "140f34f4217e76b4bdd46168133370ca54b160ea761731f99ef9d291445acc8b"
+  },
+  {
+    "id": "time-pypi",
+    "url": "https://pypi.org/pypi/mcp-server-time/json",
+    "checked_at": "2026-09-28T16:26:34.444763+00:00",
+    "status": 200,
+    "metadata": {
+      "name": "mcp-server-time",
+      "version": "2026.8.18",
+      "project_urls": {
+        "Issues": "https://github.com/modelcontextprotocol/servers/issues",
+        "Repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/time"
+      },
+      "repository": null,
+      "bin": null,
+      "engines": null,
+      "requires_python": ">=3.10",
+      "deprecated": null
+    },
+    "content_sha256": "8419dd3bee3afe03382ec649e83e4ee3af202c01688f84b1217bcf26322aee97"
+  },
+  {
+    "id": "fetch-pypi",
+    "url": "https://pypi.org/pypi/mcp-server-fetch/json",
+    "checked_at": "2026-09-28T16:26:34.493450+00:00",
+    "status": 200,
+    "metadata": {
+      "name": "mcp-server-fetch",
+      "version": "2026.8.18",
+      "project_urls": {
+        "Issues": "https://github.com/modelcontextprotocol/servers/issues",
+        "Repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+      },
+      "repository": null,
+      "bin": null,
+      "engines": null,
+      "requires_python": ">=3.10",
+      "deprecated": null
+    },
+    "content_sha256": "f1052e390ad5b4d93917e28799e12dd20d0314bc367b50bdc5671e1bf2086fab"
+  },
+  {
+    "id": "sqlite-pypi",
+    "url": "https://pypi.org/pypi/mcp-server-sqlite/json",
+    "checked_at": "2026-09-28T16:26:34.519299+00:00",
+    "status": 200,
+    "metadata": {
+      "name": "mcp-server-sqlite",
+      "version": "2025.4.25",
+      "project_urls": null,
+      "repository": null,
+      "bin": null,
+      "engines": null,
+      "requires_python": ">=3.10",
+      "deprecated": null
+    },
+    "content_sha256": "900355d47412136f1ee523c3a674eec81493fbbb43fb2b1f106102c4a836f007"
+  },
+  {
+    "id": "docker-pypi",
+    "url": "https://pypi.org/pypi/mcp-server-docker/json",
+    "checked_at": "2026-09-28T16:26:34.547839+00:00",
+    "status": 200,
+    "metadata": {
+      "name": "mcp-server-docker",
+      "version": "0.3.0",
+      "project_urls": {
+        "Issues": "https://github.com/ckreiling/mcp-server-docker/issues",
+        "Repository": "https://github.com/ckreiling/mcp-server-docker"
+      },
+      "repository": null,
+      "bin": null,
+      "engines": null,
+      "requires_python": ">=3.12",
+      "deprecated": null
+    },
+    "content_sha256": "5d849dda6fbe3f72e1d38ec9e41643500b4e245769112a95ef62717d442e2209"
+  },
+  {
+    "id": "sqlite-manifest",
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/servers-archived/main/src/sqlite/pyproject.toml",
+    "checked_at": "2026-09-28T16:26:34.598859+00:00",
+    "status": 200,
+    "content_sha256": "6ca341092f2e6705c17dac685f89a381d9b0ea0fe070566f6e3f9a8c794e0db8"
+  },
+  {
+    "id": "sqlite-cli",
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/servers-archived/main/src/sqlite/src/mcp_server_sqlite/__init__.py",
+    "checked_at": "2026-09-28T16:26:34.742698+00:00",
+    "status": 200,
+    "content_sha256": "274af74c698c875e153552a3e11e12bc2df0d96618d46c97e55e6fe7d18c3b7c"
+  },
+  {
+    "id": "docker-manifest",
+    "url": "https://raw.githubusercontent.com/ckreiling/mcp-server-docker/main/pyproject.toml",
+    "checked_at": "2026-09-28T16:26:34.841495+00:00",
+    "status": 200,
+    "content_sha256": "be514711e1ed7cb4d99f0d647c44de51609b876ab64e84f85f57ce67abe9b139"
+  },
+  {
+    "id": "docker-readme",
+    "url": "https://raw.githubusercontent.com/ckreiling/mcp-server-docker/main/README.md",
+    "checked_at": "2026-09-28T16:26:34.958151+00:00",
+    "status": 200,
+    "content_sha256": "3f90c91e347798ae0fb469a669023a4489fb0b18d99e21876c88eb942f15414e"
+  },
+  {
+    "id": "perplexity-readme",
+    "url": "https://raw.githubusercontent.com/ppl-ai/modelcontextprotocol/main/README.md",
+    "checked_at": "2026-09-28T16:26:35.042194+00:00",
+    "status": 200,
+    "content_sha256": "d75f1cf2fc85f2bbd12f79911d3f0f1bedd85cef4dd6c35c66283b1947f87654"
+  },
+  {
+    "id": "perplexity-npm",
+    "url": "https://registry.npmjs.org/@perplexity-ai%2fmcp-server/latest",
+    "checked_at": "2026-09-28T16:26:35.140576+00:00",
+    "status": 200,
+    "metadata": {
+      "name": "@perplexity-ai/mcp-server",
+      "version": "1.3.0",
+      "project_urls": null,
+      "repository": {
+        "url": "git+https://github.com/perplexityai/modelcontextprotocol.git",
+        "type": "git"
+      },
+      "bin": {
+        "perplexity-mcp": "dist/index.js"
+      },
+      "engines": {
+        "node": ">=18"
+      },
+      "requires_python": null,
+      "deprecated": null
+    },
+    "content_sha256": "0b8b09fde162253a2db404d5bb0dce96bf76aaca5f36f441eee1801e6ec7155a"
+  },
+  {
+    "id": "vercel-readme",
+    "url": "https://raw.githubusercontent.com/vercel/mcp-adapter/main/README.md",
+    "checked_at": "2026-09-28T16:26:35.303468+00:00",
+    "status": 200,
+    "content_sha256": "b527bbccb890931dedb706fd7d27666696875066e23d6370d55bb367e3874adb"
+  },
+  {
+    "id": "duckdb-repo",
+    "url": "https://api.github.com/repos/ktanaka101/duckdb_mcp_server",
+    "checked_at": "2026-09-28T16:26:35.393691+00:00",
+    "status": 404,
+    "error": "HTTP Error 404: Not Found",
+    "content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "id": "filesystem-readme",
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/filesystem/README.md",
+    "checked_at": "2026-09-28T16:26:35.550906+00:00",
+    "status": 200,
+    "content_sha256": "df276d57efc04b85fa1e8163fe1aa3d5b11d5b2a7de5ec51ba083e5cb04019cd"
+  },
+  {
+    "id": "postgres-cli",
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/servers-archived/main/src/postgres/index.ts",
+    "checked_at": "2026-09-28T16:26:35.655811+00:00",
+    "status": 200,
+    "content_sha256": "1232c4f77a9e7a111a65db6c9aec86929f67772c2d5cb11ef8ae9d21321bf4de"
+  },
+  {
+    "id": "aws-readme",
+    "url": "https://raw.githubusercontent.com/awslabs/mcp/main/src/aws-documentation-mcp-server/README.md",
+    "checked_at": "2026-09-28T16:26:35.743611+00:00",
+    "status": 200,
+    "content_sha256": "5a91969a208629a9c9745fc3b805a9edbaaec8538ee6e7663be50b9e4963d782"
+  },
+  {
+    "id": "linear-docs",
+    "url": "https://linear.app/docs/mcp",
+    "checked_at": "2026-09-28T16:26:35.832804+00:00",
+    "status": 200,
+    "content_sha256": "db27099ee67f96f08014752be2f943e4adb8e117dc7ed1cbc7e18b5977ff870d"
+  },
+  {
+    "id": "notion-readme",
+    "url": "https://raw.githubusercontent.com/makenotion/notion-mcp-server/main/README.md",
+    "checked_at": "2026-09-28T16:26:35.996933+00:00",
+    "status": 200,
+    "content_sha256": "d21612966c3b4d8747dfddbb99199b44730f0092c3869225b7cd5dc4607a0f86"
+  },
+  {
+    "id": "sentry-readme",
+    "url": "https://raw.githubusercontent.com/getsentry/sentry-mcp/main/README.md",
+    "checked_at": "2026-09-28T16:26:36.091436+00:00",
+    "status": 200,
+    "content_sha256": "81f6dc81ebc2f207005ef4958877c9e68d8364b51379ae913e1252850ef55a3f"
+  },
+  {
+    "id": "stripe-readme",
+    "url": "https://raw.githubusercontent.com/stripe/agent-toolkit/main/README.md",
+    "checked_at": "2026-09-28T16:26:36.307828+00:00",
+    "status": 200,
+    "content_sha256": "67528cf1be02a93bb8567cbdda61531759a449cf0480f31c700ec837f82ba329"
+  },
+  {
+    "id": "supabase-readme",
+    "url": "https://raw.githubusercontent.com/supabase-community/supabase-mcp/main/README.md",
+    "checked_at": "2026-09-28T16:26:36.429550+00:00",
+    "status": 200,
+    "content_sha256": "d9e85af2bfbd2414a92a1e7ac3c35b9d5aef74b42312e4d7ec2c3bf04a80bdd2"
+  },
+  {
+    "id": "cloudflare-readme",
+    "url": "https://raw.githubusercontent.com/cloudflare/mcp-server-cloudflare/main/README.md",
+    "checked_at": "2026-09-28T16:26:36.525445+00:00",
+    "status": 200,
+    "content_sha256": "c75401e900281f9e0a78b31bfe707e4adbd07248b71365c86a21e416cf538101"
+  },
+  {
+    "id": "context7-readme",
+    "url": "https://raw.githubusercontent.com/upstash/context7/main/README.md",
+    "checked_at": "2026-09-28T16:26:36.622281+00:00",
+    "status": 404,
+    "error": "HTTP Error 404: Not Found",
+    "content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

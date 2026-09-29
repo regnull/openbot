@@ -1,0 +1,184 @@
+{
+  "normalization": "$SANDBOX/$AUDIT/$CODEX_HOME/$PRIVATE_HOME replace local absolute roots only; traffic otherwise retained",
+  "original_log_sha256": "43a9d7abeeea9a6fed342972c5f7384ddffd0940507c3e8e81995b8d8fb7a0a6",
+  "receipt": {
+    "id": "puppeteer",
+    "package": "@modelcontextprotocol/server-puppeteer",
+    "version": "2025.5.12",
+    "metadata_source": "https://registry.npmjs.org/%40modelcontextprotocol%2Fserver-puppeteer/latest",
+    "catalog_argv": [
+      "npx",
+      "-y",
+      "@modelcontextprotocol/server-puppeteer"
+    ],
+    "launch_argv": [
+      "/usr/bin/node",
+      "$SANDBOX/npm/puppeteer/node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js"
+    ],
+    "sandbox_launcher": [
+      "$CODEX_HOME/bin/codex",
+      "sandbox",
+      "-c",
+      "default_permissions=\"sandbox\"",
+      "-c",
+      "permissions.sandbox.extends=\":workspace\"",
+      "-c",
+      "permissions.sandbox.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"={\".\"=\"write\"},\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\",\"$CODEX_HOME\"=\"read\"}",
+      "-c",
+      "permissions.sandbox.network.enabled=false",
+      "-P",
+      "sandbox",
+      "-C",
+      "$SANDBOX",
+      "--",
+      "/usr/bin/env",
+      "-i",
+      "HOME=$SANDBOX/home",
+      "PATH=$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR=$SANDBOX/tmp",
+      "XDG_CACHE_HOME=$SANDBOX/cache",
+      "LANG=C.UTF-8",
+      "PYTHONNOUSERSITE=1",
+      "UV_OFFLINE=true",
+      "PIP_NO_INDEX=1",
+      "PIP_FIND_LINKS=$SANDBOX/wheels",
+      "npm_config_offline=true",
+      "npm_config_ignore_scripts=true",
+      "MEMORY_FILE_PATH=$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM=1",
+      "/bin/sh",
+      "-c",
+      "cd \"$1\" && shift && exec \"$@\"",
+      "sandbox-cwd",
+      "$SANDBOX/fixtures",
+      "/usr/bin/node",
+      "$SANDBOX/npm/puppeteer/node_modules/@modelcontextprotocol/server-puppeteer/dist/index.js"
+    ],
+    "environment": {
+      "HOME": "$SANDBOX/home",
+      "PATH": "$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR": "$SANDBOX/tmp",
+      "XDG_CACHE_HOME": "$SANDBOX/cache",
+      "LANG": "C.UTF-8",
+      "PYTHONNOUSERSITE": "1",
+      "UV_OFFLINE": "true",
+      "PIP_NO_INDEX": "1",
+      "PIP_FIND_LINKS": "$SANDBOX/wheels",
+      "npm_config_offline": "true",
+      "npm_config_ignore_scripts": "true",
+      "MEMORY_FILE_PATH": "$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM": "1"
+    },
+    "cwd": "$SANDBOX/fixtures",
+    "sandbox_probe": {
+      "$PRIVATE_HOME/.ssh": "FileNotFoundError",
+      "$PRIVATE_HOME/.hermes": "FileNotFoundError",
+      "$AUDIT/openbot": "FileNotFoundError",
+      "/run/user/1000": "FileNotFoundError",
+      "/var/run/docker.sock": "FileNotFoundError",
+      "outbound": "PermissionError",
+      "workspace": true,
+      "env_keys": [
+        "GIT_CONFIG_NOSYSTEM",
+        "HOME",
+        "LANG",
+        "MEMORY_FILE_PATH",
+        "PATH",
+        "PIP_FIND_LINKS",
+        "PIP_NO_INDEX",
+        "PYTHONNOUSERSITE",
+        "TMPDIR",
+        "UV_OFFLINE",
+        "XDG_CACHE_HOME",
+        "npm_config_ignore_scripts",
+        "npm_config_offline"
+      ]
+    },
+    "checked_at": "2026-09-28T18:27:22.662458+00:00",
+    "status": "pass",
+    "initialize": {
+      "ok": true,
+      "server_name": "example-servers/puppeteer",
+      "server_version": "0.1.0",
+      "protocol": "2024-11-05",
+      "response": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {
+          "resources": {},
+          "tools": {}
+        },
+        "serverInfo": {
+          "name": "example-servers/puppeteer",
+          "version": "0.1.0"
+        }
+      }
+    },
+    "tools_list": {
+      "ok": true,
+      "names": [
+        "puppeteer_navigate",
+        "puppeteer_screenshot",
+        "puppeteer_click",
+        "puppeteer_fill",
+        "puppeteer_select",
+        "puppeteer_hover",
+        "puppeteer_evaluate"
+      ],
+      "count": 7,
+      "pages": 1
+    },
+    "tool_calls": "not-run",
+    "startup_seconds": 0.148,
+    "cleanup": {
+      "method": "stdin closed; process exited",
+      "exit_code": 0,
+      "process_group_gone": true
+    }
+  },
+  "events": [
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-11-25",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "openbot-catalog-audit",
+            "version": "1.0"
+          }
+        }
+      }
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"resources\":{},\"tools\":{}},\"serverInfo\":{\"name\":\"example-servers/puppeteer\",\"version\":\"0.1.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n"
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      }
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+      }
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"result\":{\"tools\":[{\"name\":\"puppeteer_navigate\",\"description\":\"Navigate to a URL\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"URL to navigate to\"},\"launchOptions\":{\"type\":\"object\",\"description\":\"PuppeteerJS LaunchOptions. Default null. If changed and not null, browser restarts. Example: { headless: true, args: ['--no-sandbox'] }\"},\"allowDangerous\":{\"type\":\"boolean\",\"description\":\"Allow dangerous LaunchOptions that reduce security. When false, dangerous args like --no-sandbox will throw errors. Default false.\"}},\"required\":[\"url\"]}},{\"name\":\"puppeteer_screenshot\",\"description\":\"Take a screenshot of the current page or a specific element\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name for the screenshot\"},\"selector\":{\"type\":\"string\",\"description\":\"CSS selector for element to screenshot\"},\"width\":{\"type\":\"number\",\"description\":\"Width in pixels (default: 800)\"},\"height\":{\"type\":\"number\",\"description\":\"Height in pixels (default: 600)\"},\"encoded\":{\"type\":\"boolean\",\"description\":\"If true, capture the screenshot as a base64-encoded data URI (as text) instead of binary image content. Default false.\"}},\"required\":[\"name\"]}},{\"name\":\"puppeteer_click\",\"description\":\"Click an element on the page\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"selector\":{\"type\":\"string\",\"description\":\"CSS selector for element to click\"}},\"required\":[\"selector\"]}},{\"name\":\"puppeteer_fill\",\"description\":\"Fill out an input field\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"selector\":{\"type\":\"string\",\"description\":\"CSS selector for input field\"},\"value\":{\"type\":\"string\",\"description\":\"Value to fill\"}},\"required\":[\"selector\",\"value\"]}},{\"name\":\"puppeteer_select\",\"description\":\"Select an element on the page with Select tag\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"selector\":{\"type\":\"string\",\"description\":\"CSS selector for element to select\"},\"value\":{\"type\":\"string\",\"description\":\"Value to select\"}},\"required\":[\"selector\",\"value\"]}},{\"name\":\"puppeteer_hover\",\"description\":\"Hover an element on the page\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"selector\":{\"type\":\"string\",\"description\":\"CSS selector for element to hover\"}},\"required\":[\"selector\"]}},{\"name\":\"puppeteer_evaluate\",\"description\":\"Execute JavaScript in the browser console\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"script\":{\"type\":\"string\",\"description\":\"JavaScript code to execute\"}},\"required\":[\"script\"]}}]},\"jsonrpc\":\"2.0\",\"id\":2}\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "Puppeteer MCP Server closed\n"
+    }
+  ]
+}

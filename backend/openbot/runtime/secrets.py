@@ -41,6 +41,16 @@ def resolve_secret_key(settings) -> str:
     for path in (new_file, legacy_file):
         if str(path) and path.is_file():
             return path.read_text(encoding="utf-8").strip()
+    # Before the key moved next to the database (root directory, desktop app), it was generated into
+    # ./secret.key. Carry that one over: a fresh key could not read anything stored with it.
+    old_default = Path("secret.key")
+    if old_default.is_file() and old_default.resolve() != new_file.resolve():
+        key = old_default.read_text(encoding="utf-8").strip()
+        new_file.parent.mkdir(parents=True, exist_ok=True)
+        new_file.write_text(key, encoding="utf-8")
+        os.chmod(new_file, 0o600)
+        log.warning("copied the secret key from %s to %s", old_default.resolve(), new_file)
+        return key
     return load_or_create_key(None, new_file)
 
 
