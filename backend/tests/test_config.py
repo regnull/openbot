@@ -258,3 +258,20 @@ def test_telegram_bot_token_not_set_is_none(monkeypatch):
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     settings = Settings(_env_file=None)
     assert settings.telegram_bot_token is None
+
+
+def test_shell_user_needs_an_api_key(monkeypatch):
+    # The shell user shares the backend's localhost; without a key it could call the settings API.
+    import pytest
+    monkeypatch.setenv("SHELL_USER", "shell")
+    monkeypatch.delenv("OPENBOT_API_KEY", raising=False)
+    with pytest.raises(Exception, match="SHELL_USER needs OPENBOT_API_KEY"):
+        Settings(_env_file=None)
+    monkeypatch.setenv("OPENBOT_API_KEY", "k")
+    assert Settings(_env_file=None).shell_user == "shell"
+
+
+def test_shell_user_empty_means_unset(monkeypatch):
+    monkeypatch.setenv("SHELL_USER", "")
+    monkeypatch.delenv("OPENBOT_API_KEY", raising=False)
+    assert Settings(_env_file=None).shell_user is None

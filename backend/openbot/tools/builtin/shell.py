@@ -10,6 +10,27 @@ from openbot.tools.builtin.git_for_windows import INSTALL_HINT, find_git_bash
 from openbot.tools.builtin.workspace import cap, resolve_in_workspace
 from openbot.tools.context import RunContext
 
+# PATH for commands run as SHELL_USER: the standard one, not the server's (which points at its venv).
+SHELL_USER_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+
+def _as_shell_user(name: str) -> tuple[list[str], dict[str, str]]:
+    """Command prefix and environment that run a command as `name`, seeing none of the server's
+    variables (provider keys, SECRET_KEY). Raises KeyError for an unknown user.
+
+    setpriv rather than Popen's user=/group=: uvicorn runs on uvloop, whose subprocess support
+    rejects those. setpriv execs the shell in place, so the pid and process group stay the same and
+    _kill_group still reaps everything. --no-new-privs keeps setuid binaries like su from getting
+    back to root."""
+    import pwd  # POSIX only
+
+    entry = pwd.getpwuid(int(name)) if name.isdigit() else pwd.getpwnam(name)
+    prefix = ["setpriv", f"--reuid={entry.pw_uid}", f"--regid={entry.pw_gid}", "--init-groups", "--no-new-privs",
+              "--"]
+    env = {"PATH": SHELL_USER_PATH, "HOME": entry.pw_dir, "USER": entry.pw_name, "LOGNAME": entry.pw_name,
+           "LANG": "C.UTF-8"}
+    return prefix, env
+
 
 async def _kill_group(proc: asyncio.subprocess.Process, job=None) -> None:
     if sys.platform == "win32":
@@ -47,11 +68,30 @@ async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | N
         shell, group = str(bash), {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     else:
         shell, group = "bash", {"start_new_session": True}
+    # With SHELL_USER set, every failure below is an error result: never fall back to running the
+    # command as the server user.
+    prefix: list[str] = []
+    env: dict[str, str] | None = None
+    user = runtime.context.shell_user
+    if user:
+        if sys.platform == "win32":
+            return "error: SHELL_USER is not supported on Windows"
+        if os.geteuid() != 0:
+            return f"error: cannot run commands as SHELL_USER {user!r}: the server has to run as root"
+        try:
+            prefix, env = _as_shell_user(user)
+        except KeyError:
+            return f"error: SHELL_USER {user!r} does not exist on this system"
     workdir.mkdir(parents=True, exist_ok=True)
-    proc = await asyncio.create_subprocess_exec(
-        shell, "-lc", command, cwd=str(workdir),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        **group)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *prefix, shell, "-lc", command, cwd=str(workdir), env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            **group)
+    except FileNotFoundError:
+        if not prefix:
+            raise
+        return "error: SHELL_USER needs setpriv (util-linux), which isn't installed"
     job = None
     if sys.platform == "win32":
         from openbot.tools.builtin.windows_job import WindowsJob

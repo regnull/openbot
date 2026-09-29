@@ -415,7 +415,8 @@ class Runner:
                                   model_call_limit=self.model_call_limit(bot))
             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
                              thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap,
-                             shell_output_cap=self.s.settings.shell_output_cap)
+                             shell_output_cap=self.s.settings.shell_output_cap,
+                             shell_user=self.s.settings.shell_user)
             agent = self._build_agent(bot, system_prompt)
             # The model-call limit is the real cap; the graph's recursion limit only has to be high enough
             # that the limit middleware ends the run first, and is derived from the graph so adding a

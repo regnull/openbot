@@ -103,6 +103,12 @@ class Settings(BaseSettings):
     telegram_webhook_secret: str | None = None
     telegram_transport: str = "long_polling"  # "long_polling" or "webhook"
 
+    # Run run_shell commands as this user (name or uid), with a minimal environment instead of the
+    # server's. Meant for the Docker setup (compose.yaml), where the backend runs as root and its
+    # keys, database and secret.key stay out of the shell's reach. Env only on purpose, so a bot
+    # can't switch it off through the settings API.
+    shell_user: str | None = None
+
     @model_validator(mode="after")
     def _local_public_url_follows_listen_port(self):
         if self.listen_port and self.public_url.rstrip("/") == LOCAL_PUBLIC_URL:
@@ -188,6 +194,19 @@ class Settings(BaseSettings):
                 "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
             )
         return v
+
+    @field_validator("shell_user", mode="before")
+    @classmethod
+    def _empty_shell_user_means_unset(cls, v):
+        return None if v == "" else v
+
+    @model_validator(mode="after")
+    def _shell_user_needs_api_key(self):
+        # The shell user shares the backend's localhost, so without an API key it could call the
+        # settings API and undo what the separate user is for.
+        if self.shell_user and not self.openbot_api_key:
+            raise ValueError("SHELL_USER needs OPENBOT_API_KEY: without it shell commands can call the API on localhost.")
+        return self
 
     @field_validator("telegram_transport", mode="before")
     @classmethod

@@ -152,6 +152,80 @@ async def test_run_shell_kills_process_group_on_timeout(tmp_path):
     assert not alive(child_pid)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="SHELL_USER is POSIX only")
+async def test_run_shell_as_shell_user_runs_through_setpriv_with_a_minimal_env(tmp_path, monkeypatch):
+    # Switching users needs root and Linux's setpriv, so record what run_shell asks for and run the
+    # command itself without the prefix. The real switch is covered by test_docker_live.py.
+    import getpass
+    import pwd
+
+    import openbot.tools.builtin.shell as shell_mod
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-sentinel")
+    monkeypatch.setattr(shell_mod.os, "geteuid", lambda: 0)
+    seen = {}
+    real = asyncio.create_subprocess_exec
+
+    async def spy(*args, **kwargs):
+        seen["argv"], seen["env"] = list(args), kwargs.get("env")
+        command = args[args.index("--") + 1:]
+        return await real(*command, **{k: v for k, v in kwargs.items() if k != "env"})
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+    r = rt(tmp_path)
+    name = getpass.getuser()
+    r.context.shell_user = name
+    out = await run_shell.ainvoke({"command": "echo ok", "runtime": r})
+
+    entry = pwd.getpwnam(name)
+    assert "ok" in out
+    assert seen["argv"][:6] == ["setpriv", f"--reuid={entry.pw_uid}", f"--regid={entry.pw_gid}", "--init-groups",
+                                "--no-new-privs", "--"]
+    assert seen["argv"][6:8] == ["bash", "-lc"]
+    assert set(seen["env"]) == {"PATH", "HOME", "USER", "LOGNAME", "LANG"}
+    assert "OPENAI_API_KEY" not in seen["env"]
+
+
+async def test_run_shell_without_shell_user_is_unchanged(tmp_path, monkeypatch):
+    seen = {}
+    real = asyncio.create_subprocess_exec
+
+    async def spy(*args, **kwargs):
+        seen["argv"], seen["env"] = list(args), kwargs.get("env")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+    await run_shell.ainvoke({"command": "true", "runtime": rt(tmp_path)})
+    assert seen["argv"][0] != "setpriv" and seen["env"] is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SHELL_USER is POSIX only")
+async def test_run_shell_shell_user_fails_closed(tmp_path, monkeypatch):
+    import getpass
+
+    import openbot.tools.builtin.shell as shell_mod
+
+    r = rt(tmp_path)
+    r.context.shell_user = getpass.getuser()
+    monkeypatch.setattr(shell_mod.os, "geteuid", lambda: 1000)
+    out = await run_shell.ainvoke({"command": "touch ran", "runtime": r})
+    assert out.startswith("error:") and "has to run as root" in out
+
+    monkeypatch.setattr(shell_mod.os, "geteuid", lambda: 0)
+    r.context.shell_user = "no-such-user-openbot"
+    out = await run_shell.ainvoke({"command": "touch ran", "runtime": r})
+    assert out.startswith("error:") and "does not exist" in out
+
+    async def no_setpriv(*args, **kwargs):
+        raise FileNotFoundError(args[0])
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", no_setpriv)
+    r.context.shell_user = getpass.getuser()
+    out = await run_shell.ainvoke({"command": "touch ran", "runtime": r})
+    assert out.startswith("error:") and "setpriv" in out
+    assert not (tmp_path / "ran").exists()
+
+
 async def test_run_shell_kills_process_group_on_cancellation(tmp_path):
     # Cancelling a run cancels the tool coroutine. Without a killpg on CancelledError the shell and
     # everything it spawned keep running after the run is gone -- an orphaned build or `sleep` that

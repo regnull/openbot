@@ -18,3 +18,4 @@ class RunContext:
     hop: int = 0
     tool_output_cap: int = 8000
     shell_output_cap: int = 4000
+    shell_user: str | None = None
