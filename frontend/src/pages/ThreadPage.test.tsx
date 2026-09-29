@@ -151,6 +151,20 @@ describe("ThreadPage window re-entry", () => {
     await until(() => textarea().value === "", "cleared draft stays cleared");
   });
 
+  it("retains a draft after a failed send and restores it after switching threads", async () => {
+    fake.api.postMessage = () => Promise.reject(new Error("send failed")) as never;
+    await mount("/threads/t1");
+    await until(() => text().includes("first reply"), "initial history");
+    await type("retry this draft");
+    await act(async () => { textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
+    await until(() => textarea().value === "retry this draft", "failed send retains draft");
+
+    await go("/threads/t2");
+    await until(() => text().includes("title-t2"), "second thread window");
+    await go("/threads/t1");
+    await until(() => textarea().value === "retry this draft", "failed draft restored");
+  });
+
   it("restores history after leaving to another window and returning mid-run", async () => {
     await mount("/threads/t1");
     await until(() => text().includes("first reply"), "initial history");
