@@ -94,15 +94,27 @@ def test_configured_bot_model_default_and_env_override(monkeypatch):
     assert configured_bot_model(Settings(_env_file=None)) == "anthropic/claude-3.5-haiku"
 
 
-def test_openrouter_bots_use_configured_model_for_llm_calls():
+def test_openrouter_bots_use_their_own_model():
     st = s(openrouter_api_key="k", bot_model="google/gemini-2.0-flash-001")
-    m = chat_model(BotProfile(provider="openrouter", model="stored/old-model", model_settings={}), st)
-    assert m.model_name == "google/gemini-2.0-flash-001"
+    m = chat_model(BotProfile(provider="openrouter", model="z-ai/glm-5.3-flash", model_settings={}), st)
+    assert m.model_name == "z-ai/glm-5.3-flash"
     assert "openrouter.ai" in str(m.openai_api_base)
 
 
-def test_env_model_applies_to_all_bot_llm_calls_through_openrouter():
+def test_openrouter_bot_without_a_model_uses_the_settings_model():
+    st = s(openrouter_api_key="k", bot_model="google/gemini-2.0-flash-001")
+    assert effective_bot_profile(BotProfile(provider="openrouter", model=""), st) == ("openrouter", "google/gemini-2.0-flash-001")
+
+
+def test_configured_cloud_provider_keeps_the_bots_model_alongside_openrouter():
     st = s(openai_api_key="k1", openrouter_api_key="k2", bot_model="google/gemini-2.0-flash-001")
+    m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={}), st)
+    assert m.model_name == "gpt-4.1-mini"
+    assert not m.openai_api_base
+
+
+def test_cloud_bot_without_its_providers_key_falls_back_to_openrouter():
+    st = s(openrouter_api_key="k", bot_model="google/gemini-2.0-flash-001")
     m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={}), st)
     assert m.model_name == "google/gemini-2.0-flash-001"
     assert "openrouter.ai" in str(m.openai_api_base)

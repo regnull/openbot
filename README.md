@@ -511,7 +511,9 @@ Configuration lives in two places, by design:
 Every bot's model defaults to `auto`: it uses whichever provider is configured (OpenRouter with the
 default bot model if an OpenRouter key is set, else the first configured provider), so it keeps working
 as keys are added, removed, or changed. Pick an explicit provider/model per bot in the bot editor to
-opt out for that bot.
+opt out for that bot: it then runs on exactly that model, including a different OpenRouter model per
+bot. The one exception keeps a bot working when its provider has no key: a cloud bot whose provider is
+not configured runs on OpenRouter with the default bot model, if an OpenRouter key is set.
 
 The model pickers in the bot editor and in Settings list a catalog fetched from
 [models.dev](https://models.dev) for OpenAI, Anthropic, OpenRouter and Ollama (for Ollama: the models
@@ -572,7 +574,7 @@ name, if set, is the default the page shows and the value a reset returns to.
 | Context | `summary_trigger_tokens` (60000), `summary_keep_messages` (24) | Older history folds into one structured summary by the bot's own model once the run's messages pass the trigger. Measured on the messages alone: the system prompt and tool schemas are not counted. |
 | Context | `history_token_budget` (24000), `history_max_messages` (80) | Thread history included in a run's prompt. |
 | Memory | `memory_reflection_delay` (30) | Seconds to debounce background memory reflection after a run. |
-| Model routing | `bot_model` | OpenRouter model for bots on `auto` (default `openai/gpt-4o-mini`). |
+| Model routing | `bot_model` | OpenRouter model for bots on `auto`, `openrouter` bots with no model, and cloud bots whose provider has no key (default `openai/gpt-4o-mini`). |
 | Model routing | `openrouter_provider_order` | Preferred OpenRouter upstream slugs (e.g. `z-ai`); each upstream has its own prompt cache. |
 | Model routing | `prompt_caching` (true), `direct_anthropic` (true) | Anthropic cache breakpoints on every call; send OpenRouter `anthropic/...` models straight to Anthropic when a key exists so caching covers tool results. |
 | Model retries | `model_retry_max_attempts` (3), `model_retry_base_delay` (2.0), `model_retry_backoff_cap` (60.0) | Retries a model call that failed with a transient upstream provider error (rate limit, 5xx, timeout, "model stopped before completing"); 0 or 1 attempts disables retries. Delays double from the base with jitter up to the cap. Auth/permission/invalid-request errors fail immediately. |

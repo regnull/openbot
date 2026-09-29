@@ -103,8 +103,11 @@ export default function BotEditorPage() {
     const { reasoning_effort: _current, ...rest } = form.model_settings;
     set("model_settings", v ? { ...rest, reasoning_effort: v } : rest);
   };
-  // effective_bot_profile sends every non-Ollama bot to the default OpenRouter model once that key exists.
-  const rerouted = !isAuto && form.provider !== "ollama" && (providers.data?.providers.find((p) => p.id === "openrouter")?.configured ?? false);
+  // effective_bot_profile runs a bot on its own provider and model; only a cloud bot whose provider has
+  // no key falls back to the default OpenRouter model, when OpenRouter is configured.
+  const configured = (id: string) => providers.data?.providers.find((p) => p.id === id)?.configured ?? false;
+  const rerouted = !isAuto && form.provider !== "ollama" && form.provider !== "openrouter"
+    && !configured(form.provider) && configured("openrouter");
   const grouped = groupTools(tools.data?.tools ?? []);
   const unavailable = unavailableGrants(form.tool_names, tools.data?.tools ?? []);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -191,7 +194,7 @@ export default function BotEditorPage() {
         )}
         {rerouted && (
           <Hint className="text-xs text-warn sm:col-span-2">
-            With an OpenRouter key configured, cloud bots run on the default OpenRouter model from Settings. This model is saved but not used until that key is removed.
+            No {form.provider} key is configured, so this bot runs on the default OpenRouter model from Settings. This model is saved and used once a {form.provider} key is added.
           </Hint>
         )}
         <div className="space-y-2 sm:col-span-2">
