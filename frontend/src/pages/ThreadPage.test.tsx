@@ -111,7 +111,7 @@ describe("ThreadPage window re-entry", () => {
       return Promise.resolve(detail(id, [...(server[id] ?? [])])) as never;
     };
     fake.api.getThreadUsage = () => Promise.resolve({ model_calls: 0, prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0 }) as never;
-    fake.api.listBots = () => Promise.resolve([{ id: "b1", name: "Bot", handle: "bot", icon: null } as unknown as Bot]) as never;
+    fake.api.listBots = () => Promise.resolve([{ id: "b1", name: "Bot", handle: "bot", enabled: true, icon: null } as unknown as Bot]) as never;
     fake.api.ackThread = () => Promise.resolve({ acked: 0 }) as never;
     fake.api.getRun = (id: string) => Promise.resolve({ ...run(id, runStatus[id] ?? "running"), events: [] }) as never;
     qc = new QueryClient({ defaultOptions: { queries: { staleTime: 5_000, retry: false } } });
