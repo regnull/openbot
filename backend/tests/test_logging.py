@@ -68,6 +68,7 @@ def test_uvicorn_lines_are_mirrored_to_file_exactly_once(settings, access_propag
 def test_empty_log_file_env_uses_default(monkeypatch):
     monkeypatch.setenv("LOG_FILE", "")
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("OPENBOT_ROOT_DIRECTORY", raising=False)
     s = Settings(_env_file=None)
     assert s.log_file == Path(".openbot/logs/openbot.log")
     assert s.log_level == "INFO"
