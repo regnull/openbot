@@ -1,4 +1,4 @@
-import pytest
+import pytest_asyncio
 from langchain.tools import ToolRuntime
 from sqlalchemy import select
 
@@ -14,7 +14,7 @@ from openbot.tools.context import RunContext
 from tests.factories import bot_actor
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def _no_actor_runs(services):
     """These tests exercise the CORE_TOOLS directly, using `eng`/`rev` and `setup()`'s posted messages
     only as fixture data; nothing here calls into a run. With the actor system running, `setup()`'s

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
@@ -83,7 +84,7 @@ async def _noop(*_a, **_k):
 _engines: list = []
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def _dispose_engines():
     """Autouse, so it tears down last: dispose every engine built during the test. Without this the
     aiosqlite connection threads outlive the test's event loop and warn when it is already closed."""
@@ -147,7 +148,7 @@ def scripts() -> dict:
     return {}
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def services(settings, scripts) -> Services:
     s = await build_test_services(settings, scripts)
     if s.actors is not None:
@@ -159,7 +160,7 @@ async def services(settings, scripts) -> Services:
         await s.http_client.aclose()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client(settings, services):
     app = create_app(settings, services=services)
     async with LifespanManager(app), AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:

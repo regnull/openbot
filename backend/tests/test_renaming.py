@@ -1,4 +1,4 @@
-import pytest
+import pytest_asyncio
 
 from openbot.db.models import Thread
 from openbot.runtime.delivery import create_thread, human_actor, post_message
@@ -6,7 +6,7 @@ from tests.factories import bot_actor
 from tests.fakes import ai
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def _no_actor_runs(services):
     await services.actors.stop()
 

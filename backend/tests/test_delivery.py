@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 from sqlalchemy import select
 
 from openbot.db.models import InboxItem, Message, Thread, ThreadParticipant
@@ -6,7 +7,7 @@ from openbot.runtime.delivery import create_thread, human_actor, post_message
 from tests.factories import bot_actor, external_actor
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def _no_actor_runs(services):
     """Delivery bookkeeping is asserted on its own: keep the actor system from picking the items up."""
     await services.actors.stop()
