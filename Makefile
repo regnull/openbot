@@ -28,7 +28,7 @@ backend:        ## backend API with auto-reload, from the repo root so ./tools, 
 frontend:       ## Vite dev server, proxies /api to the backend
 	cd frontend && pnpm dev
 
-electron:       ## launch Electron with a Vite frontend and dedicated backend on :8001 (override ELECTRON_BACKEND_PORT)
+electron:       ## launch Electron with a Vite frontend and dedicated backend on the first free ports from :8001/:5173 (override ELECTRON_BACKEND_PORT/FRONTEND_PORT)
 	./scripts/electron-dev.sh $(ELECTRON_DETAIL_ARGS) $(ELECTRON_ROOT_ARGS)
 
 app:            ## alias for `make electron`; starts the Electron frontend and backend together

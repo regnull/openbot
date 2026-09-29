@@ -44,3 +44,49 @@ def test_electron_launcher_rejects_missing_root_value():
     result = run_launcher("--root-directory")
     assert result.returncode == 2
     assert "requires a directory" in result.stderr
+
+
+def print_ports(**env):
+    return subprocess.run(
+        ["bash", str(SCRIPT)], text=True, capture_output=True, check=False,
+        env={**{k: v for k, v in os.environ.items() if k not in ("ELECTRON_BACKEND_PORT", "FRONTEND_PORT")},
+             "ELECTRON_DEV_PRINT_PORTS": "1", **env},
+    )
+
+
+def hold(port):
+    """Listen on `port` unless something (e.g. a running OpenBot) already does; either way it is taken."""
+    import socket
+
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", port))
+        s.listen()
+    except OSError:
+        s.close()
+        return None
+    return s
+
+
+def test_electron_launcher_skips_ports_another_instance_holds():
+    held = [hold(8001), hold(5173)]
+    try:
+        result = print_ports()
+    finally:
+        for s in held:
+            if s:
+                s.close()
+    assert result.returncode == 0, result.stderr
+    backend = int(result.stdout.split("ELECTRON_BACKEND_PORT=")[1].split()[0])
+    frontend = int(result.stdout.split("FRONTEND_PORT=")[1].split()[0])
+    assert backend > 8001 and frontend > 5173 and backend != frontend
+
+
+def test_electron_launcher_rejects_an_explicit_port_in_use():
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        result = print_ports(ELECTRON_BACKEND_PORT=str(s.getsockname()[1]))
+    assert result.returncode == 1 and "already in use" in result.stderr

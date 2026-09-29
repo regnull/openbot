@@ -14,8 +14,60 @@ if [[ "${ELECTRON_DEV_PRINT_PATHS:-}" == "1" ]]; then
   exit 0
 fi
 
-ELECTRON_BACKEND_PORT="${ELECTRON_BACKEND_PORT:-8001}"
-FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+# True when nothing on this machine is listening on the port (IPv4 or IPv6 loopback), so a second
+# OpenBot instance can tell the first one's ports are taken.
+port_is_free() {
+  python3 - "$1" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+    try:
+        s = socket.socket(family, socket.SOCK_STREAM)
+    except OSError:
+        continue                        # no IPv6 on this host
+    try:
+        s.bind((host, port))
+    except OSError as e:
+        if family == socket.AF_INET6 and e.errno == 49:   # EADDRNOTAVAIL: ::1 not configured
+            continue
+        sys.exit(1)
+    finally:
+        s.close()
+PY
+}
+
+# First free port from $1 upward, skipping $2 (the port already chosen for the other server).
+first_free_port() {
+  local port="$1"
+  for _ in {1..100}; do
+    if [[ "$port" != "${2:-}" ]] && port_is_free "$port"; then
+      printf '%s' "$port"
+      return 0
+    fi
+    port=$((port + 1))
+  done
+  echo "No free port found from $1 upward" >&2
+  return 1
+}
+
+# Ports default to the first free ones from 8001 and 5173, so a second instance (with its own
+# DATABASE_URL) starts beside the first instead of attaching to its backend and UI. An explicitly
+# set port is used as given, and fails below if it is taken.
+if [[ -z "${ELECTRON_BACKEND_PORT:-}" ]]; then
+  ELECTRON_BACKEND_PORT="$(first_free_port 8001)"
+fi
+if [[ -z "${FRONTEND_PORT:-}" ]]; then
+  FRONTEND_PORT="$(first_free_port 5173 "$ELECTRON_BACKEND_PORT")"
+fi
+for port in "$ELECTRON_BACKEND_PORT" "$FRONTEND_PORT"; do
+  port_is_free "$port" || { echo "Port $port is already in use; set ELECTRON_BACKEND_PORT / FRONTEND_PORT to free ports" >&2; exit 1; }
+done
+if [[ "${ELECTRON_DEV_PRINT_PORTS:-}" == "1" ]]; then
+  printf 'ELECTRON_BACKEND_PORT=%s\nFRONTEND_PORT=%s\n' "$ELECTRON_BACKEND_PORT" "$FRONTEND_PORT"
+  exit 0
+fi
 DETAILS_FLAG="--exclude-llm-call-details"
 if [[ "${OPENBOT_INCLUDE_LLM_CALL_DETAILS:-false}" == "true" ]]; then
   DETAILS_FLAG="--include-llm-call-details"
@@ -108,13 +160,16 @@ backend_pid=$!
 echo "Starting Vite frontend on ${FRONTEND_URL}"
 run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_PORT="$ELECTRON_BACKEND_PORT" ELECTRON_DEV="1" bash -c '
   cd frontend
-  pnpm dev --host localhost --port "$FRONTEND_PORT"
+  pnpm dev --host localhost --port "$FRONTEND_PORT" --strictPort
 ' &
 frontend_pid=$!
 
+# Waits for $1 to answer while the process $2 that should be serving it is alive: if it died (e.g. it
+# lost a race for the port), whatever answers is some other instance, which this one must not use.
 wait_for_url() {
-  local url="$1"
+  local url="$1" pid="$2"
   for _ in {1..100}; do
+    kill -0 "$pid" 2>/dev/null || { echo "The server for ${url} exited during startup" >&2; return 1; }
     if curl --silent --fail --output /dev/null "$url"; then return 0; fi
     sleep 0.2
   done
@@ -122,8 +177,8 @@ wait_for_url() {
   return 1
 }
 
-wait_for_url "${BACKEND_URL}/api/v1/health"
-wait_for_url "${FRONTEND_URL}"
+wait_for_url "${BACKEND_URL}/api/v1/health" "$backend_pid"
+wait_for_url "${FRONTEND_URL}" "$frontend_pid"
 
 echo "Launching Electron (API: ${BACKEND_URL})"
 (

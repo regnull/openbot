@@ -105,9 +105,12 @@ make app -- --include-llm-call-details  # opt in to detailed model-call token da
 make electron ROOT_DIRECTORY=~/src/myproject  # workspace ~/src/myproject, DB in ~/src/myproject/.openbot/
 ```
 
-The development launcher (`scripts/electron-dev.sh`) runs its own backend on port **8001**
-(override with `ELECTRON_BACKEND_PORT`) so it can run alongside `make run` on port **8000**, and
-points Electron at it. It runs without backend reload or Vite file watching, so restart the app to
+The development launcher (`scripts/electron-dev.sh`) runs its own backend on the first free port
+from **8001** and its Vite server on the first free port from **5173** (override with
+`ELECTRON_BACKEND_PORT` / `FRONTEND_PORT`; an explicit port that is taken is an error), so it can
+run alongside `make run` on port **8000**, and points Electron at them. Because the ports are picked
+per launch, several instances can run at once, each with its own database:
+`./openbot --root ~/src/a` in one terminal and `./openbot --root ~/src/b` in another. It runs without backend reload or Vite file watching, so restart the app to
 pick up changes. The repository-root `openbot` launcher accepts the same
 `--include-llm-call-details` flag. Electron and `./openbot` omit detailed per-LLM-call token data
 by default; `make run` and the browser workflows keep it. The backend CLI itself takes
