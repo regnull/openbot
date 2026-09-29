@@ -10,7 +10,7 @@ SCRIPT = Path(__file__).parents[1] / "openbot"
 
 
 class OpenBotLauncherTests(unittest.TestCase):
-    def run_launcher(self, *args, cwd=None, home=None, repository=None):
+    def run_launcher(self, *args, cwd=None, home=None, repository=None, log_file=None):
         with tempfile.TemporaryDirectory() as tmp:
             fake_make = Path(tmp) / "make"
             fake_make.write_text(
@@ -19,11 +19,15 @@ class OpenBotLauncherTests(unittest.TestCase):
                 "printf 'workspace=%s\\n' \"$WORKSPACE_ROOT\"\n"
                 "printf 'database=%s\\n' \"$DATABASE_URL\"\n"
                 "printf 'details=%s\\n' \"$OPENBOT_INCLUDE_LLM_CALL_DETAILS\"\n"
+                "printf 'log=%s\\n' \"$LOG_FILE\"\n"
                 "printf 'args='; printf '%s|' \"$@\"; printf '\\n'\n"
             )
             fake_make.chmod(0o755)
             env = os.environ.copy()
             env["PATH"] = f"{tmp}{os.pathsep}{env['PATH']}"
+            env.pop("LOG_FILE", None)
+            if log_file is not None:
+                env["LOG_FILE"] = log_file
             if home is not None:
                 env["HOME"] = str(home)
             if repository is not None:
@@ -41,6 +45,18 @@ class OpenBotLauncherTests(unittest.TestCase):
             self.assertIn("details=false\n", result.stdout)
             self.assertIn("args=-C|", result.stdout)
             self.assertIn("|app|ROOT_DIRECTORY=", result.stdout)
+
+    def test_log_file_lives_beside_the_database(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as db:
+            result = self.run_launcher("--db-root", db, cwd=tmp)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"log={Path(db).resolve() / 'logs' / 'openbot.log'}\n", result.stdout)
+
+    def test_log_file_from_the_environment_wins(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as db:
+            result = self.run_launcher("--db-root", db, cwd=tmp, log_file="/tmp/mine.log")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("log=/tmp/mine.log\n", result.stdout)
 
     def test_existing_local_database_directory_wins(self):
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:

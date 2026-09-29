@@ -67,9 +67,29 @@ def test_uvicorn_lines_are_mirrored_to_file_exactly_once(settings, access_propag
 
 def test_empty_log_file_env_uses_default(monkeypatch):
     monkeypatch.setenv("LOG_FILE", "")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     s = Settings(_env_file=None)
-    assert s.log_file == Path("logs/openbot.log")
+    assert s.log_file == Path(".openbot/logs/openbot.log")
     assert s.log_level == "INFO"
+
+
+def test_log_file_defaults_beside_the_database(monkeypatch, tmp_path):
+    monkeypatch.delenv("LOG_FILE", raising=False)
+    s = Settings(_env_file=None, database_url=f"sqlite+aiosqlite:///{tmp_path / 'db' / 'openbot.db'}")
+    assert s.log_file == tmp_path / "db" / "logs" / "openbot.log"
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("OPENBOT_ROOT_DIRECTORY", str(tmp_path))
+    rooted = Settings(_env_file=None)
+    monkeypatch.delenv("OPENBOT_ROOT_DIRECTORY")
+    assert rooted.log_file == tmp_path / ".openbot" / "logs" / "openbot.log"
+    assert Settings(_env_file=None, database_url="sqlite+aiosqlite://").log_file == Path("logs/openbot.log")
+    assert Settings(_env_file=None, database_url="postgresql+asyncpg://h/db").log_file == Path("logs/openbot.log")
+
+
+def test_explicit_log_file_wins(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOG_FILE", str(tmp_path / "mine.log"))
+    s = Settings(_env_file=None, database_url=f"sqlite+aiosqlite:///{tmp_path / 'openbot.db'}")
+    assert s.log_file == tmp_path / "mine.log"
 
 
 async def test_startup_logs_resolved_configuration(settings, caplog):

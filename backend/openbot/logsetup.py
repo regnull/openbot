@@ -3,7 +3,7 @@
 Two sinks hang off the ``openbot`` logger:
 
 * the console, at ``LOG_LEVEL`` (INFO by default) in uvicorn's terse style, and
-* a rotating file at ``LOG_FILE`` (``./logs/openbot.log`` by default) that always records DEBUG
+* a rotating file at ``LOG_FILE`` (``logs/openbot.log`` beside the SQLite database by default) that always records DEBUG
   detail with timestamps and logger names.
 
 The file is what you reach for after the fact: it records the resolved configuration at startup,

@@ -547,7 +547,7 @@ as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and
 | `SEED_DEMO_BOTS` | `true` | Seed the demo team when the bot table is empty and a provider is configured (at startup, or when the setup wizard completes). |
 | `WEBHOOK_RETRY_DELAYS` | `5,30,120` | Seconds between webhook delivery retries before an item is marked `failed`. |
 | `LOG_LEVEL` | `INFO` | Console verbosity. The log file always records `DEBUG` detail. |
-| `LOG_FILE` | `logs/openbot.log` | Rotating diagnostic log (10 MB x 5). See [Troubleshooting](#troubleshooting). |
+| `LOG_FILE` | `logs/openbot.log` beside the SQLite database (e.g. `.openbot/logs/openbot.log`) | Rotating diagnostic log (10 MB x 5), one per database so separate instances keep separate logs. `./openbot` sets it to `<db-root>/logs/openbot.log` even when `.env` pins it. See [Troubleshooting](#troubleshooting). |
 | `ACTIVITY_LOG_RETENTION_DAYS` | `14` | Days of activity-log rows (`activity_log` table) kept; pruned at startup. `0` keeps everything. |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | `false`, unset, `openbot`, unset | LangSmith tracing; the SDK reads these from the environment. |
 
@@ -591,7 +591,8 @@ automatically at startup against any non-`:memory:` database; nothing to run by 
 
 ## Troubleshooting
 
-Every process writes a timestamped diagnostic log to `LOG_FILE` (`logs/openbot.log` by default,
+Every process writes a timestamped diagnostic log to `LOG_FILE` (`logs/openbot.log` in the database's
+directory by default, e.g. `.openbot/logs/openbot.log`,
 rotating at 10 MB, five backups kept). It always contains `DEBUG` detail regardless of `LOG_LEVEL`,
 so it is the place to look when a bot misbehaves:
 

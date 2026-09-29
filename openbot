@@ -95,5 +95,8 @@ repository_root="$(canonical_directory "$(expand_path "$OPENBOT_REPOSITORY")")"
 export WORKSPACE_ROOT="$workspace_root"
 export DATABASE_URL="sqlite+aiosqlite:///$db_root/openbot.db"
 export OPENBOT_INCLUDE_LLM_CALL_DETAILS="$include_llm_call_details"
+# Each instance logs beside its own database (overriding a LOG_FILE pinned in .env), so two instances
+# never write to, or rotate, the same file. A LOG_FILE set in the caller's environment still wins.
+export LOG_FILE="${LOG_FILE:-$db_root/logs/openbot.log}"
 
 exec make -C "$repository_root" app ROOT_DIRECTORY="$workspace_root"
