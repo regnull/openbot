@@ -259,6 +259,22 @@ port 8000:
 make run               # builds frontend/dist, then serves it from the FastAPI app on :8000
 ```
 
+### Backend in Docker
+
+The backend runs in a container and the UI stays on the host. Shell commands run as a separate
+`shell` user without the server's environment, so they can't read provider keys, `secret.key` or
+the database (see `docs/superpowers/specs/2026-09-29-shell-sandbox-design.md`).
+
+```bash
+echo "OPENBOT_API_KEY=$(openssl rand -hex 24)" >> .env   # required, see the design note
+docker compose up --build                                # backend on 127.0.0.1:8000
+```
+
+Then start the desktop app with `--backend_url http://127.0.0.1:8000`, or run `make frontend`.
+Bots work in `./workspace`, and state is in a Docker volume (`openbot-data`). Set `OPENBOT_PORT`
+if 8000 is taken. Shell commands still have network access. On Linux, create `./workspace`
+yourself before the first start, or Docker creates it owned by root.
+
 ## Demo walkthrough
 
 The seeded bots are set up to run a small software workflow end to end against a real git
@@ -348,7 +364,8 @@ For how these pieces fit together inside the backend, see [docs/architecture.md]
 > [!TIP]
 > Practical guidance: bind to `127.0.0.1`, keep it off shared networks, set `OPENBOT_API_KEY` even
 > locally, and run it as a dedicated low-privilege user (or in a VM/container) if bots have
-> `run_shell`. Docker sandboxing for tools is on the roadmap, not in v1.
+> `run_shell`. [Backend in Docker](#backend-in-docker) does the container part and keeps shell
+> commands away from the server's keys; sandboxing each tool call is still on the roadmap.
 
 ## Tools and plugins
 
@@ -536,6 +553,7 @@ as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and
 | `PUBLIC_URL` | `http://127.0.0.1:8000` | Where browsers reach this server; builds the OAuth redirect URI for remote MCP servers. While it is this local default, it follows the port the backend CLI was started on (e.g. `:8001` under `make app`); set it explicitly for any other address. |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed origins. |
 | `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the confinement root for file tools. `run_shell` only *starts* there. |
+| `SHELL_USER` | *(unset)* | Run `run_shell` commands as this user with a minimal environment, so they don't see the server's keys. Needs `OPENBOT_API_KEY` and a server running as root; `compose.yaml` sets it. |
 | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
 | `FRONTEND_DIST` | `frontend/dist` | Built frontend served at `/` when it exists. Empty means this default. |
 | `MCP_CONFIG` | `./mcp.json` | Optional `mcpServers` file imported into the database once at startup, then ignored. See [MCP servers](#mcp-servers). |
