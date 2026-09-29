@@ -111,7 +111,7 @@ describe("ThreadPage window re-entry", () => {
       return Promise.resolve(detail(id, [...(server[id] ?? [])])) as never;
     };
     fake.api.getThreadUsage = () => Promise.resolve({ model_calls: 0, prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0 }) as never;
-    fake.api.listBots = () => Promise.resolve([{ id: "b1", name: "Bot", icon: null } as unknown as Bot]) as never;
+    fake.api.listBots = () => Promise.resolve([{ id: "b1", name: "Bot", handle: "bot", icon: null } as unknown as Bot]) as never;
     fake.api.ackThread = () => Promise.resolve({ acked: 0 }) as never;
     fake.api.getRun = (id: string) => Promise.resolve({ ...run(id, runStatus[id] ?? "running"), events: [] }) as never;
     qc = new QueryClient({ defaultOptions: { queries: { staleTime: 5_000, retry: false } } });
@@ -134,6 +134,21 @@ describe("ThreadPage window re-entry", () => {
     await until(() => textarea().value === "draft for t1", "t1 draft restored");
     await go("/threads/t2");
     await until(() => textarea().value === "draft for t2", "t2 draft restored");
+  });
+
+  it("persists mention selection when switching away and back", async () => {
+    await mount("/threads/t1");
+    await until(() => text().includes("first reply"), "initial history");
+    await type("@bo");
+    const option = el.querySelector('[role="option"]') as HTMLDivElement | null;
+    expect(option?.textContent).toContain("@bot");
+    await act(async () => { option?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })); });
+    expect(textarea().value).toBe("@bot ");
+
+    await go("/threads/t2");
+    await until(() => text().includes("title-t2"), "second thread window");
+    await go("/threads/t1");
+    await until(() => textarea().value === "@bot ", "mention draft restored");
   });
 
   it("clears a draft only after sending succeeds", async () => {

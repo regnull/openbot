@@ -73,6 +73,7 @@ export default function Composer({ threadId, handles, onSend, disabled, hint, au
     if (!q) return;
     const r = applyMention(text, q.start, caret, h);
     setText(r.text);
+    setThreadDraft(threadId, r.text);
     setCaret(r.caret);
     setSel(0);
     requestAnimationFrame(() => { ref.current?.focus(); ref.current?.setSelectionRange(r.caret, r.caret); });
