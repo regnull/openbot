@@ -75,8 +75,10 @@ source of truth; importing `mcp.json` is one-time by name, not a migration.
 2. Review the updated catalog details. For supported templates, edit Command and
    Args to the corrected values above, select Cwd/allowed directories, and review
    Env or Headers. `${VAR}` expansion reads OpenBot's process environment, **not**
-   the server's Env map. In the UI, replacing a path placeholder directly in Args
-   is usually simpler; quote paths containing spaces.
+   the server's Env map. Use `$CWD` (or `${CWD}`) in any value to substitute the
+   directory where OpenBot was started; substitution stays within the configured
+   argument, so paths containing spaces do not need shell quoting. Unknown unbraced
+   `$VAR` forms remain literal.
 3. Keep secrets in Env or Headers, never literal command arguments. Credential
    names in the catalog are descriptive, not automatically populated or enforced.
 4. Alternatively remove the old entry and add the updated template disabled.

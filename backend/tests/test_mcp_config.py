@@ -1,4 +1,5 @@
 """mcp.json parsing: Claude Code's mcpServers shape, ${VAR} expansion, transport detection."""
+
 import json
 
 import pytest
@@ -17,31 +18,112 @@ def test_missing_file_means_no_servers(tmp_path):
 
 
 def test_stdio_and_http_servers_with_env_expansion(tmp_path, monkeypatch):
-    p = _write(tmp_path, {"mcpServers": {
-        "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_TOKEN": "${GH}"}, "cwd": "/tmp"},
-        "linear": {"url": "https://mcp.linear.app/mcp"},
-        "internal": {"url": "https://mcp.${HOST}/mcp", "headers": {"Authorization": "Bearer ${KEY}"}},
-        "off": {"url": "https://x/mcp", "enabled": False},
-    }})
-    servers = {s.name: s for s in load_mcp_config(p, env={"GH": "ghp_1", "HOST": "example.com", "KEY": "k1"})}
+    p = _write(
+        tmp_path,
+        {
+            "mcpServers": {
+                "github": {
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-github"],
+                    "env": {"GITHUB_TOKEN": "${GH}"},
+                    "cwd": "/tmp",
+                },
+                "linear": {"url": "https://mcp.linear.app/mcp"},
+                "internal": {
+                    "url": "https://mcp.${HOST}/mcp",
+                    "headers": {"Authorization": "Bearer ${KEY}"},
+                },
+                "off": {"url": "https://x/mcp", "enabled": False},
+            }
+        },
+    )
+    servers = {
+        s.name: s
+        for s in load_mcp_config(p, env={"GH": "ghp_1", "HOST": "example.com", "KEY": "k1"})
+    }
     gh = servers["github"]
-    assert gh.transport == "stdio" and gh.command == "npx" and gh.args[1] == "@modelcontextprotocol/server-github"
+    assert (
+        gh.transport == "stdio"
+        and gh.command == "npx"
+        and gh.args[1] == "@modelcontextprotocol/server-github"
+    )
     assert gh.env == {"GITHUB_TOKEN": "ghp_1"} and gh.cwd == "/tmp" and gh.oauth is False
     lin = servers["linear"]
-    assert lin.transport == "http" and lin.url == "https://mcp.linear.app/mcp" and lin.oauth is True    # no static auth header
+    assert (
+        lin.transport == "http" and lin.url == "https://mcp.linear.app/mcp" and lin.oauth is True
+    )  # no static auth header
     internal = servers["internal"]
-    assert internal.url == "https://mcp.example.com/mcp" and internal.headers == {"Authorization": "Bearer k1"} and internal.oauth is False
+    assert (
+        internal.url == "https://mcp.example.com/mcp"
+        and internal.headers == {"Authorization": "Bearer k1"}
+        and internal.oauth is False
+    )
     assert servers["off"].enabled is False
 
 
 def test_unset_variable_is_an_error_for_that_server_only(tmp_path):
-    p = _write(tmp_path, {"mcpServers": {
-        "ok": {"url": "https://a/mcp"},
-        "bad": {"command": "x", "env": {"T": "${MISSING}"}},
-    }})
+    p = _write(
+        tmp_path,
+        {
+            "mcpServers": {
+                "ok": {"url": "https://a/mcp"},
+                "bad": {"command": "x", "env": {"T": "${MISSING}"}},
+            }
+        },
+    )
     servers = {s.name: s for s in load_mcp_config(p, env={})}
     assert servers["ok"].error is None
     assert servers["bad"].error and "MISSING" in servers["bad"].error
+
+
+def test_cwd_expansion_is_argv_safe_and_supports_paths_with_spaces(tmp_path, monkeypatch):
+    launch_dir = tmp_path / "OpenBot launch dir"
+    launch_dir.mkdir()
+    monkeypatch.chdir(launch_dir)
+    spec = {
+        "command": "uvx",
+        "args": ["--project", "$CWD", "${CWD}/nested", "$NOT_EXPANDED"],
+        "cwd": "$CWD",
+    }
+    server = load_mcp_config(_write(tmp_path, {"mcpServers": {"local": spec}}), env={})[0]
+    assert server.args == ["--project", str(launch_dir), f"{launch_dir}/nested", "$NOT_EXPANDED"]
+    assert server.cwd == str(launch_dir)
+
+
+def test_cwd_expansion_is_available_in_braced_form_and_existing_env_expansion_remains(
+    tmp_path, monkeypatch
+):
+    launch_dir = tmp_path / "started here"
+    launch_dir.mkdir()
+    monkeypatch.chdir(launch_dir)
+    server = load_mcp_config(
+        _write(
+            tmp_path,
+            {
+                "mcpServers": {
+                    "local": {"command": "${RUNNER}", "args": ["${CWD}", "${TOKEN}"]},
+                }
+            },
+        ),
+        env={"RUNNER": "uvx", "TOKEN": "kept"},
+    )[0]
+    assert server.command == "uvx"
+    assert server.args == [str(launch_dir), "kept"]
+
+
+def test_unknown_braced_variable_is_still_an_error(tmp_path):
+    server = load_mcp_config(
+        _write(
+            tmp_path,
+            {
+                "mcpServers": {
+                    "bad": {"command": "x", "args": ["${MISSING}"]},
+                }
+            },
+        ),
+        env={},
+    )[0]
+    assert server.error == "environment variable MISSING is not set"
 
 
 def test_malformed_config_raises(tmp_path):
@@ -49,7 +131,7 @@ def test_malformed_config_raises(tmp_path):
     p.write_text("{not json")
     with pytest.raises(McpConfigError):
         load_mcp_config(p, env={})
-    p.write_text(json.dumps({"mcpServers": {"x": {"args": ["a"]}}}))         # neither command nor url
+    p.write_text(json.dumps({"mcpServers": {"x": {"args": ["a"]}}}))  # neither command nor url
     with pytest.raises(McpConfigError):
         load_mcp_config(p, env={})
     p.write_text(json.dumps({"mcpServers": {"bad name!": {"url": "https://a"}}}))
