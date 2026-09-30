@@ -1,32 +1,25 @@
-# React + TypeScript + Vite
+# OpenBot frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The React and TypeScript UI runs in the browser through Vite or inside the optional Electron app. It talks to the backend over HTTP and server-sent events.
 
-Currently, two official plugins are available:
+## Layout
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `src/pages/`: route-level screens for bots, threads, inbox, settings, and schedules.
+- `src/components/`: shared UI, including the controls and status primitives in `ui.tsx`.
+- `src/api/`: backend client, event stream, and API types.
+- `src/lib/`: client-side state and helpers. `src/index.css` defines semantic theme tokens used by components.
+- `electron/`: desktop main process (`main.cjs`), preload bridge (`preload.cjs`), and packaged `app://openbot` scheme (`scheme.cjs`).
 
-## React Compiler
+## Develop and check
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+From the repository root, run `make setup` once, then `make dev` to start the API on port 8000 and Vite on port 5173. For the desktop app, see [Desktop app (Electron)](../README.md#desktop-app-electron).
 
-## Expanding the Oxlint configuration
+From `frontend/`, run:
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+pnpm test
+pnpm lint
+pnpm typecheck
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full project checks and PR process.
