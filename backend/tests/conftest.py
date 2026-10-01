@@ -12,6 +12,7 @@ from openbot.config import Settings
 from openbot.db.session import create_all, make_engine, make_session_factory
 from openbot.main import create_app
 from openbot.runtime.bus import EventBus
+from openbot.runtime.renaming import finish_renames
 from openbot.seed import ensure_cron_actor, ensure_human_actor
 from openbot.services import Services
 from openbot.tools.registry import build_registry
@@ -82,13 +83,17 @@ async def _noop(*_a, **_k):
 
 
 _engines: list = []
+_services: list = []
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def _dispose_engines():
     """Autouse, so it tears down last: dispose every engine built during the test. Without this the
-    aiosqlite connection threads outlive the test's event loop and warn when it is already closed."""
+    aiosqlite connection threads outlive the test's event loop and warn when it is already closed.
+    A thread title still being generated in the background is dropped first, for the same reason."""
     yield
+    while _services:
+        await finish_renames(_services.pop(), timeout=0)
     while _engines:
         await _engines.pop().dispose()
 
@@ -101,6 +106,7 @@ async def build_test_services(settings: Settings, scripts: dict | None = None) -
     await create_all(engine)
     scripts = scripts if scripts is not None else {}
     services = Services(settings=settings, session_factory=make_session_factory(engine), _owned_resources=[engine])
+    _services.append(services)
     services.registry = build_registry(settings)
     services.bus = EventBus()
     services.store = InMemoryStore()

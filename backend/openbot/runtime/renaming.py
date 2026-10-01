@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from langchain_core.messages import HumanMessage
@@ -12,7 +13,9 @@ RENAME_AFTER_MESSAGES = 3
 
 
 async def maybe_auto_rename(services, thread_id: str) -> None:
-    """Ask the default bot's model for a useful title once, after the initial conversation."""
+    """Ask the default bot's model for a useful title once, after the initial conversation. The rename is
+    claimed here; the model call runs in the background, so the post that triggered it does not wait
+    for a provider that may take seconds, or its whole timeout, to answer."""
     async with services.session_factory() as session:
         thread = await session.get(Thread, thread_id)
         if thread is None or thread.auto_renamed:
@@ -35,6 +38,12 @@ async def maybe_auto_rename(services, thread_id: str) -> None:
             return
         await session.commit()
         transcript = "\n".join(f"{m.sender_name}: {m.content}" for m in messages[:8])
+    task = asyncio.create_task(_rename(services, thread_id, actor, transcript), name=f"thread-rename:{thread_id}")
+    services._rename_tasks.add(task)
+    task.add_done_callback(services._rename_tasks.discard)
+
+
+async def _rename(services, thread_id: str, actor: Actor, transcript: str) -> None:
     prompt = HumanMessage(content=(
         "Suggest a concise, accurate title for this conversation. Return only the title, no quotes, "
         "markdown, or explanation. Use at most 80 characters.\n\n" + transcript
@@ -55,3 +64,15 @@ async def maybe_auto_rename(services, thread_id: str) -> None:
         await services.bus.publish("thread.updated", thread_id, {"id": thread_id, "title": title})
     except Exception:
         log.exception("automatic thread rename failed for %s", thread_id)
+
+
+async def finish_renames(services, timeout: float | None = None) -> None:
+    """Wait for the titles still being generated. Past `timeout` they are cancelled; the claim stays
+    consumed, like after a failed call."""
+    tasks = list(services._rename_tasks)
+    if not tasks:
+        return
+    _, pending = await asyncio.wait(tasks, timeout=timeout)
+    for t in pending:
+        t.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)

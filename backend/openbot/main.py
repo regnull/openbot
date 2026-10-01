@@ -53,6 +53,7 @@ from openbot.runtime.memory import MemoryReflector
 from openbot.runtime.model_catalog import ModelCatalog
 from openbot.runtime.persistence import open_langgraph_backends
 from openbot.runtime.providers import chat_model, embeddings
+from openbot.runtime.renaming import finish_renames
 from openbot.runtime.runner import Runner
 from openbot.runtime.scheduler import Scheduler, recover_processing
 from openbot.runtime.secrets import SecretBox, resolve_secret_key
@@ -171,6 +172,8 @@ async def stop_background(services: Services) -> None:
         await services.mcp.stop()
     if services.model_catalog is not None:
         await services.model_catalog.close()
+    # Bounded like the reflection below: a hung title call must not wedge the shutdown.
+    await finish_renames(services, timeout=10)
     if services.reflector is not None:
         # Reflection is debounced by MEMORY_REFLECTION_DELAY (30s by default), so on a normal
         # restart the last run's memories are still sitting in the pending map. Run them now rather
