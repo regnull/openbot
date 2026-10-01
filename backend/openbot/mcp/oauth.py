@@ -83,6 +83,12 @@ class DbTokenStorage:
     async def set_tokens(self, tokens: OAuthToken) -> None:
         async with self._sf() as s:
             row = await self._row(s)
+            if tokens.refresh_token is None:
+                # RFC 6749 allows a refresh response to omit refresh_token. Keep the
+                # existing grant so a later restart can refresh the new access token.
+                previous = self._dec(row.tokens, OAuthToken)
+                if previous and previous.refresh_token:
+                    tokens = tokens.model_copy(update={"refresh_token": previous.refresh_token})
             row.tokens, row.resource_url, row.updated_at = self._enc(tokens), self.url or row.resource_url, utcnow()
             await s.commit()
 
