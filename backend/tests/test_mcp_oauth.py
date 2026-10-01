@@ -42,6 +42,19 @@ async def test_credentials_round_trip_encrypted_at_rest(services, tmp_path):
     assert await store.get_tokens() is None
 
 
+async def test_refresh_response_without_refresh_token_preserves_existing_grant(services, tmp_path):
+    key = load_or_create_key(None, tmp_path / "k.key")
+    store = DbTokenStorage(services.session_factory, server="linear", key=key)
+    await store.set_tokens(OAuthToken(access_token="old-access", refresh_token="durable-refresh"))
+
+    await store.set_tokens(OAuthToken(access_token="new-access", expires_in=3600))
+
+    tokens = await store.get_tokens()
+    assert tokens is not None
+    assert tokens.access_token == "new-access"
+    assert tokens.refresh_token == "durable-refresh"
+
+
 async def test_pending_flow_records_the_url_and_the_callback_resolves_it():
     flows = PendingFlows()
     redirect, callback = flows.handlers("linear")
