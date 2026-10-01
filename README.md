@@ -274,6 +274,14 @@ echo "OPENBOT_API_KEY=$(openssl rand -hex 24)" >> .env   # required, see the des
 docker compose up --build                                # backend on 127.0.0.1:8000
 ```
 
+On Windows PowerShell 5.1, use a UTF-8-safe command when adding the API key; its default
+`Out-File` encoding is UTF-16, which Compose does not accept:
+
+```powershell
+$key = -join (1..24 | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+[IO.File]::AppendAllText('.env', "OPENBOT_API_KEY=$key`r`n", (New-Object Text.UTF8Encoding($false)))
+```
+
 Then start the desktop app with `--backend_url http://127.0.0.1:8000`, or run `make frontend`.
 Bots work in `./workspace`, and state is in a Docker volume (`openbot-data`). Set `OPENBOT_PORT`
 if 8000 is taken. Shell commands still have network access. On Linux, create `./workspace`

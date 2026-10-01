@@ -1,0 +1,2 @@
+# Entrypoints are executed directly by Linux containers; never check them out with CRLF.
+docker-entrypoint.sh text eol=lf
