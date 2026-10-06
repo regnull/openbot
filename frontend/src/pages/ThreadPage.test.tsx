@@ -137,6 +137,8 @@ describe("ThreadPage window re-entry", () => {
     expect(el.querySelector('[aria-label="tokens out: 0 tok"]')).toBeTruthy();
     expect(el.querySelector('[title="Tokens in"] svg')).toBeTruthy();
     expect(el.querySelector('[title="Tokens out"] svg')).toBeTruthy();
+    expect(el.querySelector('[aria-label="tokens in: 0 tok"] path')?.getAttribute("d")).toBe("M5 12h14M12 5l7 7-7 7");
+    expect(el.querySelector('[aria-label="tokens out: 0 tok"] path')?.getAttribute("d")).toBe("M19 12H5M12 5l-7 7 7 7");
     expect(el.querySelector('[aria-label="cost: $0.0000"]')).toBeTruthy();
 
     usageTotals = { model_calls: 2, prompt_tokens: 12345, completion_tokens: 678, cache_read_tokens: 0, cost_usd: 0.0123 };
@@ -148,6 +150,8 @@ describe("ThreadPage window re-entry", () => {
     expect(el.querySelector('[aria-label="tokens in: 12,345 tok"]')).toBeTruthy();
     expect(el.querySelector('[aria-label="tokens out: 678 tok"]')).toBeTruthy();
     expect(el.querySelector('[aria-label="cost: $0.0123"]')).toBeTruthy();
+    expect(el.querySelector('[aria-label="tokens in: 12,345 tok"] path')?.getAttribute("d")).toBe("M5 12h14M12 5l7 7-7 7");
+    expect(el.querySelector('[aria-label="tokens out: 678 tok"] path')?.getAttribute("d")).toBe("M19 12H5M12 5l-7 7 7 7");
   });
 
   it("restores each thread's draft after switching away and back", async () => {
