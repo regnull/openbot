@@ -197,11 +197,19 @@
 .thread-odometer:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--surface) 72%, var(--sunken)); transform: translateY(-1px); }
 .thread-odometer-label { color: var(--faint); font-family: var(--font-sans); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; line-height: 1; text-transform: uppercase; }
 .thread-odometer-value { display: inline-flex; align-items: center; color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1; }
-.thread-odometer-digit { min-width: 0.72em; padding: 0.12rem 0.08rem; border-left: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent); background: color-mix(in srgb, var(--sunken) 72%, transparent); text-align: center; transition: background-color 180ms ease, color 180ms ease; }
+.thread-odometer-digit { min-width: 0.72em; overflow: hidden; padding: 0.12rem 0.08rem; border-left: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent); background: color-mix(in srgb, var(--sunken) 72%, transparent); text-align: center; transition: background-color 180ms ease, color 180ms ease; }
+.thread-odometer-digit-face { display: block; }
+.thread-odometer-digit--rolling .thread-odometer-digit-face { animation: odometer-wheel-turn 360ms cubic-bezier(0.22, 0.8, 0.35, 1) both; }
 .thread-odometer-digit:first-child { border-left: 0; border-radius: 2px 0 0 2px; }
 .thread-odometer-digit:last-child { border-radius: 0 2px 2px 0; }
 .thread-odometer-separator { color: var(--muted); }
+.thread-odometer-unit { margin-left: 0.28rem; color: var(--muted); }
 .thread-odometer-loading { color: var(--faint); }
+@keyframes odometer-wheel-turn {
+  0% { opacity: 0.25; transform: translateY(-115%); }
+  55% { opacity: 1; transform: translateY(8%); }
+  100% { opacity: 1; transform: translateY(0); }
+}
 @media (max-width: 640px) {
   .thread-header { padding-inline: 0.1rem; }
   .thread-header-footer { align-items: flex-start; flex-direction: column; gap: 0.35rem; margin-left: 2.75rem; }
@@ -212,6 +220,7 @@
 @media (prefers-reduced-motion: reduce) {
   .thread-header-back, .thread-odometer { transition: none; }
   .thread-header-back:hover, .thread-odometer:hover { transform: none; }
+  .thread-odometer-digit--rolling .thread-odometer-digit-face { animation: none; }
 }
 
 /* ── Live indicators ───────────────────────────────────────────────────────── */
