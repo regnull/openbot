@@ -26,6 +26,8 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 REPEAT_NOTE = ("\n\n[This exact call already failed with this same error. Do not retry it unchanged: "
                "change the arguments, use another tool, or report the failure.]")
+REPEAT_CALL_NOTE = ("\n\n[This exact call has been repeated several times. Do not repeat it unchanged: "
+                    "use the result you have, change the arguments, or use another tool.]")
 
 
 def _text(m: ToolMessage) -> str:
@@ -57,8 +59,31 @@ def _failures(messages: list) -> Counter:
                 calls[tc["id"]] = (tc["name"], tc["args"])
         elif isinstance(m, ToolMessage) and m.tool_call_id in calls and is_failure(m):
             name, args = calls[m.tool_call_id]
-            counts[_signature(name, args, _text(m).removesuffix(REPEAT_NOTE))] += 1
+            counts[_signature(name, args, _text(m).removesuffix(REPEAT_CALL_NOTE).removesuffix(REPEAT_NOTE))] += 1
     return counts
+
+
+# Adapted from OpenCode's doom-loop check (MIT-licensed), which detects repeated tool calls.
+def _consecutive_calls(messages: list) -> tuple[tuple[str, str] | None, int]:
+    """Return the latest tool-call signature and its consecutive count."""
+    calls: dict[str, tuple[str, Any]] = {}
+    completed: list[tuple[str, str]] = []
+    for m in messages:
+        if isinstance(m, AIMessage):
+            for tc in m.tool_calls:
+                calls[tc["id"]] = (tc["name"], tc["args"])
+        elif isinstance(m, ToolMessage) and m.tool_call_id in calls:
+            name, args = calls[m.tool_call_id]
+            completed.append((name, json.dumps(args, sort_keys=True, default=str)))
+    if not completed:
+        return None, 0
+    latest = completed[-1]
+    count = 0
+    for call in reversed(completed):
+        if call != latest:
+            break
+        count += 1
+    return latest, count
 
 
 class ToolFailureMiddleware(AgentMiddleware):
@@ -69,13 +94,18 @@ class ToolFailureMiddleware(AgentMiddleware):
         self.max_repeats = max_repeats   # 0 turns the stop off; failures are still marked
 
     def _mark(self, request, result):
-        if not isinstance(result, ToolMessage) or not is_failure(result):
+        if not isinstance(result, ToolMessage):
             return result
-        result.status = "error"
         tc = request.tool_call
         messages = (request.state or {}).get("messages", []) if isinstance(request.state, dict) else []
-        if _failures(messages)[_signature(tc["name"], tc["args"], _text(result))]:
-            result.content = _text(result) + REPEAT_NOTE
+        if is_failure(result):
+            result.status = "error"
+            if _failures(messages)[_signature(tc["name"], tc["args"], _text(result))]:
+                result.content = _text(result) + REPEAT_NOTE
+        previous, consecutive = _consecutive_calls(messages)
+        signature = (tc["name"], json.dumps(tc["args"], sort_keys=True, default=str))
+        if self.max_repeats > 0 and previous == signature and consecutive >= self.max_repeats - 1:
+            result.content = _text(result) + REPEAT_CALL_NOTE
         return result
 
     def wrap_tool_call(self, request, handler):
@@ -87,13 +117,20 @@ class ToolFailureMiddleware(AgentMiddleware):
     def _check(self, state) -> dict[str, Any] | None:
         if self.max_repeats <= 0:
             return None
-        repeated = [(sig, n) for sig, n in _failures(state.get("messages", [])).items() if n >= self.max_repeats]
-        if not repeated:
-            return None
-        (name, args, error), n = repeated[0]
-        notice = (f"Stopped: `{name}` failed {n} times with the same arguments and the same error, so this run "
-                  f"ended instead of retrying it again.\n\nArguments: {_clip(args)}\n\n{_clip(error)}")
-        return {"jump_to": "end", "messages": [AIMessage(content=notice)]}
+        messages = state.get("messages", [])
+        repeated = [(sig, n) for sig, n in _failures(messages).items() if n >= self.max_repeats]
+        if repeated:
+            (name, args, error), n = repeated[0]
+            notice = (f"Stopped: `{name}` failed {n} times with the same arguments and the same error, so this run "
+                      f"ended instead of retrying it again.\n\nArguments: {_clip(args)}\n\n{_clip(error)}")
+            return {"jump_to": "end", "messages": [AIMessage(content=notice)]}
+        signature, count = _consecutive_calls(messages)
+        if signature and count > self.max_repeats:
+            name, args = signature
+            notice = (f"Stopped: `{name}` was called {count} times consecutively with the same arguments, so this run "
+                      "ended instead of repeating it again.\n\nArguments: " + _clip(args))
+            return {"jump_to": "end", "messages": [AIMessage(content=notice)]}
+        return None
 
     @hook_config(can_jump_to=["end"])
     def before_model(self, state, runtime) -> dict[str, Any] | None:
