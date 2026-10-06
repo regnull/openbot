@@ -92,6 +92,21 @@ def test_system_prompt_rejects_invalid_template(monkeypatch, tmp_path):
         prompt_module._load_system_prompt_template()
 
 
+def test_system_prompt_template_is_fixed_at_import(monkeypatch, tmp_path):
+    """The template is read once, when the code that fills it is imported. Bots edit OpenBot's own
+    source in the workspace, so a half-applied change to system_prompt.md (a new placeholder the
+    running code doesn't fill yet) must not break every run of the live instance."""
+    from openbot.runtime import prompt as prompt_module
+
+    edited = tmp_path / "system_prompt.md"
+    edited.write_text("${bot_name} ${not_filled_by_this_code}", encoding="utf-8")
+    monkeypatch.setattr(prompt_module, "SYSTEM_PROMPT_FILE", edited)
+    assert build_system_prompt(
+        bot=bot_actor("eng", name="Engineer"), all_bots=[], participants=[],
+        memories=[], workspace_root="/w", older_count=0, tool_names=[]
+    ).startswith("You are Engineer (@eng)")
+
+
 def test_system_prompt_lead_note_omitted_without_a_default_bot():
     bot = bot_actor("eng", name="Engineer", description="Builds", instructions="Be terse.")
     bot.id = "e"
