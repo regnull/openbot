@@ -28,11 +28,14 @@ message pattern "model stopped before completing" — the limitation is that a *
 error without a status code and without a recognizable message is not retried, by design (it
 could be permanent).
 """
+
 from __future__ import annotations
 
 import asyncio
+import email.utils
 import logging
 import random
+import time
 
 import anthropic
 import httpx
@@ -43,17 +46,28 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest
 log = logging.getLogger(__name__)
 
 # HTTP statuses worth a second try (rate limit, upstream hiccup, transient conflict, timeout).
-RETRYABLE_STATUS = {408, 409, 425, 429, *range(500, 600)}
+RETRYABLE_STATUS = {408, 409, 425, 429, 529, *range(500, 600)}
 
 # Generic APIError bodies seen from upstream model providers without an HTTP status attached.
-UPSTREAM_MESSAGE_PATTERNS = ("model stopped before completing",)
+UPSTREAM_MESSAGE_PATTERNS = (
+    "model stopped before completing",
+    "econnreset",
+    "socket hang up",
+    "overloaded",
+    "resource_exhausted",
+)
 # A call that hit model_call_timeout or lost its connection: no HTTP status, but as transient as a 5xx.
 # The openai and anthropic SDKs use httpx2, whose exceptions are not httpx's; a connection reset while
 # streaming reaches us as a raw httpx2.ReadError / RemoteProtocolError, not wrapped by the SDK.
 TRANSIENT_ERRORS = (
-    openai.APIConnectionError, anthropic.APIConnectionError,  # includes their APITimeoutError
-    httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError,
-    httpx2.TimeoutException, httpx2.NetworkError, httpx2.RemoteProtocolError,
+    openai.APIConnectionError,
+    anthropic.APIConnectionError,  # includes their APITimeoutError
+    httpx.TimeoutException,
+    httpx.NetworkError,
+    httpx.RemoteProtocolError,
+    httpx2.TimeoutException,
+    httpx2.NetworkError,
+    httpx2.RemoteProtocolError,
 )
 
 
@@ -83,6 +97,48 @@ def is_retryable(err: Exception) -> bool:
     return any(pattern in message for pattern in UPSTREAM_MESSAGE_PATTERNS)
 
 
+def _response_headers(err: Exception):
+    response = getattr(err, "response", None)
+    headers = getattr(response, "headers", None) if response is not None else None
+    if headers is None:
+        headers = getattr(err, "headers", None)
+    return headers
+
+
+def _retry_after(err: Exception, cap: float) -> float | None:
+    """Return a bounded server-requested retry delay, following OpenCode's retry policy."""
+    # Adapted from OpenCode's session/retry.ts (MIT licensed).
+    headers = _response_headers(err)
+    if not headers:
+        return None
+
+    def get(name: str):
+        try:
+            return headers.get(name)
+        except AttributeError:
+            return None
+
+    value = get("retry-after-ms")
+    if value is not None:
+        try:
+            return min(max(float(value) / 1000, 0.0), cap)
+        except (TypeError, ValueError):
+            pass
+
+    value = get("retry-after")
+    if value is None:
+        return None
+    try:
+        delay = max(float(value), 0.0)
+    except (TypeError, ValueError):
+        try:
+            retry_at = email.utils.parsedate_to_datetime(value).timestamp()
+        except (TypeError, ValueError, OverflowError):
+            return None
+        delay = max(retry_at - time.time(), 0.0)
+    return min(delay, cap)
+
+
 class ModelRetryMiddleware(AgentMiddleware):
     """Re-issue a model call that failed with a transient upstream provider error."""
 
@@ -93,7 +149,9 @@ class ModelRetryMiddleware(AgentMiddleware):
 
     def _delay(self, attempt: int) -> float:
         """Exponential backoff with a cap and full jitter (attempt is 1-based, the delay before it)."""
-        return min(self.base_delay * 2 ** (attempt - 1), self.backoff_cap) * random.uniform(0.0, 1.0)
+        return min(self.base_delay * 2 ** (attempt - 1), self.backoff_cap) * random.uniform(
+            0.0, 1.0
+        )
 
     def wrap_model_call(self, request: ModelRequest, handler):
         """Synchronous model calls are not retried (runs use `astream`); pass through."""
@@ -108,8 +166,15 @@ class ModelRetryMiddleware(AgentMiddleware):
                 if not is_retryable(err) or attempt >= self.max_attempts:
                     raise
                 last = err
-                delay = self._delay(attempt)
-                log.warning("transient model error on attempt %d/%d: %s: %s — retrying in %.1fs",
-                            attempt, self.max_attempts, type(err).__name__, err, delay)
+                server_delay = _retry_after(err, self.backoff_cap)
+                delay = self._delay(attempt) if server_delay is None else server_delay
+                log.warning(
+                    "transient model error on attempt %d/%d: %s: %s — retrying in %.1fs",
+                    attempt,
+                    self.max_attempts,
+                    type(err).__name__,
+                    err,
+                    delay,
+                )
                 await asyncio.sleep(delay)
         raise last  # pragma: no cover - the loop always returns or raises

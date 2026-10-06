@@ -1,10 +1,11 @@
 """Model-call retries for transient upstream provider failures: classification, backoff, wiring
 of the tunables, and the middleware loop (success, exhaustion, non-retryable, disabled)."""
+
 import pytest
 
 from openbot.config import Settings
 from openbot.runtime.app_settings import TUNABLES, coerce
-from openbot.runtime.retry import ModelRetryMiddleware, is_retryable
+from openbot.runtime.retry import ModelRetryMiddleware, _retry_after, is_retryable
 
 
 def s(**kw):
@@ -25,9 +26,17 @@ def request():
     from langchain_openai import ChatOpenAI
 
     msgs = [HumanMessage(content="hi")]
-    return ModelRequest(model=ChatOpenAI(model="m", api_key="k"), messages=msgs, system_message=None,
-                        tool_choice=None, tools=[], response_format=None, state={"messages": msgs},
-                        runtime=None, model_settings={})
+    return ModelRequest(
+        model=ChatOpenAI(model="m", api_key="k"),
+        messages=msgs,
+        system_message=None,
+        tool_choice=None,
+        tools=[],
+        response_format=None,
+        state={"messages": msgs},
+        runtime=None,
+        model_settings={},
+    )
 
 
 def mw(**kw):
@@ -78,7 +87,9 @@ async def test_max_attempts_zero_or_negative_disables_retries():
 
 
 async def test_generic_upstream_message_pattern_is_retried_but_unknown_is_not():
-    relace = Exception("Upstream error from Relace: The model stopped before completing the response.")
+    relace = Exception(
+        "Upstream error from Relace: The model stopped before completing the response."
+    )
     calls = {"n": 0, "outcomes": [relace, "ok"]}
     assert await run(mw(), calls) == "ok"
     unknown = Exception("Upstream error from Somewhere: mysterious failure")
@@ -93,7 +104,7 @@ def test_is_retryable_classification():
         assert is_retryable(ProviderError(status)), status
     for status in (400, 401, 403, 404, 422):
         assert not is_retryable(ProviderError(status)), status
-    assert not is_retryable(Exception("boom"))                       # unknown, no status: never retried
+    assert not is_retryable(Exception("boom"))  # unknown, no status: never retried
     assert is_retryable(Exception("The model stopped before completing the response."))
 
 
@@ -115,14 +126,22 @@ def test_backoff_delay_is_exponential_with_cap_and_jitter():
     m = mw(max_attempts=10, base_delay=2.0, backoff_cap=60.0)
     for attempt in range(1, 6):
         assert 0 <= m._delay(attempt) <= 2.0 * 2 ** (attempt - 1)
-    assert m._delay(20) <= 60.0                                      # capped
+    assert m._delay(20) <= 60.0  # capped
 
 
 def test_config_defaults_and_custom_values():
     st = s()
-    assert (st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap) == (3, 2.0, 60.0)
+    assert (st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap) == (
+        3,
+        2.0,
+        60.0,
+    )
     st = s(model_retry_max_attempts=5, model_retry_base_delay=0.5, model_retry_backoff_cap=10.0)
-    assert (st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap) == (5, 0.5, 10.0)
+    assert (st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap) == (
+        5,
+        0.5,
+        10.0,
+    )
 
 
 def test_config_parses_env_values(monkeypatch):
@@ -130,16 +149,23 @@ def test_config_parses_env_values(monkeypatch):
     monkeypatch.setenv("MODEL_RETRY_BASE_DELAY", "1.5")
     monkeypatch.setenv("MODEL_RETRY_BACKOFF_CAP", "20")
     st = Settings(_env_file=None)
-    assert (st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap) == (4, 1.5, 20.0)
+    assert (st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap) == (
+        4,
+        1.5,
+        20.0,
+    )
 
 
 def test_tunables_registered_and_coerced():
-    for key, kind, minimum in (("model_retry_max_attempts", "int", None),
-                               ("model_retry_base_delay", "float", 0.0),
-                               ("model_retry_backoff_cap", "float", 0.0),
-                               ("model_call_timeout", "float", 0.0)):
+    for key, kind, minimum in (
+        ("model_retry_max_attempts", "int", None),
+        ("model_retry_base_delay", "float", 0.0),
+        ("model_retry_backoff_cap", "float", 0.0),
+        ("model_call_timeout", "float", 0.0),
+    ):
         assert key in TUNABLES
         from openbot.runtime.app_settings import field_type
+
         assert field_type(key) == kind
         assert coerce(key, 7 if kind == "int" else 2.5) == (7 if kind == "int" else 2.5)
         if minimum is not None:
@@ -167,6 +193,37 @@ def test_connection_errors_are_retryable():
     assert is_retryable(anthropic.APIConnectionError(request=req))
     # Configuration mistakes are not transient.
     assert not is_retryable(httpx2.UnsupportedProtocol("bad scheme", request=req))
+
+
+def test_retry_after_headers_are_parsed_and_capped(monkeypatch):
+    class Error(Exception):
+        def __init__(self, headers):
+            super().__init__("overloaded")
+            self.response = type("Response", (), {"headers": headers})()
+
+    assert _retry_after(Error({"retry-after-ms": "1500"}), 60.0) == 1.5
+    assert _retry_after(Error({"retry-after-ms": "999999"}), 60.0) == 60.0
+    assert _retry_after(Error({"retry-after": "2"}), 60.0) == 2.0
+    assert _retry_after(Error({"retry-after": "invalid"}), 60.0) is None
+
+    monkeypatch.setattr("openbot.runtime.retry.time.time", lambda: 1000.0)
+    assert _retry_after(Error({"retry-after": "Thu, 01 Jan 1970 00:16:42 GMT"}), 60.0) == 2.0
+
+
+async def test_retry_after_zero_is_honored(monkeypatch):
+    from openbot.runtime import retry
+
+    monkeypatch.setattr(retry.random, "uniform", lambda _start, _end: 1.0)
+    error = ProviderError(429)
+    error.response = type("Response", (), {"headers": {"retry-after": "0"}})()
+    calls = {"n": 0, "outcomes": [error, "ok"]}
+    assert await run(mw(base_delay=99.0), calls) == "ok"
+    assert calls["n"] == 2
+
+
+def test_transient_message_patterns_are_retryable():
+    for message in ("ECONNRESET", "socket hang up", "provider overloaded", "RESOURCE_EXHAUSTED"):
+        assert is_retryable(Exception(message)), message
 
 
 async def test_read_error_mid_stream_is_retried():
