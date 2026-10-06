@@ -49,6 +49,7 @@ function sortForTask(models: CatalogModel[], task: string, sort: ModelSort): Cat
 export function filterConfiguredProviders(models: CatalogModel[], providers: ProviderInfo[] | undefined): CatalogModel[] {
   if (!providers?.length) return models;
   const configured = new Set(providers.filter((p) => p.configured).map((p) => p.id));
+  if (configured.size === 1 && configured.has("openrouter")) return models;
   return models.filter((m) => { const slash = m.id.indexOf("/"); return slash < 0 || configured.has(m.id.slice(0, slash)); });
 }
 

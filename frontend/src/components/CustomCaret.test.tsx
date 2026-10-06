@@ -43,6 +43,10 @@ describe("CustomCaret", () => {
     root = createRoot(el);
     input = document.createElement("input");
     input.style.fontSize = "20px";
+    input.getBoundingClientRect = () => ({
+      x: 0, y: 0, top: 0, right: 100, bottom: 30, left: 0, width: 100, height: 30,
+      toJSON: () => ({}),
+    });
     document.body.appendChild(input);
     await act(async () => { root.render(<CustomCaret />); });
   });
@@ -126,5 +130,32 @@ describe("CustomCaret", () => {
     getCaretMetrics.mockReturnValue({ left: 0, align: { kind: "bottom", y: 24 } }); // caret back at the start
     await nextFrame();
     expect(overlay()!.style.left).toBe("0px");
+  });
+
+  it("hides while a modal dialog is open", async () => {
+    getCaretMetrics.mockReturnValue({ left: 20, align: { kind: "bottom", y: 24 } });
+    await focus(input, "focusin");
+    expect(overlay()!.style.display).toBe("");
+
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    document.body.appendChild(dialog);
+    await nextFrame();
+    expect(overlay()!.style.display).toBe("none");
+    dialog.remove();
+  });
+
+  it("hides when the focused control leaves the viewport", async () => {
+    getCaretMetrics.mockReturnValue({ left: 20, align: { kind: "bottom", y: 24 } });
+    await focus(input, "focusin");
+    expect(overlay()!.style.display).toBe("");
+
+    input.getBoundingClientRect = () => ({
+      x: 0, y: -40, top: -40, right: 100, bottom: -10, left: 0, width: 100, height: 30,
+      toJSON: () => ({}),
+    });
+    await nextFrame();
+    expect(overlay()!.style.display).toBe("none");
   });
 });
