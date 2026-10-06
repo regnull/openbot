@@ -12,8 +12,6 @@ REPOSITORY_INSTRUCTIONS_CAP = 32_000
 _SYSTEM_PROMPT_FIELDS = frozenset({
     "bot_name", "bot_handle", "bot_description", "bot_instructions", "lead_context", "participants",
     "default_note", "lead_note", "lead_instructions", "older", "workspace_root", "tool_names", "roster", "mem",
-    "repository_instructions",
-
 })
 
 
@@ -42,11 +40,17 @@ def _load_system_prompt_template() -> str:
     return template
 
 
-def load_repository_instructions(workspace_root: str, *, enabled: bool) -> str:
-    """Discover repository instructions using OpenCode's AGENTS/CLAUDE precedence."""
+def load_repository_instructions(workspace_root: str, *, enabled: bool, start_directory: str | None = None) -> str:
+    """Discover repository instructions from a working directory up to its workspace root.
+
+    Adapted from OpenCode's session instruction discovery (MIT licensed).
+    """
     if not enabled:
         return ""
-    current = Path(workspace_root).expanduser().resolve()
+    boundary = Path(workspace_root).expanduser().resolve()
+    current = Path(start_directory or workspace_root).expanduser().resolve()
+    if boundary != current and boundary not in current.parents:
+        current = boundary
     while True:
         for name in ("AGENTS.md", "CLAUDE.md"):
             path = current / name
@@ -55,7 +59,7 @@ def load_repository_instructions(workspace_root: str, *, enabled: bool) -> str:
                     return path.read_text(encoding="utf-8")[:REPOSITORY_INSTRUCTIONS_CAP].strip()
             except OSError:
                 pass
-        if current.parent == current:
+        if current == boundary:
             return ""
         current = current.parent
 
@@ -132,13 +136,17 @@ def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list
                     if default_bot_handle else "")
     lead_instructions = ("- you are the lead for this thread. When human talks to you, follow this process: 1. Understand the request. If it's a simple question, answer it. 2. If it's a task request, plan the task execution. 3. Your plan must include which bots will be called, and in which order. 4. Call the next bot with comprehensive instructions. 5. When a bot does a handoff to you, understand where you are in task execution, and either handoff to the next bot, or reply to human. 6. When the task is complete, reply to human.\n"
                          if default_bot_handle and bot.handle == default_bot_handle else "")
-    repository_instructions = load_repository_instructions(workspace_root, enabled=bot.bot.load_repository_instructions)
-    repository_instructions = (f"# Repository instructions\n{repository_instructions}" if repository_instructions else "")
-    return _SYSTEM_PROMPT_TEMPLATE.substitute(
+    rendered = _SYSTEM_PROMPT_TEMPLATE.substitute(
         bot_name=bot.name, bot_handle=bot.handle, bot_description=bot.description,
         bot_instructions=bot.bot.instructions, lead_context=lead_context,
         participants=', '.join(participants) or 'nobody else', default_note=default_note,
         lead_note=lead_note, lead_instructions=lead_instructions, older=older,
         workspace_root=workspace_root, tool_names=', '.join(tool_names) or 'none besides the built-ins',
-        roster=roster, mem=mem, repository_instructions=repository_instructions,
+        roster=roster, mem=mem,
     )
+    repository_instructions = load_repository_instructions(
+        workspace_root, enabled=bot.bot.load_repository_instructions, start_directory=workspace_root
+    )
+    if repository_instructions:
+        rendered += f"\n\n# Repository instructions\n{repository_instructions}"
+    return rendered

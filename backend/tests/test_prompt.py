@@ -191,7 +191,7 @@ def test_repository_instructions_are_loaded_from_nearest_parent_with_agents_prec
     nested.mkdir(parents=True)
     (repo / "CLAUDE.md").write_text("claude", encoding="utf-8")
     (repo / "AGENTS.md").write_text("agents", encoding="utf-8")
-    assert load_repository_instructions(str(nested), enabled=True) == "agents"
+    assert load_repository_instructions(str(repo), enabled=True, start_directory=str(nested)) == "agents"
 
 
 def test_repository_instructions_searches_upward_and_caps_content(tmp_path):
@@ -202,8 +202,22 @@ def test_repository_instructions_searches_upward_and_caps_content(tmp_path):
     nested.mkdir(parents=True)
     content = "x" * 40_000
     (repo / "CLAUDE.md").write_text(content, encoding="utf-8")
-    loaded = load_repository_instructions(str(nested), enabled=True)
+    loaded = load_repository_instructions(str(repo), enabled=True, start_directory=str(nested))
     assert len(loaded) == 32_000
+
+
+def test_repository_instructions_stop_at_workspace_root(tmp_path):
+    from openbot.runtime.prompt import load_repository_instructions
+
+    workspace = tmp_path / "workspace"
+    nested = workspace / "repo" / "src"
+    nested.mkdir(parents=True)
+    (tmp_path / "AGENTS.md").write_text("outside", encoding="utf-8")
+    (workspace / "repo" / "CLAUDE.md").write_text("inside", encoding="utf-8")
+
+    assert load_repository_instructions(str(workspace / "repo"), enabled=True, start_directory=str(nested)) == "inside"
+    (workspace / "repo" / "CLAUDE.md").unlink()
+    assert load_repository_instructions(str(workspace / "repo"), enabled=True, start_directory=str(nested)) == ""
 
 
 def test_repository_instructions_can_be_disabled(tmp_path):

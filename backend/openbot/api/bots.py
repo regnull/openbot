@@ -102,6 +102,7 @@ async def list_catalog() -> list[BotCatalogEntryOut]:
                 **entry,
                 "approval_tools": entry.get("approval_tools", []),
                 "model_settings": entry.get("model_settings", {}),
+                "load_repository_instructions": entry.get("load_repository_instructions", False),
             }
         )
         for entry in CATALOG

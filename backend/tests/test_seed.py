@@ -19,6 +19,14 @@ async def test_seed_once(services):
     assert all(services.registry.has(t) for b in DEMO_BOTS for t in b["tool_names"])
 
 
+async def test_seed_configures_engineer_repository_instructions(services):
+    services.settings.openrouter_api_key = "k"
+    await seed_demo_bots(services)
+    async with services.session_factory() as s:
+        engineer = (await s.execute(select(Actor).where(Actor.handle == "engineer"))).scalar_one()
+    assert engineer.bot.load_repository_instructions is True
+
+
 async def test_seed_skipped_without_provider(services):
     assert await seed_demo_bots(services) == 0
 

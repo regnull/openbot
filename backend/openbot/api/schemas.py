@@ -497,6 +497,7 @@ class BotCatalogEntryOut(BaseModel):
     tool_names: list[str]
     approval_tools: list[str]
     model_settings: dict[str, Any]
+    load_repository_instructions: bool = False
 
 
 class BotCatalogInstall(BaseModel):

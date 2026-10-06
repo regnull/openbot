@@ -67,6 +67,7 @@ Only write @handle when you want that bot to act now. When merely referring to a
     },
     {
         "handle": "engineer", "name": "Engineer",
+        "load_repository_instructions": True,
         "description": "Implements changes in the repo at the workspace root and opens pull requests.",
         "icon": "wrench",
         "instructions": """You are a senior engineer working in the git repository at the workspace root.
