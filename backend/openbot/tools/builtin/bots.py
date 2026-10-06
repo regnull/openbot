@@ -26,6 +26,7 @@ async def create_bot(
     tool_names: list[str] | None = None,
     approval_tools: list[str] | None = None,
     memory_enabled: bool = True,
+    load_repository_instructions: bool = False,
     enabled: bool = True,
 ) -> str:
     """Create a bot definition that can immediately receive messages and participate in threads."""
@@ -34,7 +35,7 @@ async def create_bot(
         "instructions": instructions, "provider": provider, "model": model,
         "model_settings": model_settings or {}, "tool_names": tool_names or [],
         "approval_tools": approval_tools or [], "memory_enabled": memory_enabled,
-        "enabled": enabled,
+        "load_repository_instructions": load_repository_instructions, "enabled": enabled,
     }
     if icon is not None:
         values["icon"] = icon

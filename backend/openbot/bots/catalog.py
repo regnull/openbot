@@ -21,6 +21,7 @@ class BotCatalogEntry(BaseModel):
     tool_names: tuple[str, ...] = ()
     approval_tools: tuple[str, ...] = ()
     model_settings: dict = {}
+    load_repository_instructions: bool = False
 
 
 CATALOG: tuple[dict, ...] = (
@@ -48,6 +49,7 @@ CATALOG: tuple[dict, ...] = (
         "icon": "wrench",
         "instruction_file": "engineer.md",
         "tool_names": ("run_shell", "read_file", "write_file", "list_files", "search_code"),
+        "load_repository_instructions": True,
     },
     {
         "id": "reviewer",

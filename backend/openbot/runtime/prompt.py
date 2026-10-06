@@ -8,9 +8,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from openbot.db.models import Actor, Message
 
 SYSTEM_PROMPT_FILE = Path(__file__).with_name("system_prompt.md")
+REPOSITORY_INSTRUCTIONS_CAP = 32_000
 _SYSTEM_PROMPT_FIELDS = frozenset({
     "bot_name", "bot_handle", "bot_description", "bot_instructions", "lead_context", "participants",
     "default_note", "lead_note", "lead_instructions", "older", "workspace_root", "tool_names", "roster", "mem",
+    "repository_instructions",
 })
 
 
@@ -37,6 +39,24 @@ def _load_system_prompt_template() -> str:
             details.append(f"unexpected placeholders: {', '.join(unexpected)}")
         raise RuntimeError(f"Invalid shared system prompt {SYSTEM_PROMPT_FILE}: {'; '.join(details)}")
     return template
+
+
+def load_repository_instructions(workspace_root: str, *, enabled: bool) -> str:
+    """Discover repository instructions using OpenCode's AGENTS/CLAUDE precedence."""
+    if not enabled:
+        return ""
+    current = Path(workspace_root).expanduser().resolve()
+    while True:
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            path = current / name
+            try:
+                if path.is_file():
+                    return path.read_text(encoding="utf-8")[:REPOSITORY_INSTRUCTIONS_CAP].strip()
+            except OSError:
+                pass
+        if current.parent == current:
+            return ""
+        current = current.parent
 
 
 # Read once at import, so the template always matches the code that fills it. Bots edit OpenBot's own
@@ -111,11 +131,14 @@ def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list
                     if default_bot_handle else "")
     lead_instructions = ("- you are the lead for this thread. When human talks to you, follow this process: 1. Understand the request. If it's a simple question, answer it. 2. If it's a task request, plan the task execution. 3. Your plan must include which bots will be called, and in which order. 4. Call the next bot with comprehensive instructions. 5. When a bot does a handoff to you, understand where you are in task execution, and either handoff to the next bot, or reply to human. 6. When the task is complete, reply to human.\n"
                          if default_bot_handle and bot.handle == default_bot_handle else "")
+    repository_instructions = load_repository_instructions(workspace_root, enabled=bot.bot.load_repository_instructions)
     return _SYSTEM_PROMPT_TEMPLATE.substitute(
         bot_name=bot.name, bot_handle=bot.handle, bot_description=bot.description,
         bot_instructions=bot.bot.instructions, lead_context=lead_context,
         participants=', '.join(participants) or 'nobody else', default_note=default_note,
         lead_note=lead_note, lead_instructions=lead_instructions, older=older,
         workspace_root=workspace_root, tool_names=', '.join(tool_names) or 'none besides the built-ins',
-        roster=roster, mem=mem,
+        roster=roster, mem=mem, repository_instructions=(
+            f"# Repository instructions\n{repository_instructions}" if repository_instructions else ""
+        ),
     )

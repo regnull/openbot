@@ -161,7 +161,8 @@ async def seed_demo_bots(services) -> int:
                               bot=BotProfile(provider="auto", model="", instructions=spec["instructions"],
                                              icon=spec["icon"],
                                              model_settings=dict(spec.get("model_settings", {})),
-                                             tool_names=spec["tool_names"], approval_tools=spec["approval_tools"])))
+                                             tool_names=spec["tool_names"], approval_tools=spec["approval_tools"],
+                                             load_repository_instructions=spec.get("load_repository_instructions", False))))
         try:
             await session.commit()
         except IntegrityError:
@@ -182,7 +183,7 @@ async def seed_demo_bots(services) -> int:
     return len(DEMO_BOTS)
 
 
-SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon")
+SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon", "load_repository_instructions")
 
 
 async def sync_demo_bots(services) -> int:
@@ -201,7 +202,7 @@ async def sync_demo_bots(services) -> int:
                 continue
             actor.name, actor.description = spec["name"], spec["description"]
             for field in SYNCED_FIELDS:
-                setattr(actor.bot, field, spec.get(field, {} if field == "model_settings" else []))
+                setattr(actor.bot, field, spec.get(field, {} if field == "model_settings" else False if field == "load_repository_instructions" else []))
             n += 1
         await session.commit()
     log.info("synced %d demo bots from the seed definitions", n)
