@@ -13,6 +13,7 @@ of a run grows with the square of its length. Anthropic models cache any prefix 
   latest human message. `OpenRouterPromptCacheMiddleware` adds those breakpoints. The provider layer
   prefers the direct Anthropic route when an Anthropic key is configured for exactly this reason.
 """
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -70,7 +71,11 @@ class AnthropicPromptCacheMiddleware(AnthropicPromptCachingMiddleware):
         if not isinstance(message, SystemMessage) or not isinstance(message.content, list):
             return request
         blocks = _tag_system_blocks(message.content, self._cache_control)
-        return request.override(system_message=message.model_copy(update={"content": blocks})) if blocks else request
+        return (
+            request.override(system_message=message.model_copy(update={"content": blocks}))
+            if blocks
+            else request
+        )
 
 
 # Adapted from OpenCode's MIT-licensed prompt-cache breakpoint strategy.
@@ -85,7 +90,9 @@ class OpenRouterPromptCacheMiddleware(AgentMiddleware):
         if isinstance(request.system_message, SystemMessage):
             blocks = _tag_system_blocks(request.system_message.content, CACHE_CONTROL)
             if blocks is not None:
-                overrides["system_message"] = request.system_message.model_copy(update={"content": blocks})
+                overrides["system_message"] = request.system_message.model_copy(
+                    update={"content": blocks}
+                )
         messages = list(request.messages)
         for i in range(len(messages) - 1, -1, -1):
             m = messages[i]
@@ -100,7 +107,9 @@ class OpenRouterPromptCacheMiddleware(AgentMiddleware):
     def wrap_model_call(self, request: ModelRequest, handler: Callable[[ModelRequest], Any]) -> Any:
         return handler(self._apply(request))
 
-    async def awrap_model_call(self, request: ModelRequest, handler: Callable[[ModelRequest], Awaitable[Any]]) -> Any:
+    async def awrap_model_call(
+        self, request: ModelRequest, handler: Callable[[ModelRequest], Awaitable[Any]]
+    ) -> Any:
         return await handler(self._apply(request))
 
 

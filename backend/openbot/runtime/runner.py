@@ -47,15 +47,27 @@ from openbot.tools.context import RunContext
 log = logging.getLogger(__name__)
 TOOL_RESULT_CAP = 4000
 LOG_PREVIEW_CAP = 500
-CLEARED_TOOL_RESULT = "[earlier tool result cleared to save context; re-run the tool if you still need it]"
-USAGE_KEYS = ("prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "total_tokens", "model_calls")
+CLEARED_TOOL_RESULT = (
+    "[earlier tool result cleared to save context; re-run the tool if you still need it]"
+)
+USAGE_KEYS = (
+    "prompt_tokens",
+    "completion_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "reasoning_tokens",
+    "total_tokens",
+    "model_calls",
+)
 
 
 def empty_usage() -> dict[str, int | float]:
     return {**dict.fromkeys(USAGE_KEYS, 0), "cost_usd": 0.0}
 
 
-def add_usage(total: dict[str, int | float], message: AIMessage, price: dict[str, Any] | None = None) -> dict[str, int | float] | None:
+def add_usage(
+    total: dict[str, int | float], message: AIMessage, price: dict[str, Any] | None = None
+) -> dict[str, int | float] | None:
     """Fold one model reply's usage_metadata into `total`, including estimated USD cost.
 
     Pricing tiers follow OpenCode's session cost calculation: the tier selected by the prompt size
@@ -77,16 +89,24 @@ def add_usage(total: dict[str, int | float], message: AIMessage, price: dict[str
     }
     if price:
         rates = price
-        tiers = [t for t in price.get("tiers", []) if isinstance(t, dict) and isinstance(t.get("tier"), dict)]
+        tiers = [
+            t
+            for t in price.get("tiers", [])
+            if isinstance(t, dict) and isinstance(t.get("tier"), dict)
+        ]
         if tiers:
             applicable = [t for t in tiers if int(t["tier"].get("size", 0)) <= inc["prompt_tokens"]]
             if applicable:
                 rates = {**price, **applicable[-1]}
-        uncached_input = max(0, inc["prompt_tokens"] - inc["cache_read_tokens"] - inc["cache_write_tokens"])
-        inc["cost_usd"] = (uncached_input * float(rates.get("input") or 0)
-                            + inc["completion_tokens"] * float(rates.get("output") or 0)
-                            + inc["cache_read_tokens"] * float(rates.get("cache_read") or 0)
-                            + inc["cache_write_tokens"] * float(rates.get("cache_write") or 0)) / 1_000_000
+        uncached_input = max(
+            0, inc["prompt_tokens"] - inc["cache_read_tokens"] - inc["cache_write_tokens"]
+        )
+        inc["cost_usd"] = (
+            uncached_input * float(rates.get("input") or 0)
+            + inc["completion_tokens"] * float(rates.get("output") or 0)
+            + inc["cache_read_tokens"] * float(rates.get("cache_read") or 0)
+            + inc["cache_write_tokens"] * float(rates.get("cache_write") or 0)
+        ) / 1_000_000
     else:
         inc["cost_usd"] = 0.0
     for k, v in inc.items():
@@ -106,7 +126,13 @@ def normalize_interrupt(value: Any) -> dict:
         if value.get("kind") == "question":
             return {"kind": "question", "question": str(value.get("question", ""))}
         if "action_requests" in value:
-            return {"kind": "approval", "actions": [{"name": a.get("name"), "args": a.get("args", {})} for a in value["action_requests"]]}
+            return {
+                "kind": "approval",
+                "actions": [
+                    {"name": a.get("name"), "args": a.get("args", {})}
+                    for a in value["action_requests"]
+                ],
+            }
     return {"kind": "question", "question": str(value)}
 
 
@@ -121,8 +147,9 @@ def _text(m) -> str:
 @dataclass(slots=True)
 class RunProgress:
     """What a run has produced so far, kept outside `_stream` so a cancelled run can still post it."""
-    reply: str = ""         # text of the last finished model turn
-    streaming: str = ""     # text of the turn still streaming
+
+    reply: str = ""  # text of the last finished model turn
+    streaming: str = ""  # text of the turn still streaming
     tool_calls: int = 0
 
 
@@ -150,25 +177,41 @@ class ClearOlderTurnsEdit(ClearToolUsesEdit):
                 turns += 1
                 if turns >= self.keep_turns:
                     break
-        candidates = [(i, m) for i, m in enumerate(messages) if isinstance(m, ToolMessage) and m.tool_call_id not in protected]
+        candidates = [
+            (i, m)
+            for i, m in enumerate(messages)
+            if isinstance(m, ToolMessage) and m.tool_call_id not in protected
+        ]
         if self.keep:
-            candidates = candidates[:-self.keep] if self.keep < len(candidates) else []
+            candidates = candidates[: -self.keep] if self.keep < len(candidates) else []
         excluded = set(self.exclude_tools)
         for idx, tool_message in candidates:
             if tool_message.response_metadata.get("context_editing", {}).get("cleared"):
                 continue
-            ai_message = next((m for m in reversed(messages[:idx]) if isinstance(m, AIMessage)), None)
+            ai_message = next(
+                (m for m in reversed(messages[:idx]) if isinstance(m, AIMessage)), None
+            )
             if ai_message is None:
                 continue
-            tool_call = next((c for c in ai_message.tool_calls if c.get("id") == tool_message.tool_call_id), None)
+            tool_call = next(
+                (c for c in ai_message.tool_calls if c.get("id") == tool_message.tool_call_id), None
+            )
             if tool_call is None or (tool_message.name or tool_call["name"]) in excluded:
                 continue
-            messages[idx] = tool_message.model_copy(update={
-                "artifact": None, "content": self.placeholder,
-                "response_metadata": {**tool_message.response_metadata,
-                                      "context_editing": {"cleared": True, "strategy": "clear_tool_uses"}}})
+            messages[idx] = tool_message.model_copy(
+                update={
+                    "artifact": None,
+                    "content": self.placeholder,
+                    "response_metadata": {
+                        **tool_message.response_metadata,
+                        "context_editing": {"cleared": True, "strategy": "clear_tool_uses"},
+                    },
+                }
+            )
             if self.clear_tool_inputs:
-                messages[messages.index(ai_message)] = self._build_cleared_tool_input_message(ai_message, tool_message.tool_call_id)
+                messages[messages.index(ai_message)] = self._build_cleared_tool_input_message(
+                    ai_message, tool_message.tool_call_id
+                )
             if self.clear_at_least > 0 and tokens - count_tokens(messages) >= self.clear_at_least:
                 break
 
@@ -198,8 +241,16 @@ class Runner:
         result = getattr(catalog, "price_for", None)
         return result(provider, model) if result is not None else None
 
-    async def _set_status(self, run_id: str, status: str, *, interrupt: dict | None = None, error: str | None = None,
-                          langsmith_run_id: str | None = None, usage: dict[str, int | float] | None = None) -> Run:
+    async def _set_status(
+        self,
+        run_id: str,
+        status: str,
+        *,
+        interrupt: dict | None = None,
+        error: str | None = None,
+        langsmith_run_id: str | None = None,
+        usage: dict[str, int | float] | None = None,
+    ) -> Run:
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
             run.status, run.interrupt = status, interrupt
@@ -214,16 +265,31 @@ class Runner:
                 run.started_at = utcnow()
             if status in ("completed", "failed", "cancelled"):
                 run.finished_at = utcnow()
-            await activity.record(self.s, "run.status", session=session, level="error" if status == "failed" else "info",
-                                  thread_id=run.thread_id, actor_id=run.actor_id, run_id=run.id,
-                                  summary=f"run {status}" + (f": {error}" if error else "")
-                                          + (f" ({interrupt.get('kind')})" if interrupt else ""),
-                                  status=status, error=error, interrupt_kind=interrupt.get("kind") if interrupt else None,
-                                  usage=usage, langsmith_run_id=langsmith_run_id)
+            await activity.record(
+                self.s,
+                "run.status",
+                session=session,
+                level="error" if status == "failed" else "info",
+                thread_id=run.thread_id,
+                actor_id=run.actor_id,
+                run_id=run.id,
+                summary=f"run {status}"
+                + (f": {error}" if error else "")
+                + (f" ({interrupt.get('kind')})" if interrupt else ""),
+                status=status,
+                error=error,
+                interrupt_kind=interrupt.get("kind") if interrupt else None,
+                usage=usage,
+                langsmith_run_id=langsmith_run_id,
+            )
             await session.commit()
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             if status in ("running", "waiting_human", "completed", "failed", "cancelled"):
-                await self.s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": status in ("running", "waiting_human")})
+                await self.s.bus.publish(
+                    "bots.updated",
+                    None,
+                    {"id": run.actor_id, "active": status in ("running", "waiting_human")},
+                )
             return run
 
     async def _record(self, run: Run, seq: int, type_: str, payload: dict) -> int:
@@ -236,14 +302,20 @@ class Runner:
 
     async def _next_seq(self, run_id: str) -> int:
         async with self.s.session_factory() as session:
-            n = (await session.execute(select(func.max(RunEvent.seq)).where(RunEvent.run_id == run_id))).scalar()
+            n = (
+                await session.execute(
+                    select(func.max(RunEvent.seq)).where(RunEvent.run_id == run_id)
+                )
+            ).scalar()
         return 0 if n is None else n + 1
 
     async def _system_message(self, thread_id: str, content: str) -> None:
         async with self.s.session_factory() as session:
             await post_message(self.s, session, thread_id=thread_id, sender=None, content=content)
 
-    async def _post_interrupted(self, bot: Actor, thread: Thread, run: Run, hop: int, progress: RunProgress) -> None:
+    async def _post_interrupted(
+        self, bot: Actor, thread: Thread, run: Run, hop: int, progress: RunProgress
+    ) -> None:
         """Keep what a cancelled run had written: the reply still streaming, else the last finished turn.
         Not delivered, so a half-written @mention wakes nobody. Best-effort: the cancel must still land."""
         text = progress.streaming if progress.streaming.strip() else progress.reply
@@ -252,11 +324,26 @@ class Runner:
         try:
             async with self.s.session_factory() as session:
                 # A cancel that lands while the finished reply is being posted must not post it twice.
-                if (await session.execute(select(Message.id).where(Message.run_id == run.id).limit(1))).first():
+                if (
+                    await session.execute(
+                        select(Message.id).where(Message.run_id == run.id).limit(1)
+                    )
+                ).first():
                     return
-                res = await post_message(self.s, session, thread_id=thread.id, sender=bot, content=text, hop=hop,
-                                         run_id=run.id, meta={"interrupted": True}, deliver=False)
-            await self._record(run, await self._next_seq(run.id), "message", {"message_id": res.message.id})
+                res = await post_message(
+                    self.s,
+                    session,
+                    thread_id=thread.id,
+                    sender=bot,
+                    content=text,
+                    hop=hop,
+                    run_id=run.id,
+                    meta={"interrupted": True},
+                    deliver=False,
+                )
+            await self._record(
+                run, await self._next_seq(run.id), "message", {"message_id": res.message.id}
+            )
         except Exception:
             log.exception("could not post the interrupted reply for run %s", run.id)
 
@@ -273,16 +360,58 @@ class Runner:
         st = self.s.settings
         async with self.s.session_factory() as session:
             all_actors = (await session.execute(select(Actor))).scalars().all()
-            rows = (await session.execute(select(Message).where(Message.thread_id == thread.id)
-                                          .order_by(Message.created_at.desc()).limit(st.history_max_messages * 2))).scalars().all()
-            total = (await session.execute(select(func.count()).select_from(Message).where(Message.thread_id == thread.id))).scalar() or 0
-            parts = (await session.execute(select(ThreadParticipant).where(ThreadParticipant.thread_id == thread.id))).scalars().all()
-            trigger_ids = [i.message_id for i in (await session.execute(select(InboxItem).where(InboxItem.run_id == run.id, InboxItem.kind == "message"))).scalars() if i.message_id]
-            triggers = (await session.execute(select(Message).where(Message.id.in_(trigger_ids)))).scalars().all() if trigger_ids else []
+            rows = (
+                (
+                    await session.execute(
+                        select(Message)
+                        .where(Message.thread_id == thread.id)
+                        .order_by(Message.created_at.desc())
+                        .limit(st.history_max_messages * 2)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            total = (
+                await session.execute(
+                    select(func.count()).select_from(Message).where(Message.thread_id == thread.id)
+                )
+            ).scalar() or 0
+            parts = (
+                (
+                    await session.execute(
+                        select(ThreadParticipant).where(ThreadParticipant.thread_id == thread.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            trigger_ids = [
+                i.message_id
+                for i in (
+                    await session.execute(
+                        select(InboxItem).where(
+                            InboxItem.run_id == run.id, InboxItem.kind == "message"
+                        )
+                    )
+                ).scalars()
+                if i.message_id
+            ]
+            triggers = (
+                (await session.execute(select(Message).where(Message.id.in_(trigger_ids))))
+                .scalars()
+                .all()
+                if trigger_ids
+                else []
+            )
         by_id = {a.id: a for a in all_actors}
         by_handle = {a.handle: a for a in all_actors}
         participants = [by_id[p.actor_id].name for p in parts if p.actor_id in by_id]
-        default_bot_handle = by_id[thread.default_bot_actor_id].handle if thread.default_bot_actor_id in by_id else None
+        default_bot_handle = (
+            by_id[thread.default_bot_actor_id].handle
+            if thread.default_bot_actor_id in by_id
+            else None
+        )
         if default_bot_handle is None and DEFAULT_BOT_HANDLE in by_handle:
             default_bot_handle = DEFAULT_BOT_HANDLE
         # Who sees the whole thread: the default bot (it coordinates, so it needs the conversation) and the
@@ -290,25 +419,58 @@ class Runner:
         # messages addressed to it plus its own earlier replies: the hand-off has to be self-contained, and
         # read_history / recall_messages fetch the rest when it is not. Cuts each delegate call from
         # thread-sized to hand-off-sized, and keeps one bot's chatter out of another's context.
-        bots_in_thread = {p.actor_id for p in parts if p.actor_id in by_id and by_id[p.actor_id].kind == "bot"}
-        is_default = default_bot_handle is not None and by_handle.get(default_bot_handle) is not None and by_handle[default_bot_handle].id == bot.id
+        bots_in_thread = {
+            p.actor_id for p in parts if p.actor_id in by_id and by_id[p.actor_id].kind == "bot"
+        }
+        is_default = (
+            default_bot_handle is not None
+            and by_handle.get(default_bot_handle) is not None
+            and by_handle[default_bot_handle].id == bot.id
+        )
         scoped = not is_default and len(bots_in_thread) > 1
         trigger_ids = {m.id for m in triggers}
         if scoped:
-            rows = [m for m in rows if m.sender_actor_id == bot.id or bot.id in (m.mentions or []) or m.id in trigger_ids]
-        history, older = build_history(list(rows), bot.id, token_budget=st.history_token_budget, max_messages=st.history_max_messages,
-                                       trigger_ids=trigger_ids)
+            rows = [
+                m
+                for m in rows
+                if m.sender_actor_id == bot.id
+                or bot.id in (m.mentions or [])
+                or m.id in trigger_ids
+            ]
+        history, older = build_history(
+            list(rows),
+            bot.id,
+            token_budget=st.history_token_budget,
+            max_messages=st.history_max_messages,
+            trigger_ids=trigger_ids,
+        )
         older += max(0, total - len(rows))
         query = "\n".join(m.content for m in triggers)
-        memories = await memory.relevant_memories(self.s.store, bot.id, query) if self.s.store is not None else []
+        memories = (
+            await memory.relevant_memories(self.s.store, bot.id, query)
+            if self.s.store is not None
+            else []
+        )
         workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
-        stable_prompt, dynamic_prompt = build_system_prompt_parts(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
-                                     workspace_root=str(workspace_root), older_count=older,
-                                     # Only tools that will actually be bound: an MCP server that is down
-                                     # must not be advertised, or the model calls a tool it does not have.
-                                     tool_names=[n for n in bot.bot.tool_names if self.s.registry.has(n)],
-                                     default_bot_handle=default_bot_handle, scoped=scoped)
-        prompt = SystemMessage(content=[{"type": "text", "text": stable_prompt}, {"type": "text", "text": dynamic_prompt}])
+        stable_prompt, dynamic_prompt = build_system_prompt_parts(
+            bot=bot,
+            all_bots=list(all_actors),
+            participants=participants,
+            memories=memories,
+            workspace_root=str(workspace_root),
+            older_count=older,
+            # Only tools that will actually be bound: an MCP server that is down
+            # must not be advertised, or the model calls a tool it does not have.
+            tool_names=[n for n in bot.bot.tool_names if self.s.registry.has(n)],
+            default_bot_handle=default_bot_handle,
+            scoped=scoped,
+        )
+        prompt = SystemMessage(
+            content=[
+                {"type": "text", "text": stable_prompt},
+                {"type": "text", "text": dynamic_prompt},
+            ]
+        )
         hop = max([m.hop for m in triggers], default=0) + 1
         return prompt, {"messages": history}, hop
 
@@ -344,37 +506,75 @@ class Runner:
             # Retries transient upstream provider failures (rate limit, 5xx, "model stopped before
             # completing") so one bad provider turn does not abort the whole run. Before the cache
             # middleware: only the failing attempt pays, and the retried request is cache-warm.
-            ModelRetryMiddleware(st.model_retry_max_attempts, st.model_retry_base_delay,
-                                 st.model_retry_backoff_cap),
+            ModelRetryMiddleware(
+                st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap
+            ),
             *caching_middleware(model, st),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
             # Marks "error: ..." tool results as errors and ends a run stuck repeating one failing call.
             ToolFailureMiddleware(st.max_repeated_tool_failures),
-            RunMessagesSummarization(model, trigger=("tokens", st.summary_trigger_tokens),
-                                      keep=("messages", st.summary_keep_messages)),
-            ContextEditingMiddleware(edits=[ClearOlderTurnsEdit(trigger=st.context_trigger_tokens, keep=0, keep_turns=2,
-                                                                clear_at_least=st.context_clear_at_least,
-                                                                clear_tool_inputs=True,
-                                                                exclude_tools=("ask_human", "manage_memory"),
-                                                                placeholder=CLEARED_TOOL_RESULT)]),
+            RunMessagesSummarization(
+                model,
+                trigger=("tokens", st.summary_trigger_tokens),
+                keep=("messages", st.summary_keep_messages),
+            ),
+            ContextEditingMiddleware(
+                edits=[
+                    ClearOlderTurnsEdit(
+                        trigger=st.context_trigger_tokens,
+                        keep=0,
+                        keep_turns=2,
+                        clear_at_least=st.context_clear_at_least,
+                        clear_tool_inputs=True,
+                        exclude_tools=("ask_human", "manage_memory"),
+                        placeholder=CLEARED_TOOL_RESULT,
+                    )
+                ]
+            ),
         ]
         if p.approval_tools:
-            middleware.append(HumanInTheLoopMiddleware(
-                interrupt_on={t: {"allowed_decisions": ["approve", "reject"]} for t in p.approval_tools},
-                description_prefix="Tool execution requires approval"))
+            middleware.append(
+                HumanInTheLoopMiddleware(
+                    interrupt_on={
+                        t: {"allowed_decisions": ["approve", "reject"]} for t in p.approval_tools
+                    },
+                    description_prefix="Tool execution requires approval",
+                )
+            )
         return middleware
 
     def _build_agent(self, bot: Actor, system_prompt: str):
         p = bot.bot
-        tools = [*self.s.registry.resolve(list(p.tool_names)), *CORE_TOOLS, *SCHEDULING_TOOLS, *memory.memory_tools(bot.id, self.s.store),
-                 *builtin_tools(p, self.s.settings)]
+        tools = [
+            *self.s.registry.resolve(list(p.tool_names)),
+            *CORE_TOOLS,
+            *SCHEDULING_TOOLS,
+            *memory.memory_tools(bot.id, self.s.store),
+            *builtin_tools(p, self.s.settings),
+        ]
         model = self.s.model_factory(bot)
-        return create_agent(model, tools=tools, system_prompt=system_prompt, middleware=self.build_middleware(bot, model),
-                            checkpointer=self.s.checkpointer, store=self.s.store, context_schema=RunContext)
+        return create_agent(
+            model,
+            tools=tools,
+            system_prompt=system_prompt,
+            middleware=self.build_middleware(bot, model),
+            checkpointer=self.s.checkpointer,
+            store=self.s.store,
+            context_schema=RunContext,
+        )
 
-    async def _stream(self, agent, inputs, config, ctx: RunContext, run: Run, seq: int,
-                      progress: RunProgress | None = None, price: dict[str, float | None] | None = None) -> tuple[str, dict | None, int, dict[str, int | float]]:
+    async def _stream(
+        self,
+        agent,
+        inputs,
+        config,
+        ctx: RunContext,
+        run: Run,
+        seq: int,
+        progress: RunProgress | None = None,
+        price: dict[str, float | None] | None = None,
+    ) -> tuple[str, dict | None, int, dict[str, int | float]]:
         progress = progress if progress is not None else RunProgress()
         final_text, interrupt = "", None
         usage = empty_usage()
@@ -382,30 +582,76 @@ class Runner:
         # re-emit earlier AI messages in their update. Those are not new model calls: counting them again
         # tripled the usage totals, logged every old tool_call again and showed each reply twice in the UI.
         seen_replies: set[str] = set()
-        async for mode, data in agent.astream(inputs, config=config, context=ctx, stream_mode=["messages", "updates"]):
+        async for mode, data in agent.astream(
+            inputs, config=config, context=ctx, stream_mode=["messages", "updates"]
+        ):
             if mode == "messages":
                 token, meta = data
-                if isinstance(token, AIMessageChunk) and _text(token) and meta.get("langgraph_node") == "model":
+                if (
+                    isinstance(token, AIMessageChunk)
+                    and _text(token)
+                    and meta.get("langgraph_node") == "model"
+                ):
                     progress.streaming += _text(token)
-                    await self.s.bus.publish("run.event", run.thread_id, {"run_id": run.id, "type": "text_delta", "payload": {"delta": _text(token)}})
+                    await self.s.bus.publish(
+                        "run.event",
+                        run.thread_id,
+                        {
+                            "run_id": run.id,
+                            "type": "text_delta",
+                            "payload": {"delta": _text(token)},
+                        },
+                    )
                 continue
             for source, update in data.items():
                 if source == "__interrupt__":
                     interrupt = normalize_interrupt(update[0].value)
                     seq = await self._record(run, seq, "interrupt", interrupt)
-                    await activity.record(self.s, "run.interrupt", thread_id=run.thread_id, actor_id=run.actor_id, run_id=run.id,
-                                          summary=f"agent paused for a {interrupt.get('kind')}: {activity.preview(interrupt, 200)}",
-                                          kind=interrupt.get("kind"), interrupt=activity.preview(interrupt))
+                    await activity.record(
+                        self.s,
+                        "run.interrupt",
+                        thread_id=run.thread_id,
+                        actor_id=run.actor_id,
+                        run_id=run.id,
+                        summary=f"agent paused for a {interrupt.get('kind')}: {activity.preview(interrupt, 200)}",
+                        kind=interrupt.get("kind"),
+                        interrupt=activity.preview(interrupt),
+                    )
                 elif source == "tools" and isinstance(update, dict):
                     for m in update.get("messages", []):
                         if isinstance(m, ToolMessage):
-                            log.info("run %s tool_result %s status=%s len=%d: %s", run.id, m.name, m.status, len(_text(m)), _preview(_text(m)))
-                            seq = await self._record(run, seq, "tool_result", {"tool_call_id": m.tool_call_id, "name": m.name,
-                                                                              "status": m.status, "content": _text(m)[:TOOL_RESULT_CAP]})
-                            await activity.record(self.s, "run.tool_result", level="warning" if m.status == "error" else "debug",
-                                                  thread_id=run.thread_id, actor_id=run.actor_id, run_id=run.id,
-                                                  summary=f"{m.name} -> {m.status} ({len(_text(m))} chars)",
-                                                  name=m.name, status=m.status, chars=len(_text(m)), content=activity.preview(_text(m)))
+                            log.info(
+                                "run %s tool_result %s status=%s len=%d: %s",
+                                run.id,
+                                m.name,
+                                m.status,
+                                len(_text(m)),
+                                _preview(_text(m)),
+                            )
+                            seq = await self._record(
+                                run,
+                                seq,
+                                "tool_result",
+                                {
+                                    "tool_call_id": m.tool_call_id,
+                                    "name": m.name,
+                                    "status": m.status,
+                                    "content": _text(m)[:TOOL_RESULT_CAP],
+                                },
+                            )
+                            await activity.record(
+                                self.s,
+                                "run.tool_result",
+                                level="warning" if m.status == "error" else "debug",
+                                thread_id=run.thread_id,
+                                actor_id=run.actor_id,
+                                run_id=run.id,
+                                summary=f"{m.name} -> {m.status} ({len(_text(m))} chars)",
+                                name=m.name,
+                                status=m.status,
+                                chars=len(_text(m)),
+                                content=activity.preview(_text(m)),
+                            )
                 elif isinstance(update, dict):
                     # "model" is the LLM turn; middleware nodes (e.g. the model-call limit ending the run with a
                     # notice) also emit AI messages, and those must become the reply too.
@@ -421,23 +667,51 @@ class Runner:
                         progress.tool_calls += len(m.tool_calls)
                         inc = add_usage(usage, m, price)
                         if inc is not None:
-                            log.info("run %s model call %d: prompt=%d (cache_read=%d) completion=%d", run.id, usage["model_calls"],
-                                     inc["prompt_tokens"], inc["cache_read_tokens"], inc["completion_tokens"])
+                            log.info(
+                                "run %s model call %d: prompt=%d (cache_read=%d) completion=%d",
+                                run.id,
+                                usage["model_calls"],
+                                inc["prompt_tokens"],
+                                inc["cache_read_tokens"],
+                                inc["completion_tokens"],
+                            )
                             # Persist each provider-reported turn before processing its tools. This keeps
                             # live run/thread/bot totals current and makes a tool round visible immediately.
                             await self._set_status(run.id, "running", usage=inc)
-                        await activity.record(self.s, "run.model_call", level="debug", thread_id=run.thread_id, actor_id=run.actor_id,
-                                              run_id=run.id,
-                                              summary=f"model replied: {len(m.tool_calls)} tool call(s), {len(_text(m))} chars of text",
-                                              tool_calls=[tc["name"] for tc in m.tool_calls], text_chars=len(_text(m)),
-                                              usage=inc if self.s.settings.include_llm_call_details else None,
-                                              calls_so_far=usage["model_calls"])
+                        await activity.record(
+                            self.s,
+                            "run.model_call",
+                            level="debug",
+                            thread_id=run.thread_id,
+                            actor_id=run.actor_id,
+                            run_id=run.id,
+                            summary=f"model replied: {len(m.tool_calls)} tool call(s), {len(_text(m))} chars of text",
+                            tool_calls=[tc["name"] for tc in m.tool_calls],
+                            text_chars=len(_text(m)),
+                            usage=inc if self.s.settings.include_llm_call_details else None,
+                            calls_so_far=usage["model_calls"],
+                        )
                         for tc in m.tool_calls:
-                            log.info("run %s tool_call %s(%s)", run.id, tc["name"], _preview(tc["args"]))
-                            seq = await self._record(run, seq, "tool_call", {"id": tc["id"], "name": tc["name"], "args": tc["args"]})
-                            await activity.record(self.s, "run.tool_call", level="debug", thread_id=run.thread_id, actor_id=run.actor_id,
-                                                  run_id=run.id, summary=f"{tc['name']}({activity.preview(tc['args'], 200)})",
-                                                  name=tc["name"], args=activity.preview(tc["args"]))
+                            log.info(
+                                "run %s tool_call %s(%s)", run.id, tc["name"], _preview(tc["args"])
+                            )
+                            seq = await self._record(
+                                run,
+                                seq,
+                                "tool_call",
+                                {"id": tc["id"], "name": tc["name"], "args": tc["args"]},
+                            )
+                            await activity.record(
+                                self.s,
+                                "run.tool_call",
+                                level="debug",
+                                thread_id=run.thread_id,
+                                actor_id=run.actor_id,
+                                run_id=run.id,
+                                summary=f"{tc['name']}({activity.preview(tc['args'], 200)})",
+                                name=tc["name"],
+                                args=activity.preview(tc["args"]),
+                            )
                         if _text(m):
                             final_text = _text(m)
                             seq = await self._record(run, seq, "text", {"content": final_text})
@@ -453,50 +727,115 @@ class Runner:
         await self._set_status(run.id, "running")
         seq = await self._next_seq(run.id)
         if resume is not None:
-            seq = await self._record(run, seq, "resumed", {"value": getattr(resume, "resume", None)})
+            seq = await self._record(
+                run, seq, "resumed", {"value": getattr(resume, "resume", None)}
+            )
         # Pin the id of the trace's root run instead of reading one back afterwards: under LangGraph's
         # streaming the runs collect_runs() hands back each look like roots in memory (their parent is
         # only established server-side from dotted_order), so the first one is a nested ChatOpenAI call
         # and linking it drops the reader into the middle of the trace.
         trace_id = uuid.uuid4()
-        config = {"configurable": {"thread_id": run.id}, "metadata": {"bot": bot.handle, "thread_id": thread.id, "run_id": run.id},
-                  "run_name": f"bot:{bot.handle}", "run_id": trace_id}
+        config = {
+            "configurable": {"thread_id": run.id},
+            "metadata": {"bot": bot.handle, "thread_id": thread.id, "run_id": run.id},
+            "run_name": f"bot:{bot.handle}",
+            "run_id": trace_id,
+        }
         started = time.monotonic()
         progress, hop = RunProgress(), 0
         try:
             system_prompt, inputs, hop = await self._prepare(bot, thread, run)
-            workspace_root = thread_workspace_root(self.s.settings.workspace_root, thread.working_directory)
+            workspace_root = thread_workspace_root(
+                self.s.settings.workspace_root, thread.working_directory
+            )
             eff_provider, eff_model = effective_bot_profile(bot.bot, self.s.settings)
-            log.info("run %s started: bot=@%s thread=%s hop=%d resume=%s working_directory=%s tool_root=%s model=%s/%s tools=%s",
-                     run.id, bot.handle, thread.id, hop, resume is not None, thread.working_directory or ".",
-                     workspace_root, eff_provider, eff_model,
-                     ",".join([*bot.bot.tool_names, *(t.get("name") or t["type"] for t in builtin_tools(bot.bot, self.s.settings))]) or "-")
+            log.info(
+                "run %s started: bot=@%s thread=%s hop=%d resume=%s working_directory=%s tool_root=%s model=%s/%s tools=%s",
+                run.id,
+                bot.handle,
+                thread.id,
+                hop,
+                resume is not None,
+                thread.working_directory or ".",
+                workspace_root,
+                eff_provider,
+                eff_model,
+                ",".join(
+                    [
+                        *bot.bot.tool_names,
+                        *(
+                            t.get("name") or t["type"]
+                            for t in builtin_tools(bot.bot, self.s.settings)
+                        ),
+                    ]
+                )
+                or "-",
+            )
             log.debug("run %s system prompt:\n%s", run.id, system_prompt)
-            await activity.record(self.s, "run.started", thread_id=thread.id, actor_id=bot.id, run_id=run.id,
-                                  summary=f"@{bot.handle} run started (hop {hop}, {eff_provider}/{eff_model})"
-                                          + (" resuming" if resume is not None else ""),
-                                  hop=hop, resume=resume is not None, provider=eff_provider, model=eff_model,
-                                  working_directory=thread.working_directory or ".", tool_root=str(workspace_root),
-                                  tools=list(bot.bot.tool_names), history_messages=len(inputs.get("messages", [])),
-                                  model_call_limit=self.model_call_limit(bot))
-            ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
-                             thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap,
-                             shell_output_cap=self.s.settings.shell_output_cap,
-                             shell_user=self.s.settings.shell_user)
+            await activity.record(
+                self.s,
+                "run.started",
+                thread_id=thread.id,
+                actor_id=bot.id,
+                run_id=run.id,
+                summary=f"@{bot.handle} run started (hop {hop}, {eff_provider}/{eff_model})"
+                + (" resuming" if resume is not None else ""),
+                hop=hop,
+                resume=resume is not None,
+                provider=eff_provider,
+                model=eff_model,
+                working_directory=thread.working_directory or ".",
+                tool_root=str(workspace_root),
+                tools=list(bot.bot.tool_names),
+                history_messages=len(inputs.get("messages", [])),
+                model_call_limit=self.model_call_limit(bot),
+            )
+            ctx = RunContext(
+                bot.id,
+                bot.handle,
+                bot.name,
+                thread.id,
+                run.id,
+                workspace_root,
+                self.s,
+                thread.working_directory,
+                hop,
+                tool_output_cap=self.s.settings.tool_output_cap,
+                shell_output_cap=self.s.settings.shell_output_cap,
+                shell_user=self.s.settings.shell_user,
+            )
             agent = self._build_agent(bot, system_prompt)
             # The model-call limit is the real cap; the graph's recursion limit only has to be high enough
             # that the limit middleware ends the run first, and is derived from the graph so adding a
             # middleware hook (each is a node every turn traverses) can never make it the binding limit.
             config["recursion_limit"] = self.recursion_limit(agent, bot)
             with collect_runs() as cb:
-                final_text, interrupt, seq, usage = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq,
-                                                                       progress, self._model_price(bot))
+                final_text, interrupt, seq, usage = await self._stream(
+                    agent,
+                    resume if resume is not None else inputs,
+                    config,
+                    ctx,
+                    run,
+                    seq,
+                    progress,
+                    self._model_price(bot),
+                )
             ls_id = str(trace_id) if cb.traced_runs else None
-            usage_line = (f"model_calls={usage['model_calls']} prompt_tokens={usage['prompt_tokens']} "
-                          f"cache_read_tokens={usage['cache_read_tokens']} completion_tokens={usage['completion_tokens']}")
+            usage_line = (
+                f"model_calls={usage['model_calls']} prompt_tokens={usage['prompt_tokens']} "
+                f"cache_read_tokens={usage['cache_read_tokens']} completion_tokens={usage['completion_tokens']}"
+            )
             if interrupt is not None:
-                log.info("run %s waiting_human after %.1fs (%s): %s", run.id, time.monotonic() - started, usage_line, _preview(interrupt))
-                run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id)
+                log.info(
+                    "run %s waiting_human after %.1fs (%s): %s",
+                    run.id,
+                    time.monotonic() - started,
+                    usage_line,
+                    _preview(interrupt),
+                )
+                run = await self._set_status(
+                    run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id
+                )
                 delivered = await deliver_question(self.s, run, interrupt)
                 if not delivered:
                     # deliver_question only addresses human/external participants. A thread with none
@@ -506,21 +845,39 @@ class Runner:
                     log.warning("run %s waiting_human but undeliverable: %s", run.id, err)
                     await self._set_status(run.id, "failed", error=err)
                     await self._record(run, await self._next_seq(run.id), "error", {"error": err})
-                    await self._system_message(thread.id, f"@{bot.handle} tried to ask a question, but {err}.")
+                    await self._system_message(
+                        thread.id, f"@{bot.handle} tried to ask a question, but {err}."
+                    )
                     await self._drop_checkpoint(run.id)
                 return
             if final_text.strip():
                 async with self.s.session_factory() as session:
-                    res = await post_message(self.s, session, thread_id=thread.id, sender=bot, content=final_text, hop=hop, run_id=run.id)
+                    res = await post_message(
+                        self.s,
+                        session,
+                        thread_id=thread.id,
+                        sender=bot,
+                        content=final_text,
+                        hop=hop,
+                        run_id=run.id,
+                    )
                 seq = await self._record(run, seq, "message", {"message_id": res.message.id})
             await self._set_status(run.id, "completed", langsmith_run_id=ls_id)
-            log.info("run %s completed in %.1fs: reply=%d chars %s langsmith_run_id=%s", run.id, time.monotonic() - started,
-                     len(final_text), usage_line, ls_id)
+            log.info(
+                "run %s completed in %.1fs: reply=%d chars %s langsmith_run_id=%s",
+                run.id,
+                time.monotonic() - started,
+                len(final_text),
+                usage_line,
+                ls_id,
+            )
             if bot.bot.memory_enabled and self.s.reflector is not None:
                 # The run is already complete and its reply posted; reflection must never undo that.
                 try:
                     state = await agent.aget_state(config)
-                    self.s.reflector.schedule(bot, list(state.values.get("messages", [])), thread_id=thread.id)
+                    self.s.reflector.schedule(
+                        bot, list(state.values.get("messages", [])), thread_id=thread.id
+                    )
                 except Exception:
                     log.exception("could not schedule memory reflection for run %s", run.id)
             await self._drop_checkpoint(run.id)
