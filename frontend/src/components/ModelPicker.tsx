@@ -43,6 +43,8 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   const [vision, setVision] = useState(false);
   const [sort, setSort] = useState<ModelSort>("newest");
   const [taskMode, setTaskMode] = useState(provider === "openrouter");
+  const [taskProvider, setTaskProvider] = useState(provider);
+  if (provider !== taskProvider) { setTaskProvider(provider); setTaskMode(provider === "openrouter"); }
   const listId = useId();
   const all = useMemo(() => withSuggested(filterConfiguredProviders(models.data?.models ?? [], providers.data?.providers), suggested), [models.data, providers.data, suggested]);
   const groups = useMemo(() => groupModels(filterModels(all, { text: query, reasoning, vision }), suggested, suggestedLabel, sort, taskMode),
