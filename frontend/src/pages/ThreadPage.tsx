@@ -33,16 +33,30 @@ export default function ThreadPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuThreadId, setMenuThreadId] = useState(id);
+  const menuVisible = menuOpen && menuThreadId === id;
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!menuOpen) return;
+    setMenuOpen(false);
+    setMenuThreadId(id);
+  }, [id]);
+  useLayoutEffect(() => {
+    if (!menuVisible) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") { setMenuOpen(false); menuButtonRef.current?.focus(); }
     };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [menuOpen]);
+    document.addEventListener("pointerdown", onPointerDown);
+    document.querySelector<HTMLElement>("#thread-actions-menu select, #thread-actions-menu button")?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [menuVisible, menuThreadId, id]);
   const scrollContainer = useRef<HTMLDivElement>(null);
   const shouldStickToBottom = useRef(true);
   const updateScrollStickiness = useCallback(() => {
@@ -188,24 +202,24 @@ export default function ThreadPage() {
     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
     ...(bots.data ?? []).filter((b) => b.enabled).map((b) => b.handle),
   ])];
-  const defaultSelect = (className: string) => (
-    <select aria-label="Default bot" className={`rounded-ui border border-line bg-surface text-xs text-fg outline-none focus:border-accent ${className}`} value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>
+  const defaultSelect = (className: string, autoFocus = false) => (
+    <select autoFocus={autoFocus} aria-label="Default bot" className={`rounded-ui border border-line bg-surface text-xs text-fg outline-none focus:border-accent ${className}`} value={t.default_bot_handle ?? ""} onChange={(e) => updateDefault.mutate(e.target.value)} disabled={updateDefault.isPending}>
       {handles.map((h) => <option key={h} value={h}>@{h}</option>)}
     </select>
   );
   return (
     <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-4xl flex-col md:h-[calc(100vh-3rem)]">
-      <header className="thread-header sticky top-0 z-10 border-b border-line bg-canvas/95 backdrop-blur">
+      <header className="thread-header sticky top-0 z-10 border-b border-line bg-canvas">
         <div className="thread-header-main flex min-w-0 items-start gap-2">
           <Link to="/threads" aria-label="Back to threads" title="Back to threads" className="thread-header-back inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-ui border border-transparent text-muted hover:border-line hover:bg-sunken hover:text-fg">
             <ChevronLeftIcon className="h-4 w-4" />
           </Link>
           <div className="min-w-0 flex-1 pt-0.5">
             <p className="thread-header-kicker">Active thread</p>
-            <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]" title={displayedTitle || "Untitled thread"}>{displayedTitle || "Untitled thread"}</h1>
+            <h1 className="thread-header-title text-[16px] font-semibold tracking-[-0.01em]" aria-label={displayedTitle || "Untitled thread"} title={displayedTitle || "Untitled thread"}>{displayedTitle || "Untitled thread"}</h1>
             <div className="thread-header-context flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] leading-4 text-muted">
-              <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ") || "No participants yet"}</span>
-              <span className="truncate"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
+              <span className="min-w-0 break-words">{t.participants.map((p) => `@${p.handle}`).join(" ") || "No participants yet"}</span>
+              <span className="min-w-0 break-words"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
             </div>
           </div>
           <div className="thread-header-controls flex shrink-0 items-center gap-1.5">
@@ -213,14 +227,14 @@ export default function ThreadPage() {
               {defaultSelect("h-8 px-1.5")}
             </label>
             <div className="relative" ref={menuRef}>
-              <IconButton ref={menuButtonRef} aria-label="Thread actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((open) => !open)}>
+              <IconButton ref={menuButtonRef} aria-label="Thread actions" aria-controls="thread-actions-menu" aria-expanded={menuVisible} aria-haspopup="menu" onClick={() => { setMenuThreadId(id); setMenuOpen((open) => !open); }}>
                 <MoreIcon className="h-4 w-4" />
               </IconButton>
-              {menuOpen && <div role="menu" className="absolute right-0 top-10 z-20 min-w-48 rounded-ui border border-line bg-surface p-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
-                <label className="flex items-center justify-between gap-3 px-3 py-2 text-[13px] sm:hidden">Default bot
-                  {defaultSelect("h-8 max-w-32 px-1.5")}
-                </label>
-                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm("Delete thread?")) del.mutate(); }} className="h-9 w-full rounded-ui px-3 text-left text-[13px] text-danger hover:bg-danger/10">Delete thread</button>
+              {menuVisible && <div id="thread-actions-menu" role="menu" className="absolute right-0 top-10 z-20 min-w-48 rounded-ui border border-line bg-surface p-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
+                <div role="group" className="flex items-center justify-between gap-3 px-3 py-2 text-[13px] sm:hidden">Default bot
+                  {defaultSelect("h-8 max-w-32 px-1.5", true)}
+                </div>
+                <button type="button" role="menuitem" disabled={del.isPending} onClick={() => { setMenuOpen(false); if (window.confirm("Delete thread?")) del.mutate(); }} className="h-9 w-full rounded-ui px-3 text-left text-[13px] text-danger hover:bg-danger/10">Delete thread</button>
               </div>}
             </div>
           </div>

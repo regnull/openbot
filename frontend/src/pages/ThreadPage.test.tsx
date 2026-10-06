@@ -154,6 +154,40 @@ describe("ThreadPage window re-entry", () => {
     expect(el.querySelector('[aria-label="tokens out: 678 tok"] path')?.getAttribute("d")).toBe("M19 12H5M12 5l-7 7 7 7");
   });
 
+  it("keeps the full long title accessible and moves focus into the actions menu", async () => {
+    const longTitle = "A thread title long enough to exercise the responsive two-line clamp without losing its accessible name ".repeat(3);
+    fake.api.getThread = (id: string) => Promise.resolve({ ...detail(id, [...(server[id] ?? [])]), title: longTitle }) as never;
+    await mount("/threads/t1");
+    await until(() => text().includes("first reply"), "initial history");
+    const heading = el.querySelector("h1")!;
+    expect(heading.textContent).toBe(longTitle);
+    expect(heading.getAttribute("title")).toBe(longTitle);
+    expect(heading.getAttribute("aria-label")).toBe(longTitle);
+    const trigger = el.querySelector<HTMLButtonElement>('[aria-label="Thread actions"]')!;
+    await act(async () => { trigger.click(); });
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(el.querySelector('[role="menu"]')).not.toBeNull();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Default bot");
+    await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(el.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("closes the actions menu when switching threads", async () => {
+    await mount("/threads/t1");
+    await until(() => text().includes("first reply"), "initial history");
+    const trigger = () => el.querySelector<HTMLButtonElement>('[aria-label="Thread actions"]')!;
+    await act(async () => { trigger().click(); });
+    expect(el.querySelector('[role="menu"]')).not.toBeNull();
+    await go("/threads/t2");
+    await until(() => text().includes("title-t2"), "second thread window");
+    expect(el.querySelector('[role="menu"]')).toBeNull();
+    await go("/threads/t1");
+    await until(() => text().includes("first reply"), "thread after route switch");
+    expect(el.querySelector('[role="menu"]')).toBeNull();
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("restores each thread's draft after switching away and back", async () => {
     await mount("/threads/t1");
     await until(() => text().includes("first reply"), "initial history");
