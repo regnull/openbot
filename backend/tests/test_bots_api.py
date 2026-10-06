@@ -27,6 +27,27 @@ async def test_create_list_get_update_delete(client):
     assert (await client.get(f"/api/v1/bots/{bot['id']}")).status_code == 404
 
 
+async def test_bot_usage_totals_are_returned(client, services):
+    bot = (await client.post("/api/v1/bots", json=BOT)).json()
+    from openbot.db.models import Thread
+    async with services.session_factory() as session:
+        thread = Thread(title="usage")
+        session.add(thread)
+        await session.flush()
+        session.add_all([
+            Run(actor_id=bot["id"], thread_id=thread.id, status="completed", prompt_tokens=100, completion_tokens=20,
+                cache_read_tokens=40, cache_write_tokens=5, reasoning_tokens=8, model_calls=2, cost_usd=0.125),
+            Run(actor_id=bot["id"], thread_id=thread.id, status="completed", prompt_tokens=50, completion_tokens=10,
+                cache_read_tokens=10, reasoning_tokens=3, model_calls=1, cost_usd=0.025),
+        ])
+        await session.commit()
+    expected = {"model_calls": 3, "prompt_tokens": 150, "completion_tokens": 30, "cache_read_tokens": 50,
+                "cache_write_tokens": 5, "reasoning_tokens": 11, "cost_usd": 0.15}
+    assert {k: (await client.get(f"/api/v1/bots/{bot['id']}")).json()[k] for k in expected} == expected
+    listed = next(b for b in (await client.get("/api/v1/bots")).json() if b["id"] == bot["id"])
+    assert {k: listed[k] for k in expected} == expected
+
+
 async def test_validation(client):
     assert (await client.post("/api/v1/bots", json={**BOT, "handle": "Bad Handle"})).status_code == 422
     assert (await client.post("/api/v1/bots", json={**BOT, "provider": "nope"})).status_code == 422

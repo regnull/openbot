@@ -49,6 +49,12 @@ export default function BotPage() {
         </div>
       </div>
       {purged && <Hint>{purgeSummary(purged)}</Hint>}
+      <Card className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
+        <span>{b.model_calls} model call{b.model_calls === 1 ? "" : "s"}</span>
+        <span>{(b.prompt_tokens ?? 0).toLocaleString()} in</span>
+        <span>{(b.completion_tokens ?? 0).toLocaleString()} out</span>
+        <span>${(b.cost_usd ?? 0).toFixed(4)}</span>
+      </Card>
       <ErrorText error={purge.error} />
       <div className="flex gap-5 border-b border-line" role="tablist">
         {TABS.map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tabClass(t)} onClick={() => setParams({ tab: t })}>{t[0].toUpperCase() + t.slice(1)}</button>)}

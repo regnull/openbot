@@ -48,27 +48,47 @@ log = logging.getLogger(__name__)
 TOOL_RESULT_CAP = 4000
 LOG_PREVIEW_CAP = 500
 CLEARED_TOOL_RESULT = "[earlier tool result cleared to save context; re-run the tool if you still need it]"
-USAGE_KEYS = ("prompt_tokens", "completion_tokens", "cache_read_tokens", "total_tokens", "model_calls")
+USAGE_KEYS = ("prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "total_tokens", "model_calls")
 
 
-def empty_usage() -> dict[str, int]:
-    return dict.fromkeys(USAGE_KEYS, 0)
+def empty_usage() -> dict[str, int | float]:
+    return {**dict.fromkeys(USAGE_KEYS, 0), "cost_usd": 0.0}
 
 
-def add_usage(total: dict[str, int], message: AIMessage) -> dict[str, int] | None:
-    """Fold one model reply's usage_metadata into `total`; returns the increment, or None if the
-    provider reported nothing (scripted/test models, some OpenAI-compatible endpoints)."""
+def add_usage(total: dict[str, int | float], message: AIMessage, price: dict[str, Any] | None = None) -> dict[str, int | float] | None:
+    """Fold one model reply's usage_metadata into `total`, including estimated USD cost.
+
+    Pricing tiers follow OpenCode's session cost calculation: the tier selected by the prompt size
+    prices the complete input, rather than only the tokens above the tier boundary.
+    """
     um = getattr(message, "usage_metadata", None)
     if not um:
         return None
-    details = um.get("input_token_details") or {}
-    inc = {
+    input_details = um.get("input_token_details") or {}
+    output_details = um.get("output_token_details") or {}
+    inc: dict[str, int | float] = {
         "prompt_tokens": int(um.get("input_tokens") or 0),
         "completion_tokens": int(um.get("output_tokens") or 0),
-        "cache_read_tokens": int(details.get("cache_read") or 0),
+        "cache_read_tokens": int(input_details.get("cache_read") or 0),
+        "cache_write_tokens": int(input_details.get("cache_write") or 0),
+        "reasoning_tokens": int(output_details.get("reasoning") or um.get("reasoning_tokens") or 0),
         "total_tokens": int(um.get("total_tokens") or 0),
         "model_calls": 1,
     }
+    if price:
+        rates = price
+        tiers = [t for t in price.get("tiers", []) if isinstance(t, dict) and isinstance(t.get("tier"), dict)]
+        if tiers:
+            applicable = [t for t in tiers if int(t["tier"].get("size", 0)) <= inc["prompt_tokens"]]
+            if applicable:
+                rates = {**price, **applicable[-1]}
+        uncached_input = max(0, inc["prompt_tokens"] - inc["cache_read_tokens"] - inc["cache_write_tokens"])
+        inc["cost_usd"] = (uncached_input * float(rates.get("input") or 0)
+                            + inc["completion_tokens"] * float(rates.get("output") or 0)
+                            + inc["cache_read_tokens"] * float(rates.get("cache_read") or 0)
+                            + inc["cache_write_tokens"] * float(rates.get("cache_write") or 0)) / 1_000_000
+    else:
+        inc["cost_usd"] = 0.0
     for k, v in inc.items():
         total[k] += v
     return inc
@@ -170,8 +190,16 @@ class Runner:
     def __init__(self, services) -> None:
         self.s = services
 
+    def _model_price(self, bot: Actor) -> dict[str, float | None] | None:
+        catalog = getattr(self.s, "model_catalog", None)
+        if catalog is None:
+            return None
+        provider, model = effective_bot_profile(bot.bot, self.s.settings)
+        result = getattr(catalog, "price_for", None)
+        return result(provider, model) if result is not None else None
+
     async def _set_status(self, run_id: str, status: str, *, interrupt: dict | None = None, error: str | None = None,
-                          langsmith_run_id: str | None = None, usage: dict[str, int] | None = None) -> Run:
+                          langsmith_run_id: str | None = None, usage: dict[str, int | float] | None = None) -> Run:
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
             run.status, run.interrupt = status, interrupt
@@ -180,8 +208,7 @@ class Runner:
             if langsmith_run_id:
                 run.langsmith_run_id = langsmith_run_id
             if usage and usage.get("model_calls"):
-                # Resumed runs (after a question) add to what the earlier segment already recorded.
-                for k in USAGE_KEYS:
+                for k in (*USAGE_KEYS, "cost_usd"):
                     setattr(run, k, (getattr(run, k) or 0) + usage[k])
             if status == "running" and run.started_at is None:
                 run.started_at = utcnow()
@@ -346,7 +373,7 @@ class Runner:
                             checkpointer=self.s.checkpointer, store=self.s.store, context_schema=RunContext)
 
     async def _stream(self, agent, inputs, config, ctx: RunContext, run: Run, seq: int,
-                      progress: RunProgress | None = None) -> tuple[str, dict | None, int, dict[str, int]]:
+                      progress: RunProgress | None = None, price: dict[str, float | None] | None = None) -> tuple[str, dict | None, int, dict[str, int | float]]:
         progress = progress if progress is not None else RunProgress()
         final_text, interrupt = "", None
         usage = empty_usage()
@@ -391,7 +418,7 @@ class Runner:
                         # Before any await: a cancel in between must find this turn, not the one before.
                         progress.streaming, progress.reply = "", _text(m) or progress.reply
                         progress.tool_calls += len(m.tool_calls)
-                        inc = add_usage(usage, m)
+                        inc = add_usage(usage, m, price)
                         if inc is not None:
                             log.info("run %s model call %d: prompt=%d (cache_read=%d) completion=%d", run.id, usage["model_calls"],
                                      inc["prompt_tokens"], inc["cache_read_tokens"], inc["completion_tokens"])
@@ -459,7 +486,7 @@ class Runner:
             config["recursion_limit"] = self.recursion_limit(agent, bot)
             with collect_runs() as cb:
                 final_text, interrupt, seq, usage = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq,
-                                                                       progress)
+                                                                       progress, self._model_price(bot))
             ls_id = str(trace_id) if cb.traced_runs else None
             usage_line = (f"model_calls={usage['model_calls']} prompt_tokens={usage['prompt_tokens']} "
                           f"cache_read_tokens={usage['cache_read_tokens']} completion_tokens={usage['completion_tokens']}")

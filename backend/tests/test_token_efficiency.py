@@ -28,6 +28,28 @@ def rt(root: Path, cap_chars: int = 8000, shell_cap_chars: int | None = None) ->
     return ToolRuntime(context=ctx, store=None, state={}, tool_call_id="c", config={}, stream_writer=lambda *_: None)
 
 
+# --- usage accounting ---------------------------------------------------------------------------------
+
+def test_add_usage_tracks_cache_reasoning_and_tiered_cost():
+    from openbot.runtime.runner import add_usage, empty_usage
+    message = ai("done")
+    message.usage_metadata = {
+        "input_tokens": 250_000,
+        "output_tokens": 1_000,
+        "total_tokens": 251_000,
+        "input_token_details": {"cache_read": 100_000, "cache_write": 20_000},
+        "output_token_details": {"reasoning": 400},
+    }
+    usage = empty_usage()
+    inc = add_usage(usage, message, {"input": 1.0, "output": 2.0, "cache_read": 0.1, "cache_write": 0.2,
+                                    "tiers": [{"tier": {"size": 200_000}, "input": 2.0, "output": 3.0,
+                                               "cache_read": 0.2, "cache_write": 0.4}]})
+    assert inc == {"prompt_tokens": 250_000, "completion_tokens": 1_000, "cache_read_tokens": 100_000,
+                   "cache_write_tokens": 20_000, "reasoning_tokens": 400, "total_tokens": 251_000,
+                   "model_calls": 1, "cost_usd": 0.291}
+    assert usage == {**inc, "cost_usd": 0.291}
+
+
 # --- tool output ------------------------------------------------------------------------------------
 
 def test_cap_keeps_head_and_tail_and_says_how_much_was_dropped():
@@ -196,7 +218,7 @@ async def test_thread_usage_sums_all_runs(client, services):
         thread_id = thread.id
     r = await client.get(f"/api/v1/threads/{thread_id}/usage")
     assert r.status_code == 200
-    assert r.json() == {"model_calls": 4, "prompt_tokens": 110, "completion_tokens": 22, "cache_read_tokens": 5}
+    assert r.json() == {"model_calls": 4, "prompt_tokens": 110, "completion_tokens": 22, "cache_read_tokens": 5, "cache_write_tokens": 0, "reasoning_tokens": 0, "cost_usd": 0.0}
 
 
 async def test_thread_usage_is_zero_for_thread_without_runs(client, services):
@@ -208,7 +230,7 @@ async def test_thread_usage_is_zero_for_thread_without_runs(client, services):
         thread_id = thread.id
     r = await client.get(f"/api/v1/threads/{thread_id}/usage")
     assert r.status_code == 200
-    assert r.json() == {"model_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cache_read_tokens": 0}
+    assert r.json() == {"model_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0, "reasoning_tokens": 0, "cost_usd": 0.0}
     assert (await client.get("/api/v1/threads/nope/usage")).status_code == 404
 
 

@@ -10,7 +10,7 @@ export interface ModelGroup { label: string; models: CatalogModel[] }
 
 /** A bare row for an id the catalog does not know: an installed Ollama tag, or the configured default. */
 export function placeholderModel(id: string): CatalogModel {
-  return { id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: null, output: null, cost_input: null, cost_output: null, release_date: "", status: null };
+  return { id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: null, output: null, cost_input: null, cost_output: null, cost_cache_read: null, cost_cache_write: null, cost_tiers: [], release_date: "", status: null };
 }
 
 /** The catalog plus a placeholder for every suggested id it does not know, so those still list and pin. */

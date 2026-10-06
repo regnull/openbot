@@ -5,5 +5,5 @@ export const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFix
 /** Header line with the thread's running LLM totals; null until any run has made a model call. */
 export function threadUsageLabel(u: ThreadUsage): string | null {
   if (!u.model_calls) return null;
-  return `${u.model_calls} LLM call${u.model_calls === 1 ? "" : "s"} · ${compact(u.prompt_tokens)} in · ${compact(u.completion_tokens)} out`;
+  return `${u.model_calls} LLM call${u.model_calls === 1 ? "" : "s"} · ${compact(u.prompt_tokens)} in · ${compact(u.completion_tokens)} out · $${(u.cost_usd ?? 0).toFixed(4)}`;
 }
