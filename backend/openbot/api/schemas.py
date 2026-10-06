@@ -68,6 +68,7 @@ class BotCreate(BaseModel):
     tool_names: list[str] = []
     approval_tools: list[str] = []
     memory_enabled: bool = True
+    load_repository_instructions: bool = False
     enabled: bool = True
 
     @field_validator("icon")
@@ -100,6 +101,7 @@ class BotUpdate(BaseModel):
     tool_names: list[str] | None = None
     approval_tools: list[str] | None = None
     memory_enabled: bool | None = None
+    load_repository_instructions: bool | None = None
     enabled: bool | None = None
 
     @field_validator("icon")
@@ -128,6 +130,7 @@ class BotOut(BaseModel):
     tool_names: list[str]
     approval_tools: list[str]
     memory_enabled: bool
+    load_repository_instructions: bool
     model_calls: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -405,6 +408,7 @@ def bot_out(actor, *, active: bool = False, usage: dict[str, int | float] | None
                   icon=p.icon or DEFAULT_BOT_ICON, enabled=actor.enabled, active=active,
                   instructions=p.instructions, provider=p.provider, model=p.model, model_settings=p.model_settings,
                   tool_names=p.tool_names, approval_tools=p.approval_tools, memory_enabled=p.memory_enabled,
+                  load_repository_instructions=p.load_repository_instructions,
                   model_calls=int(usage.get("model_calls", 0)), prompt_tokens=int(usage.get("prompt_tokens", 0)),
                   completion_tokens=int(usage.get("completion_tokens", 0)), cache_read_tokens=int(usage.get("cache_read_tokens", 0)),
                   cache_write_tokens=int(usage.get("cache_write_tokens", 0)), reasoning_tokens=int(usage.get("reasoning_tokens", 0)),
@@ -493,6 +497,7 @@ class BotCatalogEntryOut(BaseModel):
     tool_names: list[str]
     approval_tools: list[str]
     model_settings: dict[str, Any]
+    load_repository_instructions: bool = False
 
 
 class BotCatalogInstall(BaseModel):

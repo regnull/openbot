@@ -101,6 +101,7 @@ class BotProfile(Base):
     tool_names: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     approval_tools: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     memory_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    load_repository_instructions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     actor: Mapped[Actor] = relationship(back_populates="bot")
 
 

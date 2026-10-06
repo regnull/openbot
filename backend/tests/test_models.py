@@ -89,6 +89,16 @@ async def test_migrations_create_schema(tmp_path):
     assert "icon" in bot_cols
 
 
+async def test_migration_defaults_repository_instructions_to_disabled(tmp_path):
+    url = f"sqlite+aiosqlite:///{tmp_path}/m.db"
+    await run_migrations(url)
+    engine = make_engine(url)
+    async with engine.connect() as conn:
+        columns = {col["name"]: col for col in await conn.run_sync(lambda c: inspect(c).get_columns("bot_profiles"))}
+    assert columns["load_repository_instructions"]["default"] is not None
+    await engine.dispose()
+
+
 async def test_migration_creates_model_catalog_table(tmp_path):
     url = f"sqlite+aiosqlite:///{tmp_path}/m.db"
     await run_migrations(url)

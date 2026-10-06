@@ -63,6 +63,16 @@ def test_system_prompt_contents():
     assert 'If the system does not support Markdown, sign it as "OpenBot - `@eng`".' in p
 
 
+def test_system_prompt_template_uses_only_the_supported_placeholders():
+    from string import Template
+
+    from openbot.runtime import prompt as prompt_module
+
+    actual = frozenset(Template(prompt_module.SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
+    assert actual == prompt_module._SYSTEM_PROMPT_FIELDS
+    assert "repository_instructions" not in actual
+
+
 def test_system_prompt_is_loaded_from_the_packaged_markdown_template():
     from openbot.runtime import prompt as prompt_module
 
@@ -181,3 +191,59 @@ def test_history_marks_the_bots_own_interrupted_reply():
     hist, _ = build_history([msg(1, "human", "You", "go"), cut, empty, msg(4, "bot", "Eng", "done", "eng")], "eng",
                             token_budget=10_000, max_messages=80)
     assert [m.content for m in hist[1:]] == ["half a\n\n[interrupted by the user]", "[interrupted by the user]", "done"]
+
+
+def test_repository_instructions_are_loaded_from_nearest_parent_with_agents_precedence(tmp_path):
+    from openbot.runtime.prompt import load_repository_instructions
+
+    repo = tmp_path / "repo"
+    nested = repo / "src"
+    nested.mkdir(parents=True)
+    (repo / "CLAUDE.md").write_text("claude", encoding="utf-8")
+    (repo / "AGENTS.md").write_text("agents", encoding="utf-8")
+    assert load_repository_instructions(str(repo), enabled=True, start_directory=str(nested)) == "agents"
+
+
+def test_repository_instructions_searches_upward_and_caps_content(tmp_path):
+    from openbot.runtime.prompt import load_repository_instructions
+
+    repo = tmp_path / "repo"
+    nested = repo / "a" / "b"
+    nested.mkdir(parents=True)
+    content = "x" * 40_000
+    (repo / "CLAUDE.md").write_text(content, encoding="utf-8")
+    loaded = load_repository_instructions(str(repo), enabled=True, start_directory=str(nested))
+    assert len(loaded) == 32_000
+
+
+def test_repository_instructions_stop_at_workspace_root(tmp_path):
+    from openbot.runtime.prompt import load_repository_instructions
+
+    workspace = tmp_path / "workspace"
+    nested = workspace / "repo" / "src"
+    nested.mkdir(parents=True)
+    (tmp_path / "AGENTS.md").write_text("outside", encoding="utf-8")
+    (workspace / "repo" / "CLAUDE.md").write_text("inside", encoding="utf-8")
+
+    assert load_repository_instructions(str(workspace / "repo"), enabled=True, start_directory=str(nested)) == "inside"
+    (workspace / "repo" / "CLAUDE.md").unlink()
+    assert load_repository_instructions(str(workspace / "repo"), enabled=True, start_directory=str(nested)) == ""
+
+
+def test_repository_instructions_can_be_disabled(tmp_path):
+    from openbot.runtime.prompt import load_repository_instructions
+
+    (tmp_path / "AGENTS.md").write_text("secret", encoding="utf-8")
+    assert load_repository_instructions(str(tmp_path), enabled=False) == ""
+
+
+def test_repository_instructions_are_rendered_through_validated_template(tmp_path):
+    bot = bot_actor("eng", name="Engineer", instructions="Be terse.")
+    (tmp_path / "AGENTS.md").write_text("Use the repository rules.", encoding="utf-8")
+    bot.bot.load_repository_instructions = True
+
+    prompt = build_system_prompt(bot=bot, all_bots=[bot], participants=[], memories=[],
+                                 workspace_root=str(tmp_path), older_count=0, tool_names=[])
+
+    assert "# Repository instructions\nUse the repository rules." in prompt
+    assert "${repository_instructions}" not in prompt

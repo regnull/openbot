@@ -102,6 +102,7 @@ async def list_catalog() -> list[BotCatalogEntryOut]:
                 **entry,
                 "approval_tools": entry.get("approval_tools", []),
                 "model_settings": entry.get("model_settings", {}),
+                "load_repository_instructions": entry.get("load_repository_instructions", False),
             }
         )
         for entry in CATALOG
@@ -124,7 +125,7 @@ async def install_catalog_entry(entry_id: str, body: BotCatalogInstall | None = 
     data = {"handle": handle, "name": item.name, "description": item.description, "icon": item.icon,
             "instructions": instructions, "provider": "auto", "model": "", "model_settings": item.model_settings,
             "tool_names": list(item.tool_names), "approval_tools": list(item.approval_tools),
-            "memory_enabled": True, "enabled": True}
+            "memory_enabled": True, "load_repository_instructions": item.load_repository_instructions, "enabled": True}
     _validate_tools(services, data["tool_names"], data["approval_tools"])
     actor = Actor(kind="bot", **{k: data.pop(k) for k in ACTOR_FIELDS}, bot=BotProfile(**data))
     session.add(actor)

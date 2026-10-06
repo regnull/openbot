@@ -16,8 +16,16 @@ async def test_catalog_list_install_duplicate_and_unknown(client):
     installed = await client.post('/api/v1/bots/catalog/engineer/install')
     assert installed.status_code == 201, installed.text
     assert installed.json()['instructions']
+    assert installed.json()['load_repository_instructions'] is True
     assert (await client.post('/api/v1/bots/catalog/engineer/install')).status_code == 409
     assert (await client.post('/api/v1/bots/catalog/no-such/install')).status_code == 404
+
+
+def test_catalog_entry_exposes_repository_instruction_setting():
+    from openbot.bots.catalog import CATALOG_BY_ID
+
+    engineer = next(entry for entry in CATALOG_BY_ID.values() if entry["handle"] == "engineer")
+    assert engineer["load_repository_instructions"] is True
 
 
 async def test_catalog_install_rejects_invalid_handle(client):
