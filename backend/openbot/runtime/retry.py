@@ -20,7 +20,8 @@ re-raised unchanged, so the run fails with the provider's own error message.
 
 Classification: errors the providers expose as HTTP with a transient status (408/409/425/
 429/5xx), plus LangChain's `ModelHTTPError`, and request timeouts (the SDKs' `APITimeoutError`
-and httpx's `TimeoutException`, which carry no status; see `model_call_timeout`) are retried; auth, permission and invalid-request
+and httpx's `TimeoutException`, which carry no status; see `model_call_timeout`) and dropped connections (the SDKs'
+`APIConnectionError`, and the raw httpx/httpx2 transport errors a reset mid-stream raises) are retried; auth, permission and invalid-request
 failures (400/401/403/404/422) fail immediately. Some upstream failures (like the Relace one
 above) surface as a generic `APIError` without a status code; those are matched by the known
 message pattern "model stopped before completing" — the limitation is that a *generic* provider
@@ -35,6 +36,7 @@ import random
 
 import anthropic
 import httpx
+import httpx2
 import openai
 from langchain.agents.middleware import AgentMiddleware, ModelRequest
 
@@ -45,8 +47,14 @@ RETRYABLE_STATUS = {408, 409, 425, 429, *range(500, 600)}
 
 # Generic APIError bodies seen from upstream model providers without an HTTP status attached.
 UPSTREAM_MESSAGE_PATTERNS = ("model stopped before completing",)
-# A call that hit model_call_timeout: no HTTP status, but as transient as a 5xx.
-TIMEOUT_ERRORS = (openai.APITimeoutError, anthropic.APITimeoutError, httpx.TimeoutException)
+# A call that hit model_call_timeout or lost its connection: no HTTP status, but as transient as a 5xx.
+# The openai and anthropic SDKs use httpx2, whose exceptions are not httpx's; a connection reset while
+# streaming reaches us as a raw httpx2.ReadError / RemoteProtocolError, not wrapped by the SDK.
+TRANSIENT_ERRORS = (
+    openai.APIConnectionError, anthropic.APIConnectionError,  # includes their APITimeoutError
+    httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError,
+    httpx2.TimeoutException, httpx2.NetworkError, httpx2.RemoteProtocolError,
+)
 
 
 def _error_status(err: Exception) -> int | None:
@@ -62,9 +70,9 @@ def is_retryable(err: Exception) -> bool:
     """True when `err` looks like a transient upstream model-provider failure.
 
     Retries what the provider marked transient (429/5xx via `openai.APIStatusError` or LangChain's
-    `ModelHTTPError`), request timeouts, and the known generic-upstream message pattern; never retries
+    `ModelHTTPError`), request timeouts, dropped connections, and the known generic-upstream message pattern; never retries
     auth, permission or invalid-request errors."""
-    if isinstance(err, TIMEOUT_ERRORS):
+    if isinstance(err, TRANSIENT_ERRORS):
         return True
     status = _error_status(err)
     if status is not None:
