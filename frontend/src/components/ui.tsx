@@ -1,10 +1,11 @@
-import type { ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { forwardRef, type ComponentProps, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { backendUnavailableMessage, isUnavailableErrorText } from "../lib/backendFallback";
 
 /* ── Form controls ─────────────────────────────────────────────────────────────
    Mono, flat, hairline. Focus is the accent border plus a 1px ring, never a thick glow. */
 const control = "w-full rounded-ui border border-line bg-surface px-3 text-[13px] text-fg placeholder:text-faint outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60";
-export const Input = (p: InputHTMLAttributes<HTMLInputElement>) => <input {...p} className={`${control} h-9 ${p.className ?? ""}`} />;
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>((p, ref) => <input {...p} ref={ref} className={`${control} h-9 ${p.className ?? ""}`} />);
+Input.displayName = "Input";
 export const Textarea = (p: TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...p} className={`${control} py-2 leading-relaxed ${p.className ?? ""}`} />;
 export const Select = (p: SelectHTMLAttributes<HTMLSelectElement>) => <select {...p} className={`${control} h-9 ${p.className ?? ""}`} />;
 
