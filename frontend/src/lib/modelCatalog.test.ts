@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogModel } from "../api/types";
-import { effortLevelsFor, filterModels, formatContext, formatCost, groupModels, hasCatalog, reconcileEffort, sortModels, splitAutoDefault, withSuggested } from "./modelCatalog";
+import { effortLevelsFor, filterModels, filterConfiguredProviders, formatContext, formatCost, groupModels, hasCatalog, reconcileEffort, sortModels, splitAutoDefault, taskRank, withSuggested } from "./modelCatalog";
 
 const model = (id: string, extra: Partial<CatalogModel> = {}): CatalogModel => ({
   id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: 200000, output: null,
@@ -48,6 +48,21 @@ describe("sortModels and groupModels", () => {
     expect(groups[0].label).toBe("Installed");
     expect(groups[0].models.map((m) => [m.id, m.name, m.context])).toEqual([["qwen3:8b", "qwen3:8b", null], ["claude-opus-5-5", "Claude Opus 5.5", 200000]]);
     expect(groups).toHaveLength(1);
+  });
+  it("ranks task groups by the task leaderboard, then uses the selected sort as a fallback", () => {
+    const ranked = model("deepseek/deepseek-v4.1-flash", { description: "coding", release_date: "2025-01-01" });
+    const second = model("z-ai/glm-5.3-flash", { description: "coding", release_date: "2026-01-01" });
+    const fallback = model("unknown/coder", { description: "coding", release_date: "2026-02-01" });
+    expect(taskRank("Code", ranked)).toBeLessThan(taskRank("Code", second));
+    expect(groupModels([fallback, second, ranked], [], "Suggested", "newest", true)[0].models.map((m) => m.id)).toEqual([ranked.id, second.id, fallback.id]);
+  });
+});
+
+describe("OpenRouter provider filtering", () => {
+  it("keeps only models from configured upstreams and unqualified models", () => {
+    const models = [model("anthropic/claude"), model("openai/gpt"), model("custom/model"), model("bare")];
+    const providers = [{ id: "anthropic", configured: true }, { id: "openai", configured: false }] as never;
+    expect(filterConfiguredProviders(models, providers).map((m) => m.id)).toEqual(["anthropic/claude", "bare"]);
   });
 });
 

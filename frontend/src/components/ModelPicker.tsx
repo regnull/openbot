@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useId, useMemo, useState } from "react";
 import { Api } from "../api/client";
 import type { CatalogModel } from "../api/types";
-import { filterModels, formatContext, formatCost, groupModels, withSuggested, type ModelSort } from "../lib/modelCatalog";
+import { filterConfiguredProviders, filterModels, formatContext, formatCost, groupModels, withSuggested, type ModelSort } from "../lib/modelCatalog";
 import { Badge, Input, Spinner } from "./ui";
 
 export interface ModelPickerProps {
@@ -34,6 +34,7 @@ const Chip = ({ on, name, onToggle, children }: { on: boolean; name: string; onT
  *  whether or not the catalog knows it. Rows are grouped by family; typing filters on id, name and family. */
 export function ModelPicker({ provider, value, onChange, suggested = [], suggestedLabel = "Suggested", id, required, className = "" }: ModelPickerProps) {
   const models = useQuery({ queryKey: ["models", provider], queryFn: () => Api.getModels(provider), staleTime: 5 * 60_000 });
+  const providers = useQuery({ queryKey: ["providers"], queryFn: Api.getProviders, staleTime: 5 * 60_000, enabled: provider === "openrouter" });
   const unconfigured = models.data !== undefined && !models.data.configured;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -41,10 +42,11 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   const [reasoning, setReasoning] = useState(false);
   const [vision, setVision] = useState(false);
   const [sort, setSort] = useState<ModelSort>("newest");
+  const [taskMode, setTaskMode] = useState(provider === "openrouter");
   const listId = useId();
-  const all = useMemo(() => withSuggested(models.data?.models ?? [], suggested), [models.data, suggested]);
-  const groups = useMemo(() => groupModels(filterModels(all, { text: query, reasoning, vision }), suggested, suggestedLabel, sort),
-    [all, query, reasoning, vision, sort, suggested, suggestedLabel]);
+  const all = useMemo(() => withSuggested(filterConfiguredProviders(models.data?.models ?? [], providers.data?.providers), suggested), [models.data, providers.data, suggested]);
+  const groups = useMemo(() => groupModels(filterModels(all, { text: query, reasoning, vision }), suggested, suggestedLabel, sort, taskMode),
+    [all, query, reasoning, vision, sort, suggested, suggestedLabel, taskMode]);
   const flat = useMemo(() => groups.flatMap((g) => g.models), [groups]);
   // The highlight defaults to the row whose id exactly matches the field's value (or none), and is put
   // back there whenever the filtered list changes underneath it (typing, a chip, sort, or reopening).
@@ -87,6 +89,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 pb-1.5 pt-1 font-sans text-[11px] text-faint">
+                {provider === "openrouter" && <button type="button" aria-pressed={taskMode} onMouseDown={(e) => e.preventDefault()} onClick={() => setTaskMode((v) => !v)} className="rounded-ui border border-line px-1.5 py-0.5 hover:text-fg">{taskMode ? "By task" : "By family"}</button>}
                 <Chip on={reasoning} name="reasoning" onToggle={() => setReasoning((v) => !v)}>Reasoning</Chip>
                 <Chip on={vision} name="vision" onToggle={() => setVision((v) => !v)}>Vision</Chip>
                 <button type="button" data-sort={sort} onMouseDown={(e) => e.preventDefault()} onClick={() => setSort((s) => (s === "newest" ? "cheapest" : "newest"))}
