@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogModel } from "../api/types";
-import { effortLevelsFor, filterByVendor, filterModels, formatContext, formatCost, groupModels, hasCatalog, reconcileEffort, sortModels, splitAutoDefault, taskRank, upstreamVendors, withSuggested } from "./modelCatalog";
+import { effortLevelsFor, filterByVendor, filterModels, formatContext, formatCost, groupModels, hasCatalog, hasRanks, reconcileEffort, sortModels, splitAutoDefault, taskRank, upstreamVendors, withSuggested } from "./modelCatalog";
 
 const model = (id: string, extra: Partial<CatalogModel> = {}): CatalogModel => ({
   id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: 200000, output: null,
@@ -49,13 +49,25 @@ describe("sortModels and groupModels", () => {
     expect(groups[0].models.map((m) => [m.id, m.name, m.context])).toEqual([["qwen3:8b", "qwen3:8b", null], ["claude-opus-5-5", "Claude Opus 5.5", 200000]]);
     expect(groups).toHaveLength(1);
   });
-  it("ranks task groups by the task leaderboard, then uses the selected sort as a fallback", () => {
+  it("rank sort orders by the task leaderboard, then newest for unranked models", () => {
     const ranked = model("deepseek/deepseek-v4.1-flash", { description: "coding", release_date: "2025-01-01", task_ranks: { Code: 1 } });
     const second = model("z-ai/glm-5.3-flash", { description: "coding", release_date: "2026-01-01", task_ranks: { Code: 2 } });
     const fallback = model("unknown/coder", { description: "coding", release_date: "2026-02-01" });
     const arbitrary = model("new/provider-model", { name: "Provider Model", description: "general purpose", task_ranks: { Code: 3 } });
     expect(taskRank("Code", ranked)).toBeLessThan(taskRank("Code", second));
-    expect(groupModels([fallback, second, ranked, arbitrary], [], "Suggested", "newest", true)[0].models.map((m) => m.id)).toEqual([ranked.id, second.id, arbitrary.id, fallback.id]);
+    expect(sortModels([fallback, second, ranked, arbitrary], "rank", "Code").map((m) => m.id)).toEqual([ranked.id, second.id, arbitrary.id, fallback.id]);
+    expect(sortModels([fallback, second, ranked, arbitrary], "newest", "Code")[0].id).not.toBe(ranked.id);
+  });
+});
+
+describe("rank sort without a task", () => {
+  it("uses each model's best leaderboard position across tasks", () => {
+    const visionFirst = model("a/vision", { task_ranks: { Vision: 1, Code: 9 }, release_date: "2025-01-01" });
+    const codeSecond = model("b/code", { task_ranks: { Code: 2 }, release_date: "2025-01-01" });
+    const unranked = model("c/new", { release_date: "2026-09-01" });
+    expect(sortModels([unranked, codeSecond, visionFirst], "rank").map((m) => m.id)).toEqual(["a/vision", "b/code", "c/new"]);
+    expect(hasRanks([unranked])).toBe(false);
+    expect(hasRanks([codeSecond])).toBe(true);
   });
 });
 

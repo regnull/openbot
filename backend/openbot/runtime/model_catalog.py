@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -74,17 +75,24 @@ def normalize_model(key: str, m: dict) -> dict:
     }
 
 
+_DATED_SLUG = re.compile(r"-\d{8}(?=:|$)")
+
+
 def _ranking_models(payload: Any) -> dict[str, int]:
-    """Convert OpenRouter's latest usage series into deterministic leaderboard ranks."""
+    """Rank models by usage summed over every day of OpenRouter's series. The series names dated slugs
+    (`openai/gpt-6-20260922`, `x/y-20260706:free`), so the date is dropped to match catalog ids; the
+    `Others` bucket and non-numeric values are ignored."""
     points = payload.get("data") if isinstance(payload, dict) else None
-    latest = points[-1].get("ys") if isinstance(points, list) and points and isinstance(points[-1], dict) else None
-    if not isinstance(latest, dict):
-        return {}
-    ranked = sorted(
-        ((str(model), value) for model, value in latest.items() if isinstance(value, (int, float))),
-        key=lambda item: (-item[1], item[0]),
-    )
+    totals: dict[str, float] = {}
+    for point in points if isinstance(points, list) else []:
+        ys = point.get("ys") if isinstance(point, dict) else None
+        for model, value in (ys.items() if isinstance(ys, dict) else ()):
+            if model != "Others" and isinstance(value, (int, float)):
+                key = _DATED_SLUG.sub("", str(model))
+                totals[key] = totals.get(key, 0) + value
+    ranked = sorted(totals.items(), key=lambda item: (-item[1], item[0]))
     return {model: rank for rank, (model, _) in enumerate(ranked, 1)}
+
 
 def normalize_catalog(raw: Any) -> dict[str, list[dict]]:
     """models.dev document -> {openbot provider: [normalized model, ...]} for CATALOG_SOURCES only.
