@@ -185,6 +185,7 @@
 /* ── Thread header ──────────────────────────────────────────────────────────── */
 .thread-header { padding: 0.6rem 0 0.7rem; }
 .thread-header-main { min-height: 2.4rem; }
+.thread-header-title { min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
 .thread-header-back { transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }
 .thread-header-back:hover { transform: translateX(-1px); }
 .thread-header-kicker, .thread-header-metrics-label { color: var(--accent-strong); font-family: var(--font-sans); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; line-height: 1.2; text-transform: uppercase; }
@@ -211,9 +212,12 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 @media (max-width: 640px) {
-  .thread-header { padding-inline: 0.1rem; }
+  .thread-header { padding-inline: 0.5rem; }
+  .thread-header-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .thread-header-footer { align-items: flex-start; flex-direction: column; gap: 0.35rem; margin-left: 2.75rem; }
-  .thread-header-counters { gap: 0.25rem; }
+  .thread-header-counters { gap: 0.25rem; max-width: 100%; }
+  .thread-odometer { max-width: 100%; }
+  .thread-header-controls { align-self: flex-start; }
   .thread-odometer { padding-inline: 0.3rem; }
   .thread-odometer-label { font-size: 8px; }
 }
