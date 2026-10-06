@@ -24,7 +24,7 @@ def test_normalized_record_shape():
     assert m == {
         "id": "claude-opus-5-5", "name": "Claude Opus 5.5", "family": "claude-opus", "description": "Most capable Claude",
         "reasoning": True, "effort_levels": ["low", "medium", "high", "xhigh", "max"], "image_input": True,
-        "context": 200000, "output": 64000, "cost_input": 5.0, "cost_output": 25.0, "release_date": "2026-03-01", "status": None,
+        "context": 200000, "output": 64000, "cost_input": 5.0, "cost_output": 25.0, "cost_cache_read": 0.5, "cost_cache_write": None, "cost_tiers": [], "release_date": "2026-03-01", "status": None,
     }
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openbot.api.actors import handle_taken
@@ -36,6 +36,13 @@ from openbot.services import Services
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 ACTOR_FIELDS = ("handle", "name", "description", "enabled")
+USAGE_FIELDS = ("model_calls", "prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "cost_usd")
+
+
+async def _usage_for(session: AsyncSession, actor_id: str) -> dict[str, int | float]:
+    cols = [func.coalesce(func.sum(getattr(Run, field)), 0).label(field) for field in USAGE_FIELDS]
+    row = (await session.execute(select(*cols).where(Run.actor_id == actor_id))).one()
+    return dict(zip(USAGE_FIELDS, row, strict=True))
 
 
 def _validate_tools(services: Services, tool_names: list[str], approval_tools: list[str]) -> None:
@@ -64,7 +71,12 @@ async def _get_bot_or_404(session: AsyncSession, bot_id: str) -> Actor:
 async def list_bots(session: AsyncSession = Depends(get_session)):
     actors = (await session.execute(select(Actor).where(Actor.kind == "bot").order_by(Actor.created_at))).scalars().all()
     active_ids = set((await session.execute(select(Run.actor_id).where(Run.status.in_(ACTIVE_RUN_STATUSES)).distinct())).scalars().all())
-    return [bot_out(a, active=a.id in active_ids) for a in actors]
+    usage_rows = (await session.execute(
+        select(Run.actor_id, *[func.coalesce(func.sum(getattr(Run, field)), 0).label(field) for field in USAGE_FIELDS])
+        .group_by(Run.actor_id)
+    )).all()
+    usage = {row[0]: dict(zip(USAGE_FIELDS, row[1:], strict=True)) for row in usage_rows}
+    return [bot_out(a, active=a.id in active_ids, usage=usage.get(a.id)) for a in actors]
 
 
 @router.post("", response_model=BotOut, status_code=201)
@@ -130,7 +142,7 @@ async def install_catalog_entry(entry_id: str, body: BotCatalogInstall | None = 
 async def get_bot(bot_id: str, session: AsyncSession = Depends(get_session)):
     actor = await _get_bot_or_404(session, bot_id)
     active = (await session.execute(select(Run.id).where(Run.actor_id == bot_id, Run.status.in_(ACTIVE_RUN_STATUSES)).limit(1))).first() is not None
-    return bot_out(actor, active=active)
+    return bot_out(actor, active=active, usage=await _usage_for(session, bot_id))
 
 
 @router.patch("/{bot_id}", response_model=BotOut)

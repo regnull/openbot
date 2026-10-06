@@ -128,6 +128,13 @@ class BotOut(BaseModel):
     tool_names: list[str]
     approval_tools: list[str]
     memory_enabled: bool
+    model_calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    reasoning_tokens: int = 0
+    cost_usd: float = 0.0
     created_at: datetime
     updated_at: datetime
 
@@ -195,7 +202,10 @@ class RunOut(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    reasoning_tokens: int | None = None
     total_tokens: int | None = None
+    cost_usd: float | None = None
     model_calls: int | None = None
     created_at: datetime
     started_at: datetime | None
@@ -260,6 +270,9 @@ class ThreadUsage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    reasoning_tokens: int = 0
+    cost_usd: float = 0.0
 
 
 MAX_IMAGES = 4
@@ -385,13 +398,17 @@ def actor_out(actor) -> ActorOut:
                     created_at=actor.created_at, updated_at=actor.updated_at)
 
 
-def bot_out(actor, *, active: bool = False) -> BotOut:
+def bot_out(actor, *, active: bool = False, usage: dict[str, int | float] | None = None) -> BotOut:
     p = actor.bot
+    usage = usage or {}
     return BotOut(id=actor.id, handle=actor.handle, name=actor.name, description=actor.description,
                   icon=p.icon or DEFAULT_BOT_ICON, enabled=actor.enabled, active=active,
                   instructions=p.instructions, provider=p.provider, model=p.model, model_settings=p.model_settings,
                   tool_names=p.tool_names, approval_tools=p.approval_tools, memory_enabled=p.memory_enabled,
-                  created_at=actor.created_at, updated_at=actor.updated_at)
+                  model_calls=int(usage.get("model_calls", 0)), prompt_tokens=int(usage.get("prompt_tokens", 0)),
+                  completion_tokens=int(usage.get("completion_tokens", 0)), cache_read_tokens=int(usage.get("cache_read_tokens", 0)),
+                  cache_write_tokens=int(usage.get("cache_write_tokens", 0)), reasoning_tokens=int(usage.get("reasoning_tokens", 0)),
+                  cost_usd=float(usage.get("cost_usd", 0)), created_at=actor.created_at, updated_at=actor.updated_at)
 
 
 class McpServerOut(BaseModel):
@@ -529,6 +546,9 @@ class CatalogModelOut(BaseModel):
     output: int | None = None
     cost_input: float | None = None
     cost_output: float | None = None
+    cost_cache_read: float | None = None
+    cost_cache_write: float | None = None
+    cost_tiers: list[dict[str, Any]] = []
     release_date: str = ""
     status: str | None = None
 

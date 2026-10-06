@@ -51,6 +51,7 @@ def normalize_model(key: str, m: dict) -> dict:
     mod = m.get("modalities") or {}
     limit = m.get("limit") or {}
     cost = m.get("cost") or {}
+    tiers = cost.get("tiers") if isinstance(cost.get("tiers"), list) else []
     return {
         "id": str(m.get("id") or key),
         "name": str(m.get("name") or key),
@@ -63,6 +64,9 @@ def normalize_model(key: str, m: dict) -> dict:
         "output": int(limit["output"]) if limit.get("output") is not None else None,
         "cost_input": float(cost["input"]) if cost.get("input") is not None else None,
         "cost_output": float(cost["output"]) if cost.get("output") is not None else None,
+        "cost_cache_read": float(cost["cache_read"]) if cost.get("cache_read") is not None else None,
+        "cost_cache_write": float(cost["cache_write"]) if cost.get("cache_write") is not None else None,
+        "cost_tiers": tiers,
         "release_date": str(m.get("release_date") or ""),
         "status": "beta" if m.get("status") == "beta" else None,
     }
@@ -117,6 +121,12 @@ class ModelCatalog:
         self._url = url
         self._ttl = ttl
         self._task: asyncio.Task | None = None
+        self._prices: dict[tuple[str, str], dict[str, float | None]] = {}
+
+    def price_for(self, provider: str, model_id: str) -> dict[str, float | None] | None:
+        """Return cached per-token prices without doing I/O; None means unknown/stale cache."""
+        row = getattr(self, "_prices", {}).get((provider, model_id))
+        return dict(row) if row is not None else None
 
     async def get(self, provider: str) -> CatalogResult | None:
         if provider not in CATALOG_SOURCES:
@@ -152,6 +162,9 @@ class ModelCatalog:
             log.warning("model catalog refresh from %s failed: %s", self._url, e)
             return False
         now = utcnow()
+        self._prices = {(provider, model["id"]): {"input": model.get("cost_input"), "output": model.get("cost_output"),
+                                                 "cache_read": model.get("cost_cache_read"), "cache_write": model.get("cost_cache_write"), "tiers": model.get("cost_tiers", [])}
+                        for provider, models in catalog.items() for model in models}
         try:
             async with self._sessions() as session:
                 for provider, models in catalog.items():
