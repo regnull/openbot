@@ -183,9 +183,18 @@
 .message-meta { margin-bottom: 4px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; font-family: var(--font-mono); font-size: 12px; line-height: 1.3; color: var(--muted); }
 
 /* ── Thread header ──────────────────────────────────────────────────────────── */
-.thread-header { padding-top: 0.35rem; }
-.thread-header-counters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.35rem; }
-.thread-odometer { display: inline-flex; align-items: baseline; gap: 0.35rem; min-height: 1.65rem; padding: 0.2rem 0.4rem 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: var(--radius-ui); background: color-mix(in srgb, var(--surface) 88%, var(--sunken)); white-space: nowrap; }
+.thread-header { padding: 0.6rem 0 0.7rem; }
+.thread-header-main { min-height: 2.4rem; }
+.thread-header-back { transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }
+.thread-header-back:hover { transform: translateX(-1px); }
+.thread-header-kicker, .thread-header-metrics-label { color: var(--accent-strong); font-family: var(--font-sans); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; line-height: 1.2; text-transform: uppercase; }
+.thread-header-kicker { margin-bottom: 0.1rem; }
+.thread-header-context { margin-top: 0.18rem; }
+.thread-header-controls { padding-top: 0.05rem; }
+.thread-header-footer { display: flex; align-items: center; gap: 0.65rem; margin: 0.65rem 0 0 2.75rem; }
+.thread-header-counters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.thread-odometer { display: inline-flex; align-items: baseline; gap: 0.35rem; min-height: 1.65rem; padding: 0.2rem 0.4rem 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: var(--radius-ui); background: color-mix(in srgb, var(--surface) 88%, var(--sunken)); box-shadow: 0 1px 0 color-mix(in srgb, var(--surface) 70%, transparent); white-space: nowrap; transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease; }
+.thread-odometer:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--surface) 72%, var(--sunken)); transform: translateY(-1px); }
 .thread-odometer-label { color: var(--faint); font-family: var(--font-sans); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; line-height: 1; text-transform: uppercase; }
 .thread-odometer-value { display: inline-flex; align-items: center; color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1; }
 .thread-odometer-digit { min-width: 0.72em; padding: 0.12rem 0.08rem; border-left: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent); background: color-mix(in srgb, var(--sunken) 72%, transparent); text-align: center; transition: background-color 180ms ease, color 180ms ease; }
@@ -194,9 +203,15 @@
 .thread-odometer-separator { color: var(--muted); }
 .thread-odometer-loading { color: var(--faint); }
 @media (max-width: 640px) {
+  .thread-header { padding-inline: 0.1rem; }
+  .thread-header-footer { align-items: flex-start; flex-direction: column; gap: 0.35rem; margin-left: 2.75rem; }
   .thread-header-counters { gap: 0.25rem; }
   .thread-odometer { padding-inline: 0.3rem; }
   .thread-odometer-label { font-size: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thread-header-back, .thread-odometer { transition: none; }
+  .thread-header-back:hover, .thread-odometer:hover { transform: none; }
 }
 
 /* ── Live indicators ───────────────────────────────────────────────────────── */

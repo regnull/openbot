@@ -127,6 +127,9 @@ describe("ThreadPage window re-entry", () => {
   it("renders and refreshes live usage counters", async () => {
     await mount("/threads/t1");
     await until(() => text().includes("first reply"), "initial history");
+    expect(el.querySelector(".thread-header-kicker")?.textContent).toBe("Active thread");
+    expect(el.querySelector('a[aria-label="Back to threads"]')?.getAttribute("title")).toBe("Back to threads");
+    expect(el.querySelector(".thread-header-metrics-label")?.textContent).toBe("Usage");
     expect(el.querySelector('[aria-label="Thread usage"]')?.getAttribute("role")).toBe("group");
     expect(el.querySelector('[aria-label="calls: 0"]')?.getAttribute("role")).toBe("img");
     expect(el.querySelector('[aria-label="calls: 0"]')).toBeTruthy();
