@@ -60,6 +60,20 @@ it("opens on focus, lists the catalog grouped by family newest first, and filter
   expect(last).toBe("HAIKU");
 });
 
+it("resets task mode when the provider changes", async () => {
+  await show({ provider: "openrouter" });
+  await focus();
+  expect(el.querySelector("button")?.textContent).toBe("By task");
+  await press(el.querySelector("button")!);
+  expect(el.querySelector("button")?.textContent).toBe("By family");
+
+  await act(async () => root.render(<QueryClientProvider client={qc}><Host provider="anthropic" /></QueryClientProvider>));
+  expect(el.querySelector("button")?.textContent).toBe("Reasoning");
+
+  await act(async () => root.render(<QueryClientProvider client={qc}><Host provider="openrouter" /></QueryClientProvider>));
+  expect(el.querySelector("button")?.textContent).toBe("By task");
+});
+
 it("keeps free text as the value and notes it is not in the catalog", async () => {
   await show();
   await focus();

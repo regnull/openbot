@@ -20,6 +20,7 @@ from openbot.db.models import ModelCatalogRow, utcnow
 log = logging.getLogger(__name__)
 
 MODELS_DEV_URL = "https://models.dev/api.json"
+OPENROUTER_RANKINGS_URL = "https://openrouter.ai/api/frontend/v1/rankings"
 MIN_CONTEXT = 32_000
 CATALOG_TTL = timedelta(hours=24)
 FETCH_TIMEOUT = 20.0
@@ -69,8 +70,21 @@ def normalize_model(key: str, m: dict) -> dict:
         "cost_tiers": tiers,
         "release_date": str(m.get("release_date") or ""),
         "status": "beta" if m.get("status") == "beta" else None,
+        **({"task_ranks": {str(task): int(rank) for task, rank in (m.get("task_ranks") or {}).items()}} if m.get("task_ranks") else {}),
     }
 
+
+def _ranking_models(payload: Any) -> dict[str, int]:
+    """Convert OpenRouter's latest usage series into deterministic leaderboard ranks."""
+    points = payload.get("data") if isinstance(payload, dict) else None
+    latest = points[-1].get("ys") if isinstance(points, list) and points and isinstance(points[-1], dict) else None
+    if not isinstance(latest, dict):
+        return {}
+    ranked = sorted(
+        ((str(model), value) for model, value in latest.items() if isinstance(value, (int, float))),
+        key=lambda item: (-item[1], item[0]),
+    )
+    return {model: rank for rank, (model, _) in enumerate(ranked, 1)}
 
 def normalize_catalog(raw: Any) -> dict[str, list[dict]]:
     """models.dev document -> {openbot provider: [normalized model, ...]} for CATALOG_SOURCES only.
@@ -167,6 +181,19 @@ class ModelCatalog:
             r = await self._http.get(self._url, timeout=FETCH_TIMEOUT)
             r.raise_for_status()
             catalog = normalize_catalog(r.json())
+            if "openrouter" in catalog and self._url == MODELS_DEV_URL:
+                rankings: dict[str, dict[str, int]] = {}
+                for task, dataset in (("Code", "tools"), ("Vision", "images")):
+                    try:
+                        ranking = await self._http.get(f"{OPENROUTER_RANKINGS_URL}/{dataset}", timeout=FETCH_TIMEOUT)
+                        ranking.raise_for_status()
+                        rankings[task] = _ranking_models(ranking.json())
+                    except Exception as e:  # noqa: BLE001 - rankings are optional enrichment
+                        log.warning("OpenRouter %s rankings refresh failed: %s", task, e)
+                for model in catalog["openrouter"]:
+                    ranks = {task: rank[model["id"]] for task, rank in rankings.items() if model["id"] in rank}
+                    if ranks:
+                        model["task_ranks"] = ranks
         except Exception as e:  # noqa: BLE001 - any failure must leave the cached rows in place
             log.warning("model catalog refresh from %s failed: %s", self._url, e)
             return False
