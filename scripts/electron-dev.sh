@@ -158,6 +158,8 @@ run_in_process_group uv run --project backend python -m openbot.cli "$DETAILS_FL
 backend_pid=$!
 
 echo "Starting Vite frontend on ${FRONTEND_URL}"
+# The single quotes are intentional: the string is handed to the inner bash -c, which expands $FRONTEND_PORT there.
+# shellcheck disable=SC2016
 run_in_process_group env FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_PORT="$ELECTRON_BACKEND_PORT" ELECTRON_DEV="1" bash -c '
   cd frontend
   pnpm dev --host localhost --port "$FRONTEND_PORT" --strictPort

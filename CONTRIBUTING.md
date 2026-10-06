@@ -4,7 +4,7 @@ Thanks for helping. Keep changes small and focused.
 
 ## Setup
 
-Prerequisites: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 24+ with [pnpm](https://pnpm.io/) 10.
+Prerequisites: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 24+ with [pnpm](https://pnpm.io/) 10. Optional: [ShellCheck](https://www.shellcheck.net/) — `make lint` runs it on the shell scripts when installed, and skips with a note when it is not.
 
 ```bash
 make setup   # backend deps, frontend deps, .env from template

@@ -58,10 +58,11 @@ reset_db:       ## delete the local SQLite databases (app + LangGraph state); mi
 sync_bots:      ## update the demo bots' instructions/tools/limits from the seed definitions (no threads or memories touched), from the repo root
 	uv run --project backend python -m openbot.seed
 
-lint:           ## lint backend (ruff), frontend (oxlint), and enforce the renderer/backend boundary
+lint:           ## lint backend (ruff), frontend (oxlint), shell scripts (shellcheck), and enforce the renderer/backend boundary
 	cd backend && uv run ruff check .
 	cd frontend && pnpm lint
 	python3 scripts/check-client-boundaries.py
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck scripts/*.sh; else echo "shellcheck not found; skipping. Install it from https://www.shellcheck.net/"; fi
 
 build:          ## build the frontend for production serving by the backend
 	cd frontend && pnpm build

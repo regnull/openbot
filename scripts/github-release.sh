@@ -24,6 +24,8 @@ if [[ -z "$DRY_RUN" ]]; then
   gh auth status >/dev/null 2>&1 || die "gh is not logged in; run: gh auth login"
 fi
 
+# Intentional A && B || C: die only when either git diff found uncommitted changes.
+# shellcheck disable=SC2015
 git diff --quiet && git diff --cached --quiet || die "tracked files have uncommitted changes; commit or stash them first"
 [[ "$(git symbolic-ref --quiet --short HEAD || true)" == main ]] || check "releases are cut from main"
 git fetch --quiet --tags origin main
