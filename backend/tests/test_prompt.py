@@ -213,7 +213,7 @@ def test_repository_instructions_can_be_disabled(tmp_path):
     assert load_repository_instructions(str(tmp_path), enabled=False) == ""
 
 
-def test_repository_instructions_are_rendered_without_template_placeholder(tmp_path):
+def test_repository_instructions_are_rendered_through_validated_template(tmp_path):
     bot = bot_actor("eng", name="Engineer", instructions="Be terse.")
     (tmp_path / "AGENTS.md").write_text("Use the repository rules.", encoding="utf-8")
     bot.bot.load_repository_instructions = True

@@ -30,6 +30,8 @@ ${lead_instructions}- If newer messages for you arrived while you were working, 
 # Your instructions
 ${bot_instructions}
 
+${repository_instructions}
+
 # Other bots you can mention
 ${roster}
 
