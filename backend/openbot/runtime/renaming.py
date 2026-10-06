@@ -49,7 +49,14 @@ async def _rename(services, thread_id: str, actor: Actor, transcript: str) -> No
         "markdown, or explanation. Use at most 80 characters.\n\n" + transcript
     ))
     try:
-        response = await services.model_factory(actor).ainvoke([prompt])
+        small_factory = getattr(services, "small_model_factory", None)
+        factory = small_factory or services.model_factory
+        try:
+            response = await factory(actor).ainvoke([prompt])
+        except Exception:
+            if not small_factory or small_factory == services.model_factory:
+                raise
+            response = await services.model_factory(actor).ainvoke([prompt])
         title = getattr(response, "content", "")
         if isinstance(title, list):
             title = "".join(str(x.get("text", "")) if isinstance(x, dict) else str(x) for x in title)

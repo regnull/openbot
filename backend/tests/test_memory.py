@@ -188,3 +188,39 @@ async def test_reflection_bounds_the_extractor_loop():
     await r.flush()
     assert seen.get("recursion_limit", 25) <= 12
     assert seen.get("configurable", {}).get("max_attempts", 3) <= 2
+
+
+async def test_reflection_falls_back_to_main_model_after_small_model_invocation_failure(monkeypatch):
+    from openbot.runtime import memory as mem
+
+    models = []
+    calls = []
+
+    class StubManager:
+        def __init__(self, failing):
+            self.failing = failing
+
+        async def ainvoke(self, inp, config=None):
+            calls.append(self.failing)
+            if self.failing:
+                raise RuntimeError("small model unavailable")
+            return []
+
+    def fake_manager(model, **kwargs):
+        models.append(model)
+        return StubManager(model == "small")
+
+    monkeypatch.setattr(mem, "create_memory_store_manager", fake_manager)
+
+    class Svc:
+        store = InMemoryStore()
+        model_factory = staticmethod(lambda bot: "main")
+        small_model_factory = staticmethod(lambda bot: "small")
+
+    reflector = MemoryReflector(Svc(), delay=10)
+    bot = Actor(id="b1", kind="bot", handle="b", name="B")
+    reflector.schedule(bot, [HumanMessage("remember this")], thread_id="t1")
+    await reflector.flush()
+
+    assert models == ["small", "main"]
+    assert calls == [True, False]

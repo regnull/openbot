@@ -94,6 +94,8 @@ TUNABLES: dict[str, Tunable] = {
     "prompt_caching": Tunable("Model routing", "Prompt caching", "Add cache breakpoints to every Anthropic model call."),
     "direct_anthropic": Tunable("Model routing", "Direct Anthropic routing",
         "Send OpenRouter anthropic/... models straight to Anthropic when a key is configured, so caching covers tool results too."),
+    "small_model": Tunable("Model routing", "Small model",
+        "Model used for thread titles and memory reflection. Leave empty to choose a cheap model for each bot's provider."),
     # --- Telegram --------------------------------------------------------------------------------------------
     "telegram_bot_token": Tunable("Telegram", "Bot token",
         "Telegram Bot API token (format: 123456:ABC-DEF…). Overrides the TELEGRAM_BOT_TOKEN env var.", secret=True),

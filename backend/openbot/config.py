@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     bot_model: str | None = None
     openrouter_model: str | None = None
+    small_model: str | None = None
     # Prefer these OpenRouter upstreams (CSV, e.g. `z-ai,fireworks`), falling back to others only when they cannot
     # serve a request. Each upstream has its own prompt cache; staying on one keeps it warm.
     openrouter_provider_order: Annotated[list[str], NoDecode] = []

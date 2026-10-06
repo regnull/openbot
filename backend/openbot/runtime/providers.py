@@ -180,6 +180,37 @@ def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
     return provider_chat_model(provider, model, settings, bot.model_settings)
 
 
+def small_model_name(settings: Settings, provider: str, main_model: str) -> str:
+    # Adapted from OpenCode's getSmallModel (MIT-licensed): choose a provider-local cheap model,
+    # while preserving an explicit setting and the bot's model as the final fallback.
+    if settings.small_model:
+        return settings.small_model
+    if provider == "openai":
+        return "gpt-5-mini"
+    if provider == "anthropic":
+        return "claude-haiku-4-5-20251001"
+    if provider == "openrouter":
+        return "openai/gpt-4o-mini"
+    if provider == OLLAMA:
+        return settings.ollama_model
+    if provider == "xai":
+        return "grok-4.5"
+    return main_model
+
+
+def small_chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
+    provider, main_model = effective_bot_profile(bot, settings)
+    model = small_model_name(settings, provider, main_model)
+    try:
+        small = provider_chat_model(provider, model, settings)
+        if model == main_model or not hasattr(small, "with_fallbacks"):
+            return small
+        main = provider_chat_model(provider, main_model, settings, bot.model_settings)
+        return small.with_fallbacks([main])
+    except (ValueError, RuntimeError):
+        return provider_chat_model(provider, main_model, settings, bot.model_settings)
+
+
 _WEB_SEARCH_TOOL = {
     "openai": {"type": "web_search_preview"},
     "anthropic": {"type": "web_search_20250305", "name": "web_search"},

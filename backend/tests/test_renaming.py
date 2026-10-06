@@ -42,6 +42,7 @@ async def gated_thread(services, posts):
     await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
     gate, calls = asyncio.Event(), []
     services.model_factory = lambda actor: GatedModel(messages=iter(()), gate=gate, calls=calls)
+    services.small_model_factory = services.model_factory
     async with services.session_factory() as session:
         you = await human_actor(session)
         thread = await create_thread(services, session, title="Initial", handles=["eng"], created_by=you)
@@ -58,6 +59,7 @@ async def stored(services, thread):
 async def test_auto_rename_after_third_message_and_only_once(services, scripts):
     await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
     scripts["chief_of_staff"] = [ai('  "Purposeful title"  ')]
+    services.small_model_factory = lambda actor: ScriptedChatModel(messages=iter(scripts[actor.handle]))
     async with services.bus.subscribe(None) as queue:
         async with services.session_factory() as session:
             you = await human_actor(session)
@@ -95,6 +97,41 @@ async def test_auto_rename_claim_remains_consumed_when_provider_fails(services, 
     # The failure happens in a background task now; it must still reach the log.
     [record] = [r for r in caplog.records if "automatic thread rename failed" in r.getMessage()]
     assert "provider unavailable" in str(record.exc_info[1])
+
+
+async def test_auto_rename_falls_back_to_main_model_after_small_model_invocation_failure(services, scripts):
+    await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
+    scripts["chief_of_staff"] = [RuntimeError("small model unavailable")]
+    main_calls = []
+
+    def main_factory(actor):
+        main_calls.append(actor.handle)
+        return ScriptedChatModel(messages=iter([ai("Fallback title")]))
+
+    services.model_factory = main_factory
+    services.small_model_factory = lambda actor: ScriptedChatModel(messages=iter(scripts[actor.handle]))
+    async with services.session_factory() as session:
+        you = await human_actor(session)
+        thread = await create_thread(services, session, title="Initial", handles=["eng"], created_by=you)
+        for content in ("first", "second", "third"):
+            await post_message(services, session, thread_id=thread.id, sender=you, content=content)
+    await finish_renames(services)
+    renamed = await stored(services, thread)
+    assert renamed.title == "Fallback title"
+    assert main_calls == ["chief_of_staff"]
+
+
+async def test_auto_rename_uses_main_factory_when_small_factory_is_unavailable(services, scripts):
+    await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
+    scripts["chief_of_staff"] = [ai("Main factory title")]
+    del services.small_model_factory
+    async with services.session_factory() as session:
+        you = await human_actor(session)
+        thread = await create_thread(services, session, title="Initial", handles=["eng"], created_by=you)
+        for content in ("first", "second", "third"):
+            await post_message(services, session, thread_id=thread.id, sender=you, content=content)
+    await finish_renames(services)
+    assert (await stored(services, thread)).title == "Main factory title"
 
 
 async def test_post_does_not_wait_for_the_title_model(services):

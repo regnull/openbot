@@ -22,6 +22,7 @@ class Services:
     runner: Any = None         # Runner
     reflector: Any = None      # MemoryReflector
     model_factory: Callable[[Any], Any] | None = None  # (Actor) -> BaseChatModel
+    small_model_factory: Callable[[Any], Any] | None = None  # (Actor) -> BaseChatModel
     http_client: Any = None    # httpx.AsyncClient for webhook delivery
     model_catalog: Any = None  # runtime.model_catalog.ModelCatalog (models.dev cache)
     mcp: Any = None            # McpManager
