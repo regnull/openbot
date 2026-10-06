@@ -67,6 +67,14 @@ describe("OpenRouter provider filtering", () => {
   });
 });
 
+describe("filterConfiguredProviders", () => {
+  it("keeps the OpenRouter catalog available when only an OpenRouter key is configured", () => {
+    const models = [model("openai/gpt-5"), model("anthropic/claude"), model("bare")];
+    expect(filterConfiguredProviders(models, [{ id: "openrouter", configured: true, models: [], default_model: "" }]).map((m) => m.id))
+      .toEqual(["openai/gpt-5", "anthropic/claude", "bare"]);
+  });
+});
+
 describe("formatting", () => {
   it("formats cost per million tokens", () => {
     expect(formatCost({ cost_input: 1.25, cost_output: 10 })).toBe("$1.25 / $10 per M tokens");

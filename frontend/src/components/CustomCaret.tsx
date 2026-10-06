@@ -48,6 +48,15 @@ export default function CustomCaret() {
       raf = 0;
       if (!active) return;
 
+      const rect = active.getBoundingClientRect();
+      const modalOpen = document.querySelector('[role="dialog"][aria-modal="true"]');
+      const inViewport = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+      if (modalOpen || !inViewport) {
+        overlay.style.display = "none";
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+
       const m = getCaretMetrics(active);
       if (!m) {
         overlay.style.display = "none";
