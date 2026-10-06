@@ -422,6 +422,9 @@ class Runner:
                         if inc is not None:
                             log.info("run %s model call %d: prompt=%d (cache_read=%d) completion=%d", run.id, usage["model_calls"],
                                      inc["prompt_tokens"], inc["cache_read_tokens"], inc["completion_tokens"])
+                            # Persist each provider-reported turn before processing its tools. This keeps
+                            # live run/thread/bot totals current and makes a tool round visible immediately.
+                            await self._set_status(run.id, "running", usage=inc)
                         await activity.record(self.s, "run.model_call", level="debug", thread_id=run.thread_id, actor_id=run.actor_id,
                                               run_id=run.id,
                                               summary=f"model replied: {len(m.tool_calls)} tool call(s), {len(_text(m))} chars of text",
@@ -492,7 +495,7 @@ class Runner:
                           f"cache_read_tokens={usage['cache_read_tokens']} completion_tokens={usage['completion_tokens']}")
             if interrupt is not None:
                 log.info("run %s waiting_human after %.1fs (%s): %s", run.id, time.monotonic() - started, usage_line, _preview(interrupt))
-                run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id, usage=usage)
+                run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id)
                 delivered = await deliver_question(self.s, run, interrupt)
                 if not delivered:
                     # deliver_question only addresses human/external participants. A thread with none
@@ -509,7 +512,7 @@ class Runner:
                 async with self.s.session_factory() as session:
                     res = await post_message(self.s, session, thread_id=thread.id, sender=bot, content=final_text, hop=hop, run_id=run.id)
                 seq = await self._record(run, seq, "message", {"message_id": res.message.id})
-            await self._set_status(run.id, "completed", langsmith_run_id=ls_id, usage=usage)
+            await self._set_status(run.id, "completed", langsmith_run_id=ls_id)
             log.info("run %s completed in %.1fs: reply=%d chars %s langsmith_run_id=%s", run.id, time.monotonic() - started,
                      len(final_text), usage_line, ls_id)
             if bot.bot.memory_enabled and self.s.reflector is not None:
