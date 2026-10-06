@@ -86,6 +86,17 @@ it("preserves free-text ids and applies direct use without requiring a catalog r
   expect(dialog()).toBeNull();
 });
 
+it("clears the browser search when the modal closes and reopens", async () => {
+  await show(); await click(pickerInput());
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search(), "embed"); search().dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(options()).toHaveLength(1);
+  await click([...dialog()!.querySelectorAll("button")].find((button) => button.textContent?.includes("Cancel"))!);
+  await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))); });
+  await click(pickerInput());
+  expect(search().value).toBe("");
+  expect(options()).toHaveLength(catalog.models.length);
+});
+
 it("selects a row, marks it selected, and closes", async () => {
   await show({ initial: "claude-haiku-4-5" }); await click(pickerInput());
   expect(options().find((row) => row.textContent?.includes("claude-haiku-4-5"))?.getAttribute("aria-selected")).toBe("true");

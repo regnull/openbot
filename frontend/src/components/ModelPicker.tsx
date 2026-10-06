@@ -97,7 +97,12 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
     setFamily("All families");
     setSelectedUpstreams([]);
   }
+  const openPicker = () => {
+    setQuery("");
+    setOpen(true);
+  };
   const close = () => {
+    setQuery("");
     setOpen(false);
     suppressFocusOpen.current = true;
     requestAnimationFrame(() => {
@@ -157,5 +162,5 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
       </section>
     </div>, document.body);
 
-  return <div className="relative"><Input ref={inputRef} role="combobox" aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? dialogId : undefined} aria-autocomplete="none" autoComplete="off" spellCheck={false} id={id} required={required} value={value} className={`font-mono ${className}`} onFocus={() => { if (!suppressFocusOpen.current) setOpen(true); }} onClick={() => setOpen(true)} onChange={(e) => { onChange(e.target.value); setQuery(e.target.value); setOpen(true); }} onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); setOpen(true); } if (e.key === "Escape" && open) { e.preventDefault(); close(); } }} />{!known && !models.isLoading && !unconfigured && <div className="mt-1 font-sans text-[11px] text-faint">Not in the catalog; sent to the provider as typed.</div>}{dialog}</div>;
+  return <div className="relative"><Input ref={inputRef} role="combobox" aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? dialogId : undefined} aria-autocomplete="none" autoComplete="off" spellCheck={false} id={id} required={required} value={value} className={`font-mono ${className}`} onFocus={() => { if (!suppressFocusOpen.current) openPicker(); }} onClick={openPicker} onChange={(e) => { onChange(e.target.value); setQuery(e.target.value); setOpen(true); }} onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); openPicker(); } if (e.key === "Escape" && open) { e.preventDefault(); close(); } }} />{!known && !models.isLoading && !unconfigured && <div className="mt-1 font-sans text-[11px] text-faint">Not in the catalog; sent to the provider as typed.</div>}{dialog}</div>;
 }
