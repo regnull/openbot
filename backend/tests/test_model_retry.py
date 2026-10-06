@@ -147,3 +147,32 @@ def test_tunables_registered_and_coerced():
                 coerce(key, -1)
     with pytest.raises(ValueError):
         coerce("model_retry_max_attempts", -1)
+
+
+def test_connection_errors_are_retryable():
+    """A connection reset mid-stream (OpenRouter closing the socket) surfaces as a raw transport error
+    from httpx2, which the openai/anthropic SDKs use, or as the SDKs' APIConnectionError before the
+    response starts. Both are transient and carry no HTTP status."""
+    import anthropic
+    import httpx
+    import httpx2
+    import openai
+
+    req = httpx2.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    assert is_retryable(httpx2.ReadError("", request=req))
+    assert is_retryable(httpx2.RemoteProtocolError("peer closed connection", request=req))
+    assert is_retryable(httpx2.ReadTimeout("read timed out", request=req))
+    assert is_retryable(httpx.ReadError("", request=httpx.Request("POST", "https://x")))
+    assert is_retryable(openai.APIConnectionError(request=req))
+    assert is_retryable(anthropic.APIConnectionError(request=req))
+    # Configuration mistakes are not transient.
+    assert not is_retryable(httpx2.UnsupportedProtocol("bad scheme", request=req))
+
+
+async def test_read_error_mid_stream_is_retried():
+    import httpx2
+
+    req = httpx2.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    calls = {"n": 0, "outcomes": [httpx2.ReadError("", request=req), "ok"]}
+    assert await run(mw(), calls) == "ok"
+    assert calls["n"] == 2
