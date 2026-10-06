@@ -53,8 +53,9 @@ describe("sortModels and groupModels", () => {
     const ranked = model("deepseek/deepseek-v4.1-flash", { description: "coding", release_date: "2025-01-01", task_ranks: { Code: 1 } });
     const second = model("z-ai/glm-5.3-flash", { description: "coding", release_date: "2026-01-01", task_ranks: { Code: 2 } });
     const fallback = model("unknown/coder", { description: "coding", release_date: "2026-02-01" });
+    const arbitrary = model("new/provider-model", { name: "Provider Model", description: "general purpose", task_ranks: { Code: 3 } });
     expect(taskRank("Code", ranked)).toBeLessThan(taskRank("Code", second));
-    expect(groupModels([fallback, second, ranked], [], "Suggested", "newest", true)[0].models.map((m) => m.id)).toEqual([ranked.id, second.id, fallback.id]);
+    expect(groupModels([fallback, second, ranked, arbitrary], [], "Suggested", "newest", true)[0].models.map((m) => m.id)).toEqual([ranked.id, second.id, arbitrary.id, fallback.id]);
   });
 });
 

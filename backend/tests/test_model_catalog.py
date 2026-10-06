@@ -5,8 +5,8 @@ import pytest
 
 from openbot.runtime.model_catalog import (
     CATALOG_PROVIDERS,
-    OPENROUTER_RANKINGS_URL,
     MODELS_DEV_URL,
+    OPENROUTER_RANKINGS_URL,
     ModelCatalog,
     _ranking_models,
     normalize_catalog,

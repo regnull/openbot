@@ -33,7 +33,7 @@ const TASK_PATTERNS: Array<[string, RegExp]> = [
 
 export function modelTasks(m: CatalogModel): string[] {
   const text = `${m.id} ${m.name} ${m.description} ${m.family}`.toLowerCase();
-  const tasks = TASK_PATTERNS.flatMap(([task, pattern]) => (m.reasoning && task === "Reasoning") || (m.image_input && task === "Vision") || pattern.test(text) ? [task] : []);
+  const tasks = TASK_PATTERNS.flatMap(([task, pattern]) => (m.task_ranks?.[task] != null) || (m.reasoning && task === "Reasoning") || (m.image_input && task === "Vision") || pattern.test(text) ? [task] : []);
   return tasks.length ? tasks : ["General"];
 }
 
