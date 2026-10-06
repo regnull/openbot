@@ -123,6 +123,14 @@ class ModelCatalog:
         self._task: asyncio.Task | None = None
         self._prices: dict[tuple[str, str], dict[str, float | None]] = {}
 
+    @staticmethod
+    def _prices_for(provider: str, models: list[dict]) -> dict[tuple[str, str], dict[str, float | None]]:
+        return {(provider, model["id"]): {"input": model.get("cost_input"), "output": model.get("cost_output"),
+                                         "cache_read": model.get("cost_cache_read"),
+                                         "cache_write": model.get("cost_cache_write"),
+                                         "tiers": model.get("cost_tiers", [])}
+                for model in models}
+
     def price_for(self, provider: str, model_id: str) -> dict[str, float | None] | None:
         """Return cached per-token prices without doing I/O; None means unknown/stale cache."""
         row = getattr(self, "_prices", {}).get((provider, model_id))
@@ -137,6 +145,7 @@ class ModelCatalog:
             self.schedule_refresh()
             return None
         stale = utcnow() - row.fetched_at > self._ttl
+        self._prices.update(self._prices_for(provider, row.models))
         if stale:
             self.schedule_refresh()
         return CatalogResult(provider, list(row.models), row.fetched_at, stale)
@@ -162,9 +171,8 @@ class ModelCatalog:
             log.warning("model catalog refresh from %s failed: %s", self._url, e)
             return False
         now = utcnow()
-        self._prices = {(provider, model["id"]): {"input": model.get("cost_input"), "output": model.get("cost_output"),
-                                                 "cache_read": model.get("cost_cache_read"), "cache_write": model.get("cost_cache_write"), "tiers": model.get("cost_tiers", [])}
-                        for provider, models in catalog.items() for model in models}
+        self._prices = {key: value for provider, models in catalog.items()
+                        for key, value in self._prices_for(provider, models).items()}
         try:
             async with self._sessions() as session:
                 for provider, models in catalog.items():

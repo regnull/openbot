@@ -186,3 +186,16 @@ async def test_unknown_provider_and_no_http_client(services):
     assert await cat.get("openai") is None          # no client: nothing to schedule, no error
     assert cat.schedule_refresh() is None
     await cat.close()                               # nothing running: a no-op
+
+
+async def test_get_rehydrates_prices_from_persisted_catalog(services):
+    models = [{"id": "gpt-5.5", "cost_input": 1.0, "cost_output": 2.0,
+               "cost_cache_read": 0.1, "cost_cache_write": 0.2,
+               "cost_tiers": [{"tier": {"size": 1000}, "input": 3.0}]}]
+    await _seed(services, "openai", models, timedelta(hours=1))
+    cat, client = _catalog(services, _ok)
+    async with client:
+        assert await cat.get("openai") is not None
+    assert cat.price_for("openai", "gpt-5.5") == {"input": 1.0, "output": 2.0,
+                                                        "cache_read": 0.1, "cache_write": 0.2,
+                                                        "tiers": [{"tier": {"size": 1000}, "input": 3.0}]}

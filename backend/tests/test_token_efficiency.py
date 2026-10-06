@@ -135,6 +135,25 @@ async def test_usage_is_summed_logged_and_stored(settings, caplog):
                for l in lines)
 
 
+async def test_usage_is_persisted_after_each_model_return(settings):
+    usage1 = {"input_tokens": 1000, "output_tokens": 50, "total_tokens": 1050}
+    usage2 = {"input_tokens": 1200, "output_tokens": 30, "total_tokens": 1230}
+    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command="echo hi")], usage=usage1),
+                                                            ai("done", usage=usage2)]}, tool_names=["run_shell"])
+    original = services.runner._set_status
+    snapshots = []
+
+    async def capture(run_id, status, **kwargs):
+        result = await original(run_id, status, **kwargs)
+        if kwargs.get("usage"):
+            snapshots.append((result.model_calls, result.prompt_tokens, result.cost_usd))
+        return result
+
+    services.runner._set_status = capture
+    await services.runner.execute(run.id)
+    assert [(calls, prompt) for calls, prompt, _cost in snapshots] == [(1, 1000), (2, 2200)]
+
+
 async def test_usage_stays_null_when_the_model_reports_none(settings):
     services, _eng, _t, run = await make(settings, {"eng": [ai("done")]})
     await services.runner.execute(run.id)
