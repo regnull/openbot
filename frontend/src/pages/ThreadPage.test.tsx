@@ -173,6 +173,21 @@ describe("ThreadPage window re-entry", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("closes the actions menu when switching threads", async () => {
+    await mount("/threads/t1");
+    await until(() => text().includes("first reply"), "initial history");
+    const trigger = () => el.querySelector<HTMLButtonElement>('[aria-label="Thread actions"]')!;
+    await act(async () => { trigger().click(); });
+    expect(el.querySelector('[role="menu"]')).not.toBeNull();
+    await go("/threads/t2");
+    await until(() => text().includes("title-t2"), "second thread window");
+    expect(el.querySelector('[role="menu"]')).toBeNull();
+    await go("/threads/t1");
+    await until(() => text().includes("first reply"), "thread after route switch");
+    expect(el.querySelector('[role="menu"]')).toBeNull();
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("restores each thread's draft after switching away and back", async () => {
     await mount("/threads/t1");
     await until(() => text().includes("first reply"), "initial history");

@@ -37,6 +37,10 @@ export default function ThreadPage() {
   const menuVisible = menuOpen && menuThreadId === id;
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setMenuOpen(false);
+    setMenuThreadId(id);
+  }, [id]);
   useLayoutEffect(() => {
     if (!menuVisible) return;
     const onKeyDown = (event: KeyboardEvent) => {
