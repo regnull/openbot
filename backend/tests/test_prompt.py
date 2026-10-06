@@ -63,6 +63,16 @@ def test_system_prompt_contents():
     assert 'If the system does not support Markdown, sign it as "OpenBot - `@eng`".' in p
 
 
+def test_system_prompt_template_uses_only_the_supported_placeholders():
+    from string import Template
+
+    from openbot.runtime import prompt as prompt_module
+
+    actual = frozenset(Template(prompt_module.SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
+    assert actual == prompt_module._SYSTEM_PROMPT_FIELDS
+    assert "repository_instructions" not in actual
+
+
 def test_system_prompt_is_loaded_from_the_packaged_markdown_template():
     from openbot.runtime import prompt as prompt_module
 
