@@ -3,7 +3,7 @@ import type { CatalogModel } from "../api/types";
 export const CATALOG_PROVIDERS = new Set(["openai", "anthropic", "openrouter", "ollama"]);
 export const hasCatalog = (provider: string): boolean => CATALOG_PROVIDERS.has(provider);
 export interface ModelFilters { text: string; reasoning: boolean; vision: boolean }
-export type ModelSort = "newest" | "cheapest";
+export type ModelSort = "rank" | "newest" | "cheapest";
 export interface ModelGroup { label: string; models: CatalogModel[] }
 
 export function placeholderModel(id: string): CatalogModel {
@@ -22,7 +22,6 @@ const byCheapest = (a: CatalogModel, b: CatalogModel) => {
   const ca = a.cost_output ?? Number.POSITIVE_INFINITY, cb = b.cost_output ?? Number.POSITIVE_INFINITY;
   return ca === cb ? byNewest(a, b) : ca - cb;
 };
-export function sortModels(models: CatalogModel[], sort: ModelSort): CatalogModel[] { return [...models].sort(sort === "cheapest" ? byCheapest : byNewest); }
 
 const TASK_PATTERNS: Array<[string, RegExp]> = [
   ["Reasoning", /reason|think|o[13](?:[-.]|$)|r1|deepseek-r1/],
@@ -41,8 +40,13 @@ export function taskRank(task: string, m: CatalogModel): number {
   return m.task_ranks?.[task] ?? Number.POSITIVE_INFINITY;
 }
 
-function sortForTask(models: CatalogModel[], task: string, sort: ModelSort): CatalogModel[] {
-  return [...models].sort((a, b) => taskRank(task, a) - taskRank(task, b) || (sort === "cheapest" ? byCheapest(a, b) : byNewest(a, b)));
+/** Leaderboard position for `task`, or the best position across tasks when no task is given; unranked is Infinity. */
+const leaderboardRank = (m: CatalogModel, task?: string): number => task ? taskRank(task, m) : Math.min(Number.POSITIVE_INFINITY, ...Object.values(m.task_ranks ?? {}));
+export const hasRanks = (models: CatalogModel[]): boolean => models.some((m) => Object.keys(m.task_ranks ?? {}).length > 0);
+/** Sort by leaderboard rank (unranked models after, newest first), release date, or output price. */
+export function sortModels(models: CatalogModel[], sort: ModelSort, task?: string): CatalogModel[] {
+  if (sort !== "rank") return [...models].sort(sort === "cheapest" ? byCheapest : byNewest);
+  return [...models].sort((a, b) => { const ra = leaderboardRank(a, task), rb = leaderboardRank(b, task); return ra === rb ? byNewest(a, b) : ra - rb; });
 }
 
 const vendorOf = (id: string): string => { const slash = id.indexOf("/"); return slash < 0 ? "" : id.slice(0, slash); };
@@ -55,12 +59,7 @@ export function filterByVendor(models: CatalogModel[], vendor: string): CatalogM
   return vendor ? models.filter((m) => { const v = vendorOf(m.id); return !v || v === vendor; }) : models;
 }
 
-export function groupModels(models: CatalogModel[], suggested: string[], suggestedLabel: string, sort: ModelSort, taskMode = false): ModelGroup[] {
-  if (taskMode) {
-    const groups = new Map<string, CatalogModel[]>();
-    for (const m of models) for (const task of modelTasks(m)) groups.set(task, [...(groups.get(task) ?? []), m]);
-    return [...groups].map(([label, ms]) => ({ label, models: sortForTask(ms, label, sort) }));
-  }
+export function groupModels(models: CatalogModel[], suggested: string[], suggestedLabel: string, sort: ModelSort): ModelGroup[] {
   const sorted = sortModels(models, sort);
   const byId = new Map(sorted.map((m) => [m.id, m]));
   const pinned = suggested.flatMap((id) => { const m = byId.get(id); return m ? [m] : []; });

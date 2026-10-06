@@ -183,3 +183,35 @@ it("shows the full OpenRouter catalog regardless of which direct provider keys a
   await act(async () => { vendor.value = "google"; vendor.dispatchEvent(new Event("change", { bubbles: true })); });
   expect(options().map((row) => row.querySelector(".font-mono")?.textContent)).toEqual(["google/gemini-3"]);
 });
+
+it("sorts a task by leaderboard rank by default and cycles through newest and cheapest", async () => {
+  vi.spyOn(Api, "getModels").mockResolvedValue({ ...catalog, provider: "openrouter", models: [
+    model("a/new-coder", { description: "coding", release_date: "2026-09-01", cost_output: 9 }),
+    model("b/top-coder", { release_date: "2025-01-01", cost_output: 5, task_ranks: { Code: 1 } }),
+    model("c/cheap-coder", { description: "coding", release_date: "2026-01-01", cost_output: 1, task_ranks: { Code: 2 } }),
+  ] });
+  await show({ provider: "openrouter" }); await click(pickerInput());
+  await click([...dialog()!.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Code"))!);
+  const ids = () => options().map((row) => row.querySelector(".font-mono")?.textContent);
+  const sortButton = () => dialog()!.querySelector<HTMLButtonElement>("button[aria-label='Sort models']")!;
+  expect(sortButton().textContent).toBe("Top ranked");
+  expect(ids()).toEqual(["b/top-coder", "c/cheap-coder", "a/new-coder"]);
+  await click(sortButton());
+  expect(sortButton().textContent).toBe("Newest");
+  expect(ids()).toEqual(["a/new-coder", "c/cheap-coder", "b/top-coder"]);
+  await click(sortButton());
+  expect(sortButton().textContent).toBe("Cheapest");
+  expect(ids()).toEqual(["c/cheap-coder", "b/top-coder", "a/new-coder"]);
+  await click(sortButton());
+  expect(sortButton().textContent).toBe("Top ranked");
+});
+
+it("offers no rank sort when the catalog has no leaderboard data", async () => {
+  await show(); await click(pickerInput());
+  const sortButton = dialog()!.querySelector<HTMLButtonElement>("button[aria-label='Sort models']")!;
+  expect(sortButton.textContent).toBe("Newest");
+  await click(sortButton);
+  expect(sortButton.textContent).toBe("Cheapest");
+  await click(sortButton);
+  expect(sortButton.textContent).toBe("Newest");
+});

@@ -40,6 +40,14 @@ def test_ranking_payload_is_deterministic_and_ignores_invalid_values():
     assert _ranking_models(payload) == {"a-model": 1, "z-model": 2, "negative": 3}
 
 
+def test_ranking_sums_every_day_and_maps_dated_slugs_to_catalog_ids():
+    payload = {"data": [
+        {"x": "2026-10-04", "ys": {"openai/gpt-6-20260922": 5, "tencent/hy3-20260706:free": 9, "Others": 99}},
+        {"x": "2026-10-05", "ys": {"openai/gpt-6-20260922": 6, "google/gemini-2.5-flash": 4, "tencent/hy3-20260801:free": 3}},
+    ]}
+    assert _ranking_models(payload) == {"tencent/hy3:free": 1, "openai/gpt-6": 2, "google/gemini-2.5-flash": 3}
+
+
 def test_effort_levels_come_only_from_the_effort_option():
     by_id = {m["id"]: m for m in normalize_catalog(SAMPLE)["anthropic"]}
     assert by_id["claude-sonnet-4-5"]["effort_levels"] == []   # budget_tokens only
