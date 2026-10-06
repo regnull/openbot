@@ -82,7 +82,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
         }} />
       {!known && !models.isLoading && !unconfigured && <div className="mt-1 font-sans text-[11px] text-faint">Not in the catalog; sent to the provider as typed.</div>}
       {open && (
-        <div id={listId} role="listbox" aria-label="Models" onMouseDown={(e) => e.preventDefault()}
+        <div role="dialog" aria-label="Model picker" onMouseDown={(e) => e.preventDefault()}
           className="absolute left-0 right-0 top-full z-10 mt-1 max-h-80 overflow-y-auto rounded-ui border border-line bg-surface py-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
           {unconfigured ? (
             <div className="px-3 py-2 font-sans text-[13px] text-muted">{notConfiguredText(provider)}</div>
@@ -100,6 +100,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
               </div>
               {models.isLoading && <div className="px-3 py-2"><Spinner /></div>}
               {!models.isLoading && flat.length === 0 && <div className="px-3 py-2 font-sans text-[13px] text-muted">No matching models.</div>}
+              <div id={listId} role="listbox" aria-label="Models">
               {groups.map((g) => (
                 <div key={g.label} data-group={g.label}>
                   <div className="px-3 pb-0.5 pt-2 font-sans text-[11px] font-medium uppercase tracking-wide text-faint">{g.label}</div>
@@ -130,6 +131,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
                   })}
                 </div>
               ))}
+              </div>
             </>
           )}
         </div>

@@ -3,7 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from openbot.runtime.model_catalog import CATALOG_PROVIDERS, normalize_catalog
+from openbot.runtime.model_catalog import (
+    CATALOG_PROVIDERS,
+    OPENROUTER_RANKINGS_URL,
+    MODELS_DEV_URL,
+    ModelCatalog,
+    _ranking_models,
+    normalize_catalog,
+)
 
 SAMPLE = json.loads((Path(__file__).parent / "fixtures" / "models_dev_sample.json").read_text())
 
@@ -26,6 +33,11 @@ def test_normalized_record_shape():
         "reasoning": True, "effort_levels": ["low", "medium", "high", "xhigh", "max"], "image_input": True,
         "context": 200000, "output": 64000, "cost_input": 5.0, "cost_output": 25.0, "cost_cache_read": 0.5, "cost_cache_write": None, "cost_tiers": [], "release_date": "2026-03-01", "status": None,
     }
+
+
+def test_ranking_payload_is_deterministic_and_ignores_invalid_values():
+    payload = {"data": [{"ys": {"z-model": 3, "a-model": 3, "bad": "n/a", "negative": -1}}]}
+    assert _ranking_models(payload) == {"a-model": 1, "z-model": 2, "negative": 3}
 
 
 def test_effort_levels_come_only_from_the_effort_option():
@@ -66,7 +78,6 @@ import httpx
 from sqlalchemy import select
 
 from openbot.db.models import ModelCatalogRow, utcnow
-from openbot.runtime.model_catalog import MODELS_DEV_URL, ModelCatalog
 
 
 def _catalog(services, handler) -> tuple[ModelCatalog, httpx.AsyncClient]:
@@ -102,10 +113,14 @@ async def test_refresh_writes_one_row_per_provider(services):
 
 async def test_get_on_empty_db_returns_none_and_schedules_one_refresh(services):
     calls = 0
+    catalog_calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal calls
+        nonlocal calls, catalog_calls
         calls += 1
+        if str(request.url).startswith(OPENROUTER_RANKINGS_URL):
+            return httpx.Response(200, json={"data": [{"ys": {"z-ai/glm-5.3-flash": 1}}]})
+        catalog_calls += 1
         return httpx.Response(200, json=SAMPLE)
 
     cat, client = _catalog(services, handler)
@@ -113,7 +128,8 @@ async def test_get_on_empty_db_returns_none_and_schedules_one_refresh(services):
         assert await cat.get("openai") is None
         assert await cat.get("anthropic") is None      # second miss while the first fetch is in flight
         await cat.schedule_refresh()                    # returns the in-flight task; awaiting it waits for the fetch
-        assert calls == 1
+        assert catalog_calls == 1
+        assert calls == 3
         got = await cat.get("openai")
     assert got is not None and got.stale is False and got.models[0]["id"] == "gpt-5.5"
 

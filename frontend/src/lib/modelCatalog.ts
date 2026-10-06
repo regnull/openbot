@@ -24,11 +24,6 @@ const byCheapest = (a: CatalogModel, b: CatalogModel) => {
 };
 export function sortModels(models: CatalogModel[], sort: ModelSort): CatalogModel[] { return [...models].sort(sort === "cheapest" ? byCheapest : byNewest); }
 
-/** Task labels mirror OpenRouter's usage-ranked collections, with capability metadata as a fallback. */
-const TASK_LEADERBOARD_RANKS: Record<string, Partial<Record<string, number>>> = {
-  Code: { "deepseek/deepseek-v4.1-flash": 1, "z-ai/glm-5.3-flash": 2, "openai/gpt-5.6-luna": 3, "xiaomi/mimo-v2.5": 4 },
-  Vision: { "deepseek/deepseek-v4.1-flash": 1, "z-ai/glm-5.3-flash": 2, "openai/gpt-5.6-luna": 3 },
-};
 const TASK_PATTERNS: Array<[string, RegExp]> = [
   ["Reasoning", /reason|think|o[13](?:[-.]|$)|r1|deepseek-r1/],
   ["Vision", /vision|vl|visual|gemini|qwen-vl/],
@@ -43,7 +38,7 @@ export function modelTasks(m: CatalogModel): string[] {
 }
 
 export function taskRank(task: string, m: CatalogModel): number {
-  return TASK_LEADERBOARD_RANKS[task]?.[m.id] ?? Number.POSITIVE_INFINITY;
+  return m.task_ranks?.[task] ?? Number.POSITIVE_INFINITY;
 }
 
 function sortForTask(models: CatalogModel[], task: string, sort: ModelSort): CatalogModel[] {

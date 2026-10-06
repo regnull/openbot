@@ -50,8 +50,8 @@ describe("sortModels and groupModels", () => {
     expect(groups).toHaveLength(1);
   });
   it("ranks task groups by the task leaderboard, then uses the selected sort as a fallback", () => {
-    const ranked = model("deepseek/deepseek-v4.1-flash", { description: "coding", release_date: "2025-01-01" });
-    const second = model("z-ai/glm-5.3-flash", { description: "coding", release_date: "2026-01-01" });
+    const ranked = model("deepseek/deepseek-v4.1-flash", { description: "coding", release_date: "2025-01-01", task_ranks: { Code: 1 } });
+    const second = model("z-ai/glm-5.3-flash", { description: "coding", release_date: "2026-01-01", task_ranks: { Code: 2 } });
     const fallback = model("unknown/coder", { description: "coding", release_date: "2026-02-01" });
     expect(taskRank("Code", ranked)).toBeLessThan(taskRank("Code", second));
     expect(groupModels([fallback, second, ranked], [], "Suggested", "newest", true)[0].models.map((m) => m.id)).toEqual([ranked.id, second.id, fallback.id]);

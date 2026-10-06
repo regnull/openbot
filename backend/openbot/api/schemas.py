@@ -556,6 +556,7 @@ class CatalogModelOut(BaseModel):
     cost_tiers: list[dict[str, Any]] = []
     release_date: str = ""
     status: str | None = None
+    task_ranks: dict[str, int] = Field(default_factory=dict)
 
 
 class ModelsOut(BaseModel):
