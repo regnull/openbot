@@ -8,11 +8,11 @@ import { isBackendUnavailable } from "../api/errors";
 import { useBusEvents } from "../api/sse";
 import Composer from "../components/Composer";
 import MessageList from "../components/MessageList";
+import ThreadOdometer from "../components/ThreadOdometer";
 import { Button, ErrorText, IconButton, OfflineNotice, Spinner } from "../components/ui";
 import { ChevronLeftIcon, MoreIcon } from "../components/icons";
 import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
 import { emptyThreadState, hydrate, mergeRun, missedRunEnds, openRunIds, reduceThreadEvent, type ThreadState } from "../lib/threadState";
-import { threadUsageLabel } from "../lib/threadUsage";
 import { setOpenBotTitle } from "../lib/documentTitle";
 
 export default function ThreadPage() {
@@ -104,8 +104,8 @@ export default function ThreadPage() {
   // locally-reduced thread state behind. Refetch the thread instead of trusting it.
   useBusEvents(id, (e) => {
     setState((s) => reduceThreadEvent(s, e));
-    // Usage is written when a run leaves `running`, so that is when the header totals move.
-    if (e.event === "run.updated" && e.data.status !== "running") qc.invalidateQueries({ queryKey: ["thread-usage", id] });
+    // Usage is persisted incrementally, including while a run remains running.
+    if (e.event === "run.updated") qc.invalidateQueries({ queryKey: ["thread-usage", id] });
   }, () => {
     qc.invalidateQueries({ queryKey: ["thread", id] });
     qc.invalidateQueries({ queryKey: ["thread-usage", id] });
@@ -182,7 +182,8 @@ export default function ThreadPage() {
   }
   const t = detail.data;
   const displayedTitle = state.title ?? t.title;
-  const usageLine = usage.data ? threadUsageLabel(usage.data) : null;
+  const usageData = usage.data;
+  const costFormatter = (value: number) => value.toFixed(4);
   const handles = [...new Set([
     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
     ...(bots.data ?? []).filter((b) => b.enabled).map((b) => b.handle),
@@ -204,7 +205,12 @@ export default function ThreadPage() {
           <p className="flex flex-wrap items-baseline gap-x-3 text-[11px] leading-4 text-muted">
             <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
             <span className="truncate"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
-            {usageLine && <span className="truncate" title="Tokens across every run in this thread">{usageLine}</span>}
+            <span className="thread-header-counters" role="group" aria-label="Thread usage">
+              <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
+              <ThreadOdometer label="in" value={usageData?.prompt_tokens} suffix=" tok" loading={usage.isLoading} />
+              <ThreadOdometer label="out" value={usageData?.completion_tokens} suffix=" tok" loading={usage.isLoading} />
+              <ThreadOdometer label="cost" value={usageData?.cost_usd} prefix="$" format={costFormatter} loading={usage.isLoading} />
+            </span>
           </p>
         </div>
         <label className="hidden shrink-0 items-center gap-1.5 text-[11px] text-muted sm:flex">default

@@ -55,6 +55,7 @@ describe("ThreadPage window re-entry", () => {
   // bus published is persisted first (see delivery), so once it is emitted it stays in every
   // later response — the fake must behave the same way or it manufactures bugs.
   let server: Record<string, Message[]>;
+  let usageTotals: { model_calls: number; prompt_tokens: number; completion_tokens: number; cache_read_tokens: number; cost_usd: number };
   const navRef: { current: null | ((to: string) => void) } = { current: null };
 
   const text = (): string => el.textContent ?? "";
@@ -105,12 +106,13 @@ describe("ThreadPage window re-entry", () => {
     Element.prototype.scrollTo = () => {};
     getThreadCalls = [];
     server = { t1: [m1], t2: [] };
+    usageTotals = { model_calls: 0, prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0, cost_usd: 0 };
     runStatus.r1 = "running";
     fake.api.getThread = (id: string) => {
       getThreadCalls.push(id);
       return Promise.resolve(detail(id, [...(server[id] ?? [])])) as never;
     };
-    fake.api.getThreadUsage = () => Promise.resolve({ model_calls: 0, prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0 }) as never;
+    fake.api.getThreadUsage = () => Promise.resolve(usageTotals) as never;
     fake.api.listBots = () => Promise.resolve([{ id: "b1", name: "Bot", handle: "bot", enabled: true, icon: null } as unknown as Bot]) as never;
     fake.api.ackThread = () => Promise.resolve({ acked: 0 }) as never;
     fake.api.getRun = (id: string) => Promise.resolve({ ...run(id, runStatus[id] ?? "running"), events: [] }) as never;
@@ -121,6 +123,27 @@ describe("ThreadPage window re-entry", () => {
   });
   // A page left mounted keeps its window Esc listener, which would cancel runs in later tests.
   afterEach(() => { act(() => root.unmount()); el.remove(); });
+
+  it("renders and refreshes live usage counters", async () => {
+    await mount("/threads/t1");
+    await until(() => text().includes("first reply"), "initial history");
+    expect(el.querySelector('[aria-label="Thread usage"]')?.getAttribute("role")).toBe("group");
+    expect(el.querySelector('[aria-label="calls: 0"]')?.getAttribute("role")).toBe("img");
+    expect(el.querySelector('[aria-label="calls: 0"]')).toBeTruthy();
+    expect(el.querySelector('[aria-label="in: 0 tok"]')).toBeTruthy();
+    expect(el.querySelector('[aria-label="out: 0 tok"]')).toBeTruthy();
+    expect(el.querySelector('[aria-label="cost: $0.0000"]')).toBeTruthy();
+
+    usageTotals = { model_calls: 2, prompt_tokens: 12345, completion_tokens: 678, cache_read_tokens: 0, cost_usd: 0.0123 };
+    await act(async () => {
+      sse.onEvent?.({ event: "run.updated", thread_id: "t1", data: { ...run("r1", "running"), status: "running" } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await until(() => !!el.querySelector('[aria-label="calls: 2"]'), "updated usage counters");
+    expect(el.querySelector('[aria-label="in: 12,345 tok"]')).toBeTruthy();
+    expect(el.querySelector('[aria-label="out: 678 tok"]')).toBeTruthy();
+    expect(el.querySelector('[aria-label="cost: $0.0123"]')).toBeTruthy();
+  });
 
   it("restores each thread's draft after switching away and back", async () => {
     await mount("/threads/t1");
