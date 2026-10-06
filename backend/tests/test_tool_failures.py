@@ -5,7 +5,12 @@ from sqlalchemy import select
 
 from openbot.db.models import ActivityLog, Run
 from openbot.mcp.manager import _wrap
-from openbot.runtime.tool_failures import REPEAT_NOTE, ToolFailureMiddleware, is_failure
+from openbot.runtime.tool_failures import (
+    REPEAT_CALL_NOTE,
+    REPEAT_NOTE,
+    ToolFailureMiddleware,
+    is_failure,
+)
 from tests.fakes import ai, call
 from tests.test_runner import events, get, make, messages
 
@@ -69,6 +74,25 @@ def test_the_stop_only_counts_identical_failures():
     assert mw._check({"messages": same})["jump_to"] == "end"
     other_error = [first, ToolMessage("error: e", tool_call_id="a"), second, ToolMessage("error: f", tool_call_id="b")]
     assert mw._check({"messages": other_error}) is None
+
+
+def test_repeated_successful_calls_are_warned_then_stopped():
+    mw = ToolFailureMiddleware(max_repeats=3)
+    calls = [AIMessage("", tool_calls=[call("t", cid=str(i), x=1)]) for i in range(1, 5)]
+    messages = [calls[0], ToolMessage("one", tool_call_id="1"), calls[1], ToolMessage("two", tool_call_id="2")]
+    request = type("Request", (), {"tool_call": call("t", cid="3", x=1), "state": {"messages": messages}})()
+    result = mw._mark(request, ToolMessage("three", tool_call_id="3"))
+    assert REPEAT_CALL_NOTE in result.content
+    continued = messages + [calls[2], result, calls[3], ToolMessage("four", tool_call_id="4")]
+    assert mw._check({"messages": continued})["jump_to"] == "end"
+
+
+def test_repeated_call_sequence_resets_for_a_different_tool_or_arguments():
+    mw = ToolFailureMiddleware(max_repeats=3)
+    first = AIMessage("", tool_calls=[call("t", cid="a", x=1)])
+    second = AIMessage("", tool_calls=[call("t", cid="b", x=2)])
+    messages = [first, ToolMessage("one", tool_call_id="a"), second, ToolMessage("two", tool_call_id="b")]
+    assert mw._check({"messages": messages}) is None
 
 
 async def test_mcp_server_errors_reach_the_model_as_error_results():
