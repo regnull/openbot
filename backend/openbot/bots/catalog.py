@@ -69,6 +69,15 @@ CATALOG: tuple[dict, ...] = (
         "instruction_file": "qa.md",
         "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
     },
+    {
+        "id": "frontend_designer",
+        "handle": "frontend_designer",
+        "name": "Frontend Designer",
+        "description": "Creates cohesive, accessible frontend direction and implementation-ready UI guidance.",
+        "icon": "palette",
+        "instruction_file": "frontend_designer.md",
+        "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
+    },
 )
 
 CATALOG_BY_ID = {entry["id"]: entry for entry in CATALOG}
