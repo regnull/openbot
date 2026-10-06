@@ -195,37 +195,44 @@ export default function ThreadPage() {
   );
   return (
     <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-4xl flex-col md:h-[calc(100vh-3rem)]">
-      {/* Status line: what this thread is, who is in it, where its tools run, what it has cost. */}
-      <header className="thread-header sticky top-0 z-10 flex min-h-12 items-center gap-2 border-b border-line bg-canvas/95 pb-2.5 backdrop-blur">
-        <Link to="/threads" aria-label="Back to threads" title="Threads" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-ui text-muted hover:bg-sunken hover:text-fg">
-          <ChevronLeftIcon className="h-4 w-4" />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-semibold">{displayedTitle || "Untitled thread"}</h1>
-          <p className="flex flex-wrap items-baseline gap-x-3 text-[11px] leading-4 text-muted">
-            <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
-            <span className="truncate"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
-            <span className="thread-header-counters" role="group" aria-label="Thread usage">
-              <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
-              <ThreadOdometer label="in" value={usageData?.prompt_tokens} suffix=" tok" loading={usage.isLoading} />
-              <ThreadOdometer label="out" value={usageData?.completion_tokens} suffix=" tok" loading={usage.isLoading} />
-              <ThreadOdometer label="cost" value={usageData?.cost_usd} prefix="$" format={costFormatter} loading={usage.isLoading} />
-            </span>
-          </p>
-        </div>
-        <label className="hidden shrink-0 items-center gap-1.5 text-[11px] text-muted sm:flex">default
-          {defaultSelect("h-8 px-1.5")}
-        </label>
-        <div className="relative" ref={menuRef}>
-          <IconButton ref={menuButtonRef} aria-label="Thread actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((open) => !open)}>
-            <MoreIcon className="h-4 w-4" />
-          </IconButton>
-          {menuOpen && <div role="menu" className="absolute right-0 top-10 z-20 min-w-48 rounded-ui border border-line bg-surface p-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
-            <label className="flex items-center justify-between gap-3 px-3 py-2 text-[13px] sm:hidden">Default bot
-              {defaultSelect("h-8 max-w-32 px-1.5")}
+      <header className="thread-header sticky top-0 z-10 border-b border-line bg-canvas/95 backdrop-blur">
+        <div className="thread-header-main flex min-w-0 items-start gap-2">
+          <Link to="/threads" aria-label="Back to threads" title="Back to threads" className="thread-header-back inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-ui border border-transparent text-muted hover:border-line hover:bg-sunken hover:text-fg">
+            <ChevronLeftIcon className="h-4 w-4" />
+          </Link>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <p className="thread-header-kicker">Active thread</p>
+            <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]" title={displayedTitle || "Untitled thread"}>{displayedTitle || "Untitled thread"}</h1>
+            <div className="thread-header-context flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] leading-4 text-muted">
+              <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ") || "No participants yet"}</span>
+              <span className="truncate"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
+            </div>
+          </div>
+          <div className="thread-header-controls flex shrink-0 items-center gap-1.5">
+            <label className="hidden items-center gap-1.5 text-[11px] text-muted sm:flex">default
+              {defaultSelect("h-8 px-1.5")}
             </label>
-            <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm("Delete thread?")) del.mutate(); }} className="h-9 w-full rounded-ui px-3 text-left text-[13px] text-danger hover:bg-danger/10">Delete thread</button>
-          </div>}
+            <div className="relative" ref={menuRef}>
+              <IconButton ref={menuButtonRef} aria-label="Thread actions" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((open) => !open)}>
+                <MoreIcon className="h-4 w-4" />
+              </IconButton>
+              {menuOpen && <div role="menu" className="absolute right-0 top-10 z-20 min-w-48 rounded-ui border border-line bg-surface p-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
+                <label className="flex items-center justify-between gap-3 px-3 py-2 text-[13px] sm:hidden">Default bot
+                  {defaultSelect("h-8 max-w-32 px-1.5")}
+                </label>
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm("Delete thread?")) del.mutate(); }} className="h-9 w-full rounded-ui px-3 text-left text-[13px] text-danger hover:bg-danger/10">Delete thread</button>
+              </div>}
+            </div>
+          </div>
+        </div>
+        <div className="thread-header-footer">
+          <span className="thread-header-metrics-label">Usage</span>
+          <span className="thread-header-counters" role="group" aria-label="Thread usage">
+            <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
+            <ThreadOdometer label="in" value={usageData?.prompt_tokens} suffix=" tok" loading={usage.isLoading} />
+            <ThreadOdometer label="out" value={usageData?.completion_tokens} suffix=" tok" loading={usage.isLoading} />
+            <ThreadOdometer label="cost" value={usageData?.cost_usd} prefix="$" format={costFormatter} loading={usage.isLoading} />
+          </span>
         </div>
       </header>
       {/* The thinking placeholder is rendered inline in MessageList, not as a separate banner. */}
