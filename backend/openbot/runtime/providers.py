@@ -202,7 +202,11 @@ def small_chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
     provider, main_model = effective_bot_profile(bot, settings)
     model = small_model_name(settings, provider, main_model)
     try:
-        return provider_chat_model(provider, model, settings)
+        small = provider_chat_model(provider, model, settings)
+        if model == main_model or not hasattr(small, "with_fallbacks"):
+            return small
+        main = provider_chat_model(provider, main_model, settings, bot.model_settings)
+        return small.with_fallbacks([main])
     except (ValueError, RuntimeError):
         return provider_chat_model(provider, main_model, settings, bot.model_settings)
 

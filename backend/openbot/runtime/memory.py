@@ -189,11 +189,28 @@ class MemoryReflector:
             return
         bot, messages = item
         try:
-            # trustcall loops extract -> validate_or_retry -> extract whenever a model call yields no AI
-            # message (a provider error, say) without counting an attempt, so an unhealthy upstream spun
-            # until LangGraph's default limit of 25. Reflection is best-effort background work: cap it.
-            await self.make_manager(bot).ainvoke({"messages": messages},
-                                                 config={"recursion_limit": 12, "configurable": {"max_attempts": 2}})
+            try:
+                await self.make_manager(bot).ainvoke(
+                    {"messages": messages},
+                    config={"recursion_limit": 12, "configurable": {"max_attempts": 2}},
+                )
+            except Exception:
+                small_factory = getattr(self.services, "small_model_factory", None)
+                if not small_factory or small_factory is self.services.model_factory:
+                    raise
+                model = self.services.model_factory(bot)
+                manager = create_memory_store_manager(
+                    model,
+                    namespace=bot_namespace(bot.id),
+                    store=ReflectionMemoryStore(self.services.store),
+                    instructions=REFLECTION_INSTRUCTIONS,
+                    enable_inserts=True,
+                    enable_deletes=False,
+                )
+                await manager.ainvoke(
+                    {"messages": messages},
+                    config={"recursion_limit": 12, "configurable": {"max_attempts": 2}},
+                )
         except Exception:
             log.exception("memory reflection failed for bot %s in thread %s", bot.handle, key[1])
 

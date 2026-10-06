@@ -139,6 +139,38 @@ def test_small_chat_model_uses_small_model_and_falls_back_to_main(monkeypatch):
     assert calls == ["unavailable", "main"]
 
 
+
+def test_small_chat_model_falls_back_when_invocation_fails(monkeypatch):
+    class Model:
+        def __init__(self, name, error=False):
+            self.name = name
+            self.error = error
+
+        def with_fallbacks(self, fallbacks):
+            primary, fallback = self, fallbacks[0]
+
+            class Combined:
+                def invoke(self, value):
+                    if primary.error:
+                        return fallback.invoke(value)
+                    return primary.invoke(value)
+
+            return Combined()
+
+        def invoke(self, value):
+            if self.error:
+                raise RuntimeError("small model unavailable during invocation")
+            return self.name
+
+    def build(provider, model, settings, model_settings=None):
+        return Model(model, error=model == "small")
+
+    monkeypatch.setattr("openbot.runtime.providers.provider_chat_model", build)
+    model = small_chat_model(BotProfile(provider="openai", model="main", model_settings={}),
+                             s(openai_api_key="k", small_model="small"))
+    assert model.invoke("prompt") == "main"
+
+
 def test_cloud_bot_without_its_providers_key_falls_back_to_openrouter():
     st = s(openrouter_api_key="k", bot_model="google/gemini-2.0-flash-001")
     m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={}), st)
