@@ -2,7 +2,7 @@ from openbot.bots.catalog import CATALOG, CATALOG_BY_ID, BotCatalogEntry, load_i
 
 
 def test_catalog_entries_have_instruction_files():
-    assert len(CATALOG) == 4
+    assert len(CATALOG) == 5
     assert len(CATALOG_BY_ID) == len(CATALOG)
     for raw in CATALOG:
         entry = BotCatalogEntry.model_validate(raw)
@@ -12,12 +12,19 @@ def test_catalog_entries_have_instruction_files():
 
 async def test_catalog_list_install_duplicate_and_unknown(client):
     entries = (await client.get('/api/v1/bots/catalog')).json()
-    assert {entry['id'] for entry in entries} == {'chief_of_staff', 'engineer', 'reviewer', 'qa'}
+    assert {entry['id'] for entry in entries} == {
+        'chief_of_staff', 'engineer', 'reviewer', 'qa', 'frontend_designer',
+    }
     installed = await client.post('/api/v1/bots/catalog/engineer/install')
     assert installed.status_code == 201, installed.text
     assert installed.json()['instructions']
     assert installed.json()['load_repository_instructions'] is True
     assert (await client.post('/api/v1/bots/catalog/engineer/install')).status_code == 409
+
+    designer = await client.post('/api/v1/bots/catalog/frontend_designer/install')
+    assert designer.status_code == 201, designer.text
+    assert designer.json()['handle'] == 'frontend_designer'
+    assert 'Frontend Designer for OpenBot' in designer.json()['instructions']
     assert (await client.post('/api/v1/bots/catalog/no-such/install')).status_code == 404
 
 
