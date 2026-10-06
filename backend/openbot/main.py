@@ -52,7 +52,7 @@ from openbot.runtime.bus import EventBus
 from openbot.runtime.memory import MemoryReflector
 from openbot.runtime.model_catalog import ModelCatalog
 from openbot.runtime.persistence import open_langgraph_backends
-from openbot.runtime.providers import chat_model, embeddings
+from openbot.runtime.providers import chat_model, embeddings, small_chat_model
 from openbot.runtime.renaming import finish_renames
 from openbot.runtime.runner import Runner
 from openbot.runtime.scheduler import Scheduler, recover_processing
@@ -86,6 +86,7 @@ async def build_services(settings: Settings) -> Services:
     services.checkpointer, services.store = await stack.enter_async_context(open_langgraph_backends(settings, emb))
     services.langgraph_stack = stack
     services.model_factory = lambda actor: chat_model(actor.bot, settings)
+    services.small_model_factory = lambda actor: small_chat_model(actor.bot, settings)
     services.reflector = MemoryReflector(services, settings.memory_reflection_delay)
     services.runner = Runner(services)
     services.http_client = httpx.AsyncClient(timeout=15)

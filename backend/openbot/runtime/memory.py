@@ -163,7 +163,8 @@ class MemoryReflector:
         self._timers: dict[tuple[str, str], asyncio.Task] = {}
 
     def make_manager(self, bot: Actor):
-        model = self.services.model_factory(bot)
+        factory = getattr(self.services, "small_model_factory", None) or self.services.model_factory
+        model = factory(bot)
         return create_memory_store_manager(model, namespace=bot_namespace(bot.id),
                                            store=ReflectionMemoryStore(self.services.store),
                                            instructions=REFLECTION_INSTRUCTIONS,

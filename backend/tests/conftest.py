@@ -125,6 +125,7 @@ async def build_test_services(settings: Settings, scripts: dict | None = None) -
         return ScriptedChatModel(messages=iters[actor.handle])
 
     services.model_factory = factory
+    services.small_model_factory = factory
     try:
         from openbot.runtime.memory import MemoryReflector
         services.reflector = MemoryReflector(services, settings.memory_reflection_delay)

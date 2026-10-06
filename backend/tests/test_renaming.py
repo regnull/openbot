@@ -42,6 +42,7 @@ async def gated_thread(services, posts):
     await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
     gate, calls = asyncio.Event(), []
     services.model_factory = lambda actor: GatedModel(messages=iter(()), gate=gate, calls=calls)
+    services.small_model_factory = services.model_factory
     async with services.session_factory() as session:
         you = await human_actor(session)
         thread = await create_thread(services, session, title="Initial", handles=["eng"], created_by=you)
@@ -58,6 +59,7 @@ async def stored(services, thread):
 async def test_auto_rename_after_third_message_and_only_once(services, scripts):
     await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
     scripts["chief_of_staff"] = [ai('  "Purposeful title"  ')]
+    services.small_model_factory = lambda actor: ScriptedChatModel(messages=iter(scripts[actor.handle]))
     async with services.bus.subscribe(None) as queue:
         async with services.session_factory() as session:
             you = await human_actor(session)

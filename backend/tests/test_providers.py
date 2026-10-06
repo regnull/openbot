@@ -14,6 +14,8 @@ from openbot.runtime.providers import (
     embeddings,
     provider_chat_model,
     provider_status,
+    small_chat_model,
+    small_model_name,
 )
 
 
@@ -111,6 +113,30 @@ def test_configured_cloud_provider_keeps_the_bots_model_alongside_openrouter():
     m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={}), st)
     assert m.model_name == "gpt-4.1-mini"
     assert not m.openai_api_base
+
+
+def test_small_model_defaults_by_provider_and_honors_override():
+    assert small_model_name(s(), "openai", "gpt-5.5") == "gpt-5-mini"
+    assert small_model_name(s(), "anthropic", "claude-sonnet-5") == "claude-haiku-4-5-20251001"
+    assert small_model_name(s(small_model="custom/model"), "openai", "gpt-5.5") == "custom/model"
+
+
+def test_small_chat_model_uses_small_model_and_falls_back_to_main(monkeypatch):
+    bot = BotProfile(provider="openai", model="gpt-5.5", model_settings={})
+    settings = s(openai_api_key="k", small_model="gpt-5-mini")
+    model = small_chat_model(bot, settings)
+    assert model.model_name == "gpt-5-mini"
+
+    calls = []
+    def build(provider, model, settings, model_settings=None):
+        calls.append(model)
+        if model == "unavailable":
+            raise RuntimeError("unavailable")
+        return model
+    monkeypatch.setattr("openbot.runtime.providers.provider_chat_model", build)
+    assert small_chat_model(BotProfile(provider="openai", model="main", model_settings={}),
+                            s(openai_api_key="k", small_model="unavailable")) == "main"
+    assert calls == ["unavailable", "main"]
 
 
 def test_cloud_bot_without_its_providers_key_falls_back_to_openrouter():
