@@ -39,6 +39,12 @@ def _load_system_prompt_template() -> str:
     return template
 
 
+# Read once at import, so the template always matches the code that fills it. Bots edit OpenBot's own
+# source in the workspace; re-reading the file per run let a half-applied edit (a new placeholder the
+# running code doesn't fill) fail every run until restart.
+_SYSTEM_PROMPT_TEMPLATE = Template(_load_system_prompt_template())
+
+
 def build_history(messages: list[Message], actor_id: str, *, token_budget: int, max_messages: int,
                   trigger_ids: set[str] | frozenset[str] = frozenset()) -> tuple[list[BaseMessage], int]:
     """Render the thread from the bot's point of view. Messages in `trigger_ids` (the ones that woke
@@ -105,7 +111,7 @@ def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list
                     if default_bot_handle else "")
     lead_instructions = ("- you are the lead for this thread. When human talks to you, follow this process: 1. Understand the request. If it's a simple question, answer it. 2. If it's a task request, plan the task execution. 3. Your plan must include which bots will be called, and in which order. 4. Call the next bot with comprehensive instructions. 5. When a bot does a handoff to you, understand where you are in task execution, and either handoff to the next bot, or reply to human. 6. When the task is complete, reply to human.\n"
                          if default_bot_handle and bot.handle == default_bot_handle else "")
-    return Template(_load_system_prompt_template()).substitute(
+    return _SYSTEM_PROMPT_TEMPLATE.substitute(
         bot_name=bot.name, bot_handle=bot.handle, bot_description=bot.description,
         bot_instructions=bot.bot.instructions, lead_context=lead_context,
         participants=', '.join(participants) or 'nobody else', default_note=default_note,
