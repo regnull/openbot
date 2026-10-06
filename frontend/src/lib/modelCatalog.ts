@@ -1,4 +1,4 @@
-import type { CatalogModel, ProviderInfo } from "../api/types";
+import type { CatalogModel } from "../api/types";
 
 export const CATALOG_PROVIDERS = new Set(["openai", "anthropic", "openrouter", "ollama"]);
 export const hasCatalog = (provider: string): boolean => CATALOG_PROVIDERS.has(provider);
@@ -45,12 +45,14 @@ function sortForTask(models: CatalogModel[], task: string, sort: ModelSort): Cat
   return [...models].sort((a, b) => taskRank(task, a) - taskRank(task, b) || (sort === "cheapest" ? byCheapest(a, b) : byNewest(a, b)));
 }
 
-/** Filter OpenRouter's catalog to upstreams enabled in this installation. */
-export function filterConfiguredProviders(models: CatalogModel[], providers: ProviderInfo[] | undefined): CatalogModel[] {
-  if (!providers?.length) return models;
-  const configured = new Set(providers.filter((p) => p.configured).map((p) => p.id));
-  if (configured.size === 1 && configured.has("openrouter")) return models;
-  return models.filter((m) => { const slash = m.id.indexOf("/"); return slash < 0 || configured.has(m.id.slice(0, slash)); });
+const vendorOf = (id: string): string => { const slash = id.indexOf("/"); return slash < 0 ? "" : id.slice(0, slash); };
+/** Upstream vendors of an OpenRouter-style catalog (`openai/gpt-5` -> `openai`), sorted. */
+export function upstreamVendors(models: CatalogModel[]): string[] {
+  return [...new Set(models.map((m) => vendorOf(m.id)).filter(Boolean))].sort();
+}
+/** Narrow to one vendor; models without a vendor prefix are always kept. Empty vendor means no filter. */
+export function filterByVendor(models: CatalogModel[], vendor: string): CatalogModel[] {
+  return vendor ? models.filter((m) => { const v = vendorOf(m.id); return !v || v === vendor; }) : models;
 }
 
 export function groupModels(models: CatalogModel[], suggested: string[], suggestedLabel: string, sort: ModelSort, taskMode = false): ModelGroup[] {

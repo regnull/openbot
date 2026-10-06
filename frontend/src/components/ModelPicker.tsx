@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Api } from "../api/client";
 import type { CatalogModel } from "../api/types";
-import { filterConfiguredProviders, filterModels, formatContext, formatCost, groupModels, modelTasks, sortModels, withSuggested, type ModelSort } from "../lib/modelCatalog";
+import { filterByVendor, filterModels, formatContext, formatCost, groupModels, modelTasks, sortModels, upstreamVendors, withSuggested, type ModelSort } from "../lib/modelCatalog";
 import { Badge, Button, Input, Spinner } from "./ui";
 
 export interface ModelPickerProps {
@@ -68,7 +68,6 @@ function ModelRow({ model, selected, installed, provider, onPick }: { model: Cat
 
 export function ModelPicker({ provider, value, onChange, suggested = [], suggestedLabel = "Suggested", id, required, className = "" }: ModelPickerProps) {
   const models = useQuery({ queryKey: ["models", provider], queryFn: () => Api.getModels(provider), staleTime: 5 * 60_000 });
-  const providers = useQuery({ queryKey: ["providers"], queryFn: Api.getProviders, staleTime: 5 * 60_000, enabled: provider === "openrouter" });
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [reasoning, setReasoning] = useState(false);
@@ -77,7 +76,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   const [taskMode, setTaskMode] = useState(provider === "openrouter");
   const [task, setTask] = useState<Task>("All models");
   const [family, setFamily] = useState("All families");
-  const [selectedUpstreams, setSelectedUpstreams] = useState<string[]>([]);
+  const [vendor, setVendor] = useState("");
   const [seenProvider, setSeenProvider] = useState(provider);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -87,7 +86,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   const dialogId = useId();
   const listId = useId();
   const suggestedSet = useMemo(() => new Set(suggested), [suggested]);
-  const configuredUpstreams = useMemo(() => (providers.data?.providers ?? []).filter((p) => p.configured), [providers.data]);
+  const vendors = useMemo(() => provider === "openrouter" ? upstreamVendors(models.data?.models ?? []) : [], [provider, models.data]);
   const unconfigured = models.data !== undefined && !models.data.configured;
 
   if (provider !== seenProvider) {
@@ -95,7 +94,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
     setTaskMode(provider === "openrouter");
     setTask("All models");
     setFamily("All families");
-    setSelectedUpstreams([]);
+    setVendor("");
   }
   const openPicker = () => {
     setQuery("");
@@ -118,11 +117,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); document.body.style.overflow = ""; };
   }, [open]);
-  const all = useMemo(() => {
-    let result = withSuggested(filterConfiguredProviders(models.data?.models ?? [], providers.data?.providers), suggested);
-    if (selectedUpstreams.length) result = result.filter((m) => { const slash = m.id.indexOf("/"); return slash < 0 || selectedUpstreams.includes(m.id.slice(0, slash)); });
-    return result;
-  }, [models.data, providers.data, suggested, selectedUpstreams]);
+  const all = useMemo(() => filterByVendor(withSuggested(models.data?.models ?? [], suggested), vendor), [models.data, suggested, vendor]);
   const filtered = useMemo(() => filterModels(all, { text: query, reasoning, vision }), [all, query, reasoning, vision]);
   const visible = useMemo(() => filtered.filter((m) => taskMatches(m, task, suggestedSet)), [filtered, task, suggestedSet]);
   const familyGroups = useMemo(() => groupModels(visible, suggested, suggestedLabel, sort, false), [visible, suggested, suggestedLabel, sort]);
@@ -152,7 +147,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
       }} className="flex h-[min(720px,calc(100vh-16px))] w-[min(960px,calc(100vw-16px))] max-w-full flex-col overflow-hidden rounded-ui border border-line bg-surface shadow-[0_24px_60px_-20px_rgb(0_0_0/0.65)] sm:h-[min(720px,calc(100vh-32px))] sm:w-[min(960px,calc(100vw-32px))]" data-positioning="viewport-aware">
         <header className="shrink-0 border-b border-line p-4">
           <div className="flex items-start justify-between gap-3"><div><h2 id={titleId} className="text-base font-semibold">Choose a model</h2><p className="mt-1 font-sans text-xs text-muted">Search the catalog or enter a model ID directly.</p></div><button type="button" onClick={close} className="min-h-9 rounded-ui border border-line px-2 text-xs text-muted hover:bg-sunken hover:text-fg">Esc <span aria-hidden>×</span></button></div>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input ref={searchRef} aria-label="Search model IDs, names, or families" placeholder="Search model IDs, names, or families" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" spellCheck={false} className="font-mono" />{provider === "openrouter" && configuredUpstreams.length > 0 && <select aria-label="Configured providers" value={selectedUpstreams.length ? selectedUpstreams.join(",") : ""} onChange={(e) => setSelectedUpstreams(e.target.value ? e.target.value.split(",") : [])} className="h-9 rounded-ui border border-line bg-surface px-2 text-xs"><option value="">All configured providers</option>{configuredUpstreams.map((p) => <option key={p.id} value={p.id}>{p.id}</option>)}</select>}</div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input ref={searchRef} aria-label="Search model IDs, names, or families" placeholder="Search model IDs, names, or families" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" spellCheck={false} className="font-mono" />{vendors.length > 0 && <select aria-label="Model vendor" value={vendor} onChange={(e) => setVendor(e.target.value)} className="h-9 rounded-ui border border-line bg-surface px-2 text-xs"><option value="">All vendors</option>{vendors.map((v) => <option key={v} value={v}>{v}</option>)}</select>}</div>
         </header>
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
           <nav aria-label="Browse models" className="scrollbar-subtle shrink-0 overflow-x-auto border-b border-line p-3 sm:w-56 sm:overflow-y-auto sm:border-b-0 sm:border-r"><div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Browse</div><div role="tablist" aria-label="Browse mode" className="mb-3 flex gap-1 sm:flex-col">{[true, false].map((mode) => <button key={String(mode)} type="button" role="tab" aria-selected={taskMode === mode} onClick={() => { setTaskMode(mode); setTask("All models"); setFamily("All families"); }} className={`min-h-10 rounded-ui border px-2 text-left text-xs ${taskMode === mode ? "border-accent bg-accent/15 text-fg" : "border-transparent text-muted hover:bg-sunken hover:text-fg"}`}>{mode ? "By task" : "By family"}</button>)}</div>{taskMode ? <div className="flex gap-1 sm:flex-col">{TASKS.map((name) => <button key={name} type="button" role="tab" aria-selected={task === name} disabled={counts.get(name) === 0} onClick={() => setTask(name)} className={`min-h-10 whitespace-nowrap rounded-ui px-2 text-left text-xs ${task === name ? "bg-sunken font-medium text-fg" : "text-muted hover:bg-sunken hover:text-fg"} disabled:cursor-not-allowed disabled:opacity-50`}>{name}<span className="float-right ml-3 text-faint">{counts.get(name) ?? 0}</span></button>)}</div> : <div className="space-y-1"><button type="button" onClick={() => setFamily("All families")} className={`flex min-h-10 w-full items-center justify-between rounded-ui px-2 text-left text-xs ${family === "All families" ? "bg-sunken font-medium text-fg" : "text-muted hover:bg-sunken hover:text-fg"}`}><span>All families</span><span className="text-faint">{filtered.length}</span></button>{familyGroups.map((group) => <button key={group.label} type="button" onClick={() => setFamily(group.label)} className={`flex min-h-10 w-full items-center justify-between rounded-ui px-2 text-left text-xs ${family === group.label ? "bg-sunken font-medium text-fg" : "text-muted hover:bg-sunken hover:text-fg"}`}><span>{group.label}</span><span className="text-faint">{group.models.length}</span></button>)}</div>}</nav>

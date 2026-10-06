@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogModel } from "../api/types";
-import { effortLevelsFor, filterModels, filterConfiguredProviders, formatContext, formatCost, groupModels, hasCatalog, reconcileEffort, sortModels, splitAutoDefault, taskRank, withSuggested } from "./modelCatalog";
+import { effortLevelsFor, filterByVendor, filterModels, formatContext, formatCost, groupModels, hasCatalog, reconcileEffort, sortModels, splitAutoDefault, taskRank, upstreamVendors, withSuggested } from "./modelCatalog";
 
 const model = (id: string, extra: Partial<CatalogModel> = {}): CatalogModel => ({
   id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: 200000, output: null,
@@ -59,19 +59,12 @@ describe("sortModels and groupModels", () => {
   });
 });
 
-describe("OpenRouter provider filtering", () => {
-  it("keeps only models from configured upstreams and unqualified models", () => {
-    const models = [model("anthropic/claude"), model("openai/gpt"), model("custom/model"), model("bare")];
-    const providers = [{ id: "anthropic", configured: true }, { id: "openai", configured: false }] as never;
-    expect(filterConfiguredProviders(models, providers).map((m) => m.id)).toEqual(["anthropic/claude", "bare"]);
-  });
-});
-
-describe("filterConfiguredProviders", () => {
-  it("keeps the OpenRouter catalog available when only an OpenRouter key is configured", () => {
-    const models = [model("openai/gpt-5"), model("anthropic/claude"), model("bare")];
-    expect(filterConfiguredProviders(models, [{ id: "openrouter", configured: true, models: [], default_model: "" }]).map((m) => m.id))
-      .toEqual(["openai/gpt-5", "anthropic/claude", "bare"]);
+describe("upstream vendors", () => {
+  it("lists vendor prefixes of the catalog and keeps unqualified models in every vendor filter", () => {
+    const models = [model("openai/gpt-5"), model("anthropic/claude"), model("openai/gpt-4o"), model("bare")];
+    expect(upstreamVendors(models)).toEqual(["anthropic", "openai"]);
+    expect(filterByVendor(models, "openai").map((m) => m.id)).toEqual(["openai/gpt-5", "openai/gpt-4o", "bare"]);
+    expect(filterByVendor(models, "").map((m) => m.id)).toEqual(["openai/gpt-5", "anthropic/claude", "openai/gpt-4o", "bare"]);
   });
 });
 

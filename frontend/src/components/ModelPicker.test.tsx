@@ -172,3 +172,14 @@ it("shows unconfigured providers without blocking direct entry", async () => {
   expect(dialog()?.querySelector("[role=listbox]")).toBeNull();
   expect(dialog()?.querySelector("[role=status]")?.textContent).toContain("not configured");
 });
+
+it("shows the full OpenRouter catalog regardless of which direct provider keys are configured", async () => {
+  vi.spyOn(Api, "getModels").mockResolvedValue({ ...catalog, provider: "openrouter", models: [model("openai/gpt-5"), model("google/gemini-3"), model("openrouter/auto")] });
+  vi.spyOn(Api, "getProviders").mockResolvedValue({ providers: [{ id: "auto", configured: true, models: [], default_model: "" }, { id: "openrouter", configured: true, models: [], default_model: "" }, { id: "openai", configured: false, models: [], default_model: "" }], embedding_model: "", embeddings_configured: false });
+  await show({ provider: "openrouter" }); await click(pickerInput());
+  expect(options().map((row) => row.querySelector(".font-mono")?.textContent).sort()).toEqual(["google/gemini-3", "openai/gpt-5", "openrouter/auto"]);
+  const vendor = dialog()!.querySelector<HTMLSelectElement>("select[aria-label='Model vendor']")!;
+  expect([...vendor.options].map((o) => o.value)).toEqual(["", "google", "openai", "openrouter"]);
+  await act(async () => { vendor.value = "google"; vendor.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(options().map((row) => row.querySelector(".font-mono")?.textContent)).toEqual(["google/gemini-3"]);
+});
