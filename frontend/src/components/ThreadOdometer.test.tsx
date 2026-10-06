@@ -4,16 +4,20 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
 import ThreadOdometer from "./ThreadOdometer";
+import { ArrowRightIcon } from "./icons";
 
 describe("ThreadOdometer", () => {
   it("renders segmented digits with an accessible label", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
-    act(() => { root.render(<ThreadOdometer label="in" value={12345} suffix=" tok" />); });
+    act(() => { root.render(<ThreadOdometer label="tokens in" indicator={<ArrowRightIcon className="h-3 w-3" />} indicatorLabel="Tokens in" value={12345} unit="tok" />); });
 
-    expect(container.textContent).toContain("in12,345 tok");
+    expect(container.textContent).toContain("12,345tok");
+    expect(container.querySelector(".thread-odometer-unit")?.textContent).toBe("tok");
+    expect(container.querySelector("svg")).toBeTruthy();
+    expect(container.querySelector(".thread-odometer-label")?.getAttribute("title")).toBe("Tokens in");
     expect(container.querySelectorAll(".thread-odometer-digit")).toHaveLength(5);
-    expect(container.firstElementChild?.getAttribute("aria-label")).toBe("in: 12,345 tok");
+    expect(container.firstElementChild?.getAttribute("aria-label")).toBe("tokens in: 12,345 tok");
     expect(container.firstElementChild?.getAttribute("role")).toBe("img");
 
     act(() => root.unmount());

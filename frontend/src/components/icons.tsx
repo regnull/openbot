@@ -20,6 +20,8 @@ export const MoonIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path 
 export const MonitorIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>;
 export const CloseIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M18 6 6 18M6 6l12 12" /></svg>;
 export const ArrowUpIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M12 19V5M5 12l7-7 7 7" /></svg>;
+export const ArrowLeftIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M19 12H5M12 5l-7 7 7 7" /></svg>;
+export const ArrowRightIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M5 12h14M12 5l7 7-7 7" /></svg>;
 export const MoreIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></svg>;
 export const ExternalIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg>;
 export const SendIcon = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M5 12h14M13 6l6 6-6 6" /></svg>;

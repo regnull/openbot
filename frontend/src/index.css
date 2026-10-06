@@ -201,6 +201,7 @@
 .thread-odometer-digit:first-child { border-left: 0; border-radius: 2px 0 0 2px; }
 .thread-odometer-digit:last-child { border-radius: 0 2px 2px 0; }
 .thread-odometer-separator { color: var(--muted); }
+.thread-odometer-unit { margin-left: 0.28rem; color: var(--muted); }
 .thread-odometer-loading { color: var(--faint); }
 @media (max-width: 640px) {
   .thread-header { padding-inline: 0.1rem; }

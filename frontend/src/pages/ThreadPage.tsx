@@ -10,7 +10,7 @@ import Composer from "../components/Composer";
 import MessageList from "../components/MessageList";
 import ThreadOdometer from "../components/ThreadOdometer";
 import { Button, ErrorText, IconButton, OfflineNotice, Spinner } from "../components/ui";
-import { ChevronLeftIcon, MoreIcon } from "../components/icons";
+import { ArrowLeftIcon, ArrowRightIcon, ChevronLeftIcon, MoreIcon } from "../components/icons";
 import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
 import { emptyThreadState, hydrate, mergeRun, missedRunEnds, openRunIds, reduceThreadEvent, type ThreadState } from "../lib/threadState";
 import { setOpenBotTitle } from "../lib/documentTitle";
@@ -229,8 +229,8 @@ export default function ThreadPage() {
           <span className="thread-header-metrics-label">Usage</span>
           <span className="thread-header-counters" role="group" aria-label="Thread usage">
             <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
-            <ThreadOdometer label="in" value={usageData?.prompt_tokens} suffix=" tok" loading={usage.isLoading} />
-            <ThreadOdometer label="out" value={usageData?.completion_tokens} suffix=" tok" loading={usage.isLoading} />
+            <ThreadOdometer label="tokens in" indicator={<ArrowRightIcon className="h-3 w-3" />} indicatorLabel="Tokens in" value={usageData?.prompt_tokens} unit="tok" loading={usage.isLoading} />
+            <ThreadOdometer label="tokens out" indicator={<ArrowLeftIcon className="h-3 w-3" />} indicatorLabel="Tokens out" value={usageData?.completion_tokens} unit="tok" loading={usage.isLoading} />
             <ThreadOdometer label="cost" value={usageData?.cost_usd} prefix="$" format={costFormatter} loading={usage.isLoading} />
           </span>
         </div>
