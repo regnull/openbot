@@ -13,15 +13,24 @@ from tests.fakes import ScriptedChatModel, ai, call
 
 async def make(settings, scripts, *, working_directory=None, **profile):
     services = await build_test_services(settings, scripts)
-    services.actors = None            # drive the runner directly in these tests
+    services.actors = None  # drive the runner directly in these tests
     services.runner = Runner(services)
     async with services.session_factory() as s:
-        eng, rev = bot_actor("eng", description="builds", **profile), bot_actor("rev", description="reviews")
+        eng, rev = (
+            bot_actor("eng", description="builds", **profile),
+            bot_actor("rev", description="reviews"),
+        )
         s.add_all([eng, rev])
         await s.commit()
         you = await human_actor(s)
-        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you,
-                                working_directory=working_directory)
+        t = await create_thread(
+            services,
+            s,
+            title="t",
+            handles=["eng"],
+            created_by=you,
+            working_directory=working_directory,
+        )
         res = await post_message(services, s, thread_id=t.id, sender=you, content="please build it")
         item = res.items[0]
         run = Run(actor_id=eng.id, thread_id=t.id)
@@ -39,17 +48,40 @@ async def get(services, model, id_):
 
 async def messages(services, thread_id):
     async with services.session_factory() as s:
-        return (await s.execute(select(Message).where(Message.thread_id == thread_id).order_by(Message.created_at))).scalars().all()
+        return (
+            (
+                await s.execute(
+                    select(Message)
+                    .where(Message.thread_id == thread_id)
+                    .order_by(Message.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
 
 async def events(services, run_id):
     async with services.session_factory() as s:
-        return (await s.execute(select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.seq))).scalars().all()
+        return (
+            (
+                await s.execute(
+                    select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.seq)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
 
 def test_normalize_interrupt():
-    assert normalize_interrupt({"kind": "question", "question": "q"}) == {"kind": "question", "question": "q"}
-    v = normalize_interrupt({"action_requests": [{"name": "run_shell", "args": {"command": "ls"}, "description": "d"}]})
+    assert normalize_interrupt({"kind": "question", "question": "q"}) == {
+        "kind": "question",
+        "question": "q",
+    }
+    v = normalize_interrupt(
+        {"action_requests": [{"name": "run_shell", "args": {"command": "ls"}, "description": "d"}]}
+    )
     assert v == {"kind": "approval", "actions": [{"name": "run_shell", "args": {"command": "ls"}}]}
     assert normalize_interrupt("raw") == {"kind": "question", "question": "raw"}
 
@@ -63,10 +95,24 @@ async def test_simple_reply_and_handoff(settings):
     msgs = await messages(services, t.id)
     assert msgs[-1].sender_actor_id == eng.id and msgs[-1].hop == 1 and msgs[-1].run_id == run.id
     async with services.session_factory() as s:
-        rev_items = (await s.execute(select(InboxItem).where(InboxItem.message_id == msgs[-1].id, InboxItem.kind == "message"))).scalars().all()
+        rev_items = (
+            (
+                await s.execute(
+                    select(InboxItem).where(
+                        InboxItem.message_id == msgs[-1].id, InboxItem.kind == "message"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
     assert {i.actor_id for i in rev_items} >= {msgs[-1].mentions[0]}
     sent = ScriptedChatModel.seen[0]
-    assert sent[0].type == "system" and "@rev" in sent[0].content and "[You] (new): please build it" in sent[-1].content
+    assert (
+        sent[0].type == "system"
+        and "@rev" in str(sent[0].content)
+        and "[You] (new): please build it" in sent[-1].content
+    )
     assert [e.type for e in await events(services, run.id)] == ["text", "message"]
 
 
@@ -75,20 +121,32 @@ async def test_runner_uses_thread_working_directory_for_tools(settings):
     ScriptedChatModel.seen.clear()
     # Git Bash on Windows prints /e/...; `pwd -W` gives the drive-letter form (with forward slashes).
     project = settings.workspace_root / "project"
-    pwd, shown = ("pwd -W", project.as_posix()) if sys.platform == "win32" else ("pwd", str(project))
-    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command=pwd)]), ai("done")]},
-                                         working_directory="project", tool_names=["run_shell"])
+    pwd, shown = (
+        ("pwd -W", project.as_posix()) if sys.platform == "win32" else ("pwd", str(project))
+    )
+    services, _eng, _t, run = await make(
+        settings,
+        {"eng": [ai(tool_calls=[call("run_shell", command=pwd)]), ai("done")]},
+        working_directory="project",
+        tool_names=["run_shell"],
+    )
     await services.runner.execute(run.id)
 
-    assert str(settings.workspace_root / "project") in ScriptedChatModel.seen[0][0].content
-    assert any(e.type == "tool_result" and shown in e.payload["content"]
-               for e in await events(services, run.id))
+    assert str(settings.workspace_root / "project") in str(ScriptedChatModel.seen[0][0].content)
+    assert any(
+        e.type == "tool_result" and shown in e.payload["content"]
+        for e in await events(services, run.id)
+    )
 
 
 async def test_tool_call_events(settings):
     settings.tools_dir.mkdir(parents=True)
-    (settings.tools_dir / "p.py").write_text('from langchain.tools import tool\n@tool\ndef ping() -> str:\n    """Ping."""\n    return "pong"\n')
-    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("ping")]), ai("pong received")]}, tool_names=["ping"])
+    (settings.tools_dir / "p.py").write_text(
+        'from langchain.tools import tool\n@tool\ndef ping() -> str:\n    """Ping."""\n    return "pong"\n'
+    )
+    services, _eng, _t, run = await make(
+        settings, {"eng": [ai(tool_calls=[call("ping")]), ai("pong received")]}, tool_names=["ping"]
+    )
     await services.runner.execute(run.id)
     ev = await events(services, run.id)
     assert [e.type for e in ev] == ["tool_call", "tool_result", "text", "message"]
@@ -96,18 +154,42 @@ async def test_tool_call_events(settings):
 
 
 async def test_ask_human_and_resume(settings):
-    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")]), ai("Merging as you said.")]})
+    services, _eng, _t, run = await make(
+        settings,
+        {
+            "eng": [
+                ai(tool_calls=[call("ask_human", question="Merge?")]),
+                ai("Merging as you said."),
+            ]
+        },
+    )
     await services.runner.execute(run.id)
     run = await get(services, Run, run.id)
-    assert run.status == "waiting_human" and run.interrupt == {"kind": "question", "question": "Merge?"}
+    assert run.status == "waiting_human" and run.interrupt == {
+        "kind": "question",
+        "question": "Merge?",
+    }
     async with services.session_factory() as s:
-        qs = (await s.execute(select(InboxItem).where(InboxItem.kind == "question"))).scalars().all()
-    assert len(qs) == 1 and qs[0].payload["interrupt"]["question"] == "Merge?" and qs[0].run_id == run.id
+        qs = (
+            (await s.execute(select(InboxItem).where(InboxItem.kind == "question"))).scalars().all()
+        )
+    assert (
+        len(qs) == 1
+        and qs[0].payload["interrupt"]["question"] == "Merge?"
+        and qs[0].run_id == run.id
+    )
     await services.runner.execute(run.id, resume=Command(resume="yes"))
     run = await get(services, Run, run.id)
     assert run.status == "completed" and run.interrupt is None
     ev = await events(services, run.id)
-    assert [e.type for e in ev] == ["tool_call", "interrupt", "resumed", "tool_result", "text", "message"]
+    assert [e.type for e in ev] == [
+        "tool_call",
+        "interrupt",
+        "resumed",
+        "tool_result",
+        "text",
+        "message",
+    ]
     assert "yes" in ev[3].payload["content"]
 
 
@@ -115,14 +197,18 @@ async def test_ask_human_with_no_human_in_thread_fails_the_run(settings):
     # A bot-to-bot delegation thread with nobody to ask (see router.py's bot handoffs) must not leave
     # the run "waiting_human" forever -- deliver_question only addresses human/external participants,
     # so with none the question can never be answered and the bot would show as busy indefinitely.
-    services = await build_test_services(settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")])]})
+    services = await build_test_services(
+        settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")])]}
+    )
     services.actors = None
     services.runner = Runner(services)
     async with services.session_factory() as s:
         eng = bot_actor("eng", description="builds")
         s.add(eng)
         await s.commit()
-        t = await create_thread(services, s, title="t", handles=["eng"], created_by=None, include_human=False)
+        t = await create_thread(
+            services, s, title="t", handles=["eng"], created_by=None, include_human=False
+        )
         run = Run(actor_id=eng.id, thread_id=t.id)
         s.add(run)
         await s.flush()
@@ -133,20 +219,35 @@ async def test_ask_human_with_no_human_in_thread_fails_the_run(settings):
     msgs = await messages(services, t.id)
     assert msgs[-1].sender_kind == "system" and "tried to ask a question" in msgs[-1].content
     async with services.session_factory() as s:
-        qs = (await s.execute(select(InboxItem).where(InboxItem.kind == "question"))).scalars().all()
+        qs = (
+            (await s.execute(select(InboxItem).where(InboxItem.kind == "question"))).scalars().all()
+        )
     assert qs == []
 
 
 async def test_tool_approval(settings):
-    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command="echo hi")]), ai("done")]},
-                                       tool_names=["run_shell"], approval_tools=["run_shell"])
+    services, _eng, _t, run = await make(
+        settings,
+        {"eng": [ai(tool_calls=[call("run_shell", command="echo hi")]), ai("done")]},
+        tool_names=["run_shell"],
+        approval_tools=["run_shell"],
+    )
     await services.runner.execute(run.id)
     run = await get(services, Run, run.id)
-    assert run.status == "waiting_human" and run.interrupt["kind"] == "approval" and run.interrupt["actions"][0]["name"] == "run_shell"
-    await services.runner.execute(run.id, resume=Command(resume={"decisions": [{"type": "approve"}]}))
+    assert (
+        run.status == "waiting_human"
+        and run.interrupt["kind"] == "approval"
+        and run.interrupt["actions"][0]["name"] == "run_shell"
+    )
+    await services.runner.execute(
+        run.id, resume=Command(resume={"decisions": [{"type": "approve"}]})
+    )
     run = await get(services, Run, run.id)
     assert run.status == "completed"
-    assert any(e.type == "tool_result" and "hi" in e.payload["content"] for e in await events(services, run.id))
+    assert any(
+        e.type == "tool_result" and "hi" in e.payload["content"]
+        for e in await events(services, run.id)
+    )
 
 
 async def test_failure_posts_system_message(settings):
@@ -157,15 +258,22 @@ async def test_failure_posts_system_message(settings):
     msgs = await messages(services, t.id)
     assert msgs[-1].sender_kind == "system" and "@eng failed" in msgs[-1].content
     async with services.session_factory() as s:
-        bot_items = (await s.execute(select(InboxItem).where(InboxItem.actor_id == eng.id))).scalars().all()
+        bot_items = (
+            (await s.execute(select(InboxItem).where(InboxItem.actor_id == eng.id))).scalars().all()
+        )
     assert len(bot_items) == 1  # the system message did not create new work for the bot
 
 
 async def test_failure_mid_stream_records_error_after_earlier_events(settings):
     settings.tools_dir.mkdir(parents=True)
-    (settings.tools_dir / "p.py").write_text('from langchain.tools import tool\n@tool\ndef ping() -> str:\n    """Ping."""\n    return "pong"\n')
-    services, _eng, t, run = await make(settings, {"eng": [ai(tool_calls=[call("ping")]), RuntimeError("provider down")]},
-                                       tool_names=["ping"])
+    (settings.tools_dir / "p.py").write_text(
+        'from langchain.tools import tool\n@tool\ndef ping() -> str:\n    """Ping."""\n    return "pong"\n'
+    )
+    services, _eng, t, run = await make(
+        settings,
+        {"eng": [ai(tool_calls=[call("ping")]), RuntimeError("provider down")]},
+        tool_names=["ping"],
+    )
     await services.runner.execute(run.id)
     run = await get(services, Run, run.id)
     assert run.status == "failed" and "provider down" in run.error
@@ -210,10 +318,13 @@ async def test_reflection_failure_does_not_fail_a_completed_run(settings):
 async def test_memory_reflection_scheduled(settings):
     services, _eng, _t, run = await make(settings, {"eng": [ai("ok")]})
     scheduled = []
-    services.reflector.schedule = lambda bot, msgs, *, thread_id: scheduled.append((bot.handle, len(msgs), thread_id))
+    services.reflector.schedule = lambda bot, msgs, *, thread_id: scheduled.append(
+        (bot.handle, len(msgs), thread_id)
+    )
     await services.runner.execute(run.id)
-    assert scheduled and scheduled[0][0] == "eng" and scheduled[0][1] >= 2 and scheduled[0][2] == _t.id
-
+    assert (
+        scheduled and scheduled[0][0] == "eng" and scheduled[0][1] >= 2 and scheduled[0][2] == _t.id
+    )
 
 
 async def test_langsmith_id_is_the_pinned_trace_root(settings, monkeypatch):
@@ -261,10 +372,15 @@ def _collecting(traced):
 
 async def test_runner_logs_run_context_and_tool_activity(settings, caplog):
     import logging
+
     caplog.set_level(logging.DEBUG, logger="openbot")
     (settings.workspace_root / "project").mkdir(parents=True)
-    services, eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("list_files", path=".")]), ai("done")]},
-                                        working_directory="project", tool_names=["list_files"])
+    services, eng, _t, run = await make(
+        settings,
+        {"eng": [ai(tool_calls=[call("list_files", path=".")]), ai("done")]},
+        working_directory="project",
+        tool_names=["list_files"],
+    )
     await services.runner.execute(run.id)
 
     lines = [r.getMessage() for r in caplog.records if r.name.startswith("openbot.runtime.runner")]
@@ -272,10 +388,19 @@ async def test_runner_logs_run_context_and_tool_activity(settings, caplog):
     assert "bot=@eng" in start and "working_directory=project" in start
     assert f"tool_root={(settings.workspace_root / 'project').resolve()}" in start
     assert f"model={eng.bot.provider}/{eng.bot.model}" in start
-    assert any(l.startswith(f"run {run.id} tool_call list_files") and '"path": "."' in l for l in lines)
-    assert any(l.startswith(f"run {run.id} tool_result list_files") and "status=success" in l for l in lines)
+    assert any(
+        l.startswith(f"run {run.id} tool_call list_files") and '"path": "."' in l for l in lines
+    )
+    assert any(
+        l.startswith(f"run {run.id} tool_result list_files") and "status=success" in l
+        for l in lines
+    )
     assert any(l.startswith(f"run {run.id} completed") for l in lines)
-    debug = [r for r in caplog.records if r.levelno == logging.DEBUG and "system prompt" in r.getMessage()]
+    debug = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.DEBUG and "system prompt" in r.getMessage()
+    ]
     assert debug and str((settings.workspace_root / "project").resolve()) in debug[0].getMessage()
 
 
@@ -294,7 +419,9 @@ async def _checkpoint(services, run_id):
 async def test_checkpoint_is_kept_while_waiting_and_deleted_when_the_run_ends(settings):
     """The agent transcript is checkpointed under the run id only so a paused run can resume. Once
     the run is terminal (and reflection has taken its copy) nothing reads it again, so it goes."""
-    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")]), ai("Merged.")]})
+    services, _eng, _t, run = await make(
+        settings, {"eng": [ai(tool_calls=[call("ask_human", question="Merge?")]), ai("Merged.")]}
+    )
     await services.runner.execute(run.id)
     assert (await get(services, Run, run.id)).status == "waiting_human"
     assert await _checkpoint(services, run.id) is not None
@@ -304,8 +431,10 @@ async def test_checkpoint_is_kept_while_waiting_and_deleted_when_the_run_ends(se
 
 
 async def test_checkpoint_deleted_after_a_failed_run(settings):
-    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("read_history")]), RuntimeError("provider down")]},
-                                       )
+    services, _eng, _t, run = await make(
+        settings,
+        {"eng": [ai(tool_calls=[call("read_history")]), RuntimeError("provider down")]},
+    )
     await services.runner.execute(run.id)
     assert (await get(services, Run, run.id)).status == "failed"
     assert await _checkpoint(services, run.id) is None
