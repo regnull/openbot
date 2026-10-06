@@ -66,7 +66,7 @@ async def test_simple_reply_and_handoff(settings):
         rev_items = (await s.execute(select(InboxItem).where(InboxItem.message_id == msgs[-1].id, InboxItem.kind == "message"))).scalars().all()
     assert {i.actor_id for i in rev_items} >= {msgs[-1].mentions[0]}
     sent = ScriptedChatModel.seen[0]
-    assert sent[0].type == "system" and "@rev" in sent[0].content and "[You] (new): please build it" in sent[-1].content
+    assert sent[0].type == "system" and "@rev" in str(sent[0].content) and "[You] (new): please build it" in sent[-1].content
     assert [e.type for e in await events(services, run.id)] == ["text", "message"]
 
 
@@ -80,7 +80,7 @@ async def test_runner_uses_thread_working_directory_for_tools(settings):
                                          working_directory="project", tool_names=["run_shell"])
     await services.runner.execute(run.id)
 
-    assert str(settings.workspace_root / "project") in ScriptedChatModel.seen[0][0].content
+    assert str(settings.workspace_root / "project") in str(ScriptedChatModel.seen[0][0].content)
     assert any(e.type == "tool_result" and shown in e.payload["content"]
                for e in await events(services, run.id))
 

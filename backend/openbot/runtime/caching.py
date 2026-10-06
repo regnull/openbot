@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, ModelRequest
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -41,6 +42,18 @@ def _tag_blocks(content: str | list) -> list | None:
     return None
 
 
+def _tag_system_blocks(content: str | list, cache_control: dict[str, str]) -> list | None:
+    if isinstance(content, str):
+        return _tag_blocks(content)
+    blocks = [dict(b) if isinstance(b, dict) else {"type": "text", "text": str(b)} for b in content]
+    text_blocks = [b for b in blocks if b.get("type") == "text" and str(b.get("text", "")).strip()]
+    if not text_blocks:
+        return None
+    for block in text_blocks[:2]:
+        block["cache_control"] = cache_control
+    return blocks
+
+
 def _tagged(message: BaseMessage) -> BaseMessage | None:
     blocks = _tag_blocks(message.content)
     if blocks is None:
@@ -48,6 +61,19 @@ def _tagged(message: BaseMessage) -> BaseMessage | None:
     return message.model_copy(update={"content": blocks})
 
 
+class AnthropicPromptCacheMiddleware(AnthropicPromptCachingMiddleware):
+    """Cache both stable and dynamic system-prompt blocks for direct Anthropic calls."""
+
+    def _apply_caching(self, request: ModelRequest) -> ModelRequest:
+        request = super()._apply_caching(request)
+        message = request.system_message
+        if not isinstance(message, SystemMessage) or not isinstance(message.content, list):
+            return request
+        blocks = _tag_system_blocks(message.content, self._cache_control)
+        return request.override(system_message=message.model_copy(update={"content": blocks})) if blocks else request
+
+
+# Adapted from OpenCode's MIT-licensed prompt-cache breakpoint strategy.
 class OpenRouterPromptCacheMiddleware(AgentMiddleware):
     """Add Anthropic cache breakpoints to requests sent through an OpenAI-compatible endpoint.
 
@@ -57,9 +83,9 @@ class OpenRouterPromptCacheMiddleware(AgentMiddleware):
     def _apply(self, request: ModelRequest) -> ModelRequest:
         overrides: dict[str, Any] = {}
         if isinstance(request.system_message, SystemMessage):
-            tagged = _tagged(request.system_message)
-            if tagged is not None:
-                overrides["system_message"] = tagged
+            blocks = _tag_system_blocks(request.system_message.content, CACHE_CONTROL)
+            if blocks is not None:
+                overrides["system_message"] = request.system_message.model_copy(update={"content": blocks})
         messages = list(request.messages)
         for i in range(len(messages) - 1, -1, -1):
             m = messages[i]
@@ -85,12 +111,10 @@ def caching_middleware(model: BaseChatModel, settings) -> list[AgentMiddleware]:
         return []
     try:
         from langchain_anthropic import ChatAnthropic
-        from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
     except ImportError:  # pragma: no cover - langchain-anthropic is a hard dependency
         ChatAnthropic = None  # type: ignore[assignment]
-        AnthropicPromptCachingMiddleware = None  # type: ignore[assignment]
     if ChatAnthropic is not None and isinstance(model, ChatAnthropic):
-        return [AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore")]
+        return [AnthropicPromptCacheMiddleware(unsupported_model_behavior="ignore")]
     base_url = str(getattr(model, "openai_api_base", None) or "")
     model_name = str(getattr(model, "model_name", "") or "")
     if OPENROUTER_HOST in base_url and model_name.startswith("anthropic/"):

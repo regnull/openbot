@@ -2,7 +2,6 @@
 direct-Anthropic routing that makes full caching possible for OpenRouter `anthropic/...` models."""
 from langchain.agents.middleware import ModelRequest
 from langchain_anthropic import ChatAnthropic
-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
@@ -10,6 +9,7 @@ from openbot.config import Settings
 from openbot.db.models import BotProfile
 from openbot.runtime.caching import (
     CACHE_CONTROL,
+    AnthropicPromptCacheMiddleware,
     OpenRouterPromptCacheMiddleware,
     caching_middleware,
 )
@@ -36,11 +36,21 @@ def request(messages, system="You are a bot."):
 
 def test_middleware_selection_by_provider():
     st = s()
-    assert isinstance(caching_middleware(ChatAnthropic(model="claude-sonnet-5", api_key="k"), st)[0], AnthropicPromptCachingMiddleware)
+    assert isinstance(caching_middleware(ChatAnthropic(model="claude-sonnet-5", api_key="k"), st)[0], AnthropicPromptCacheMiddleware)
     assert isinstance(caching_middleware(openrouter(), st)[0], OpenRouterPromptCacheMiddleware)
     assert caching_middleware(openrouter("openai/gpt-5.5"), st) == []          # OpenAI caches automatically
     assert caching_middleware(ChatOpenAI(model="gpt-5.5", api_key="k"), st) == []
     assert caching_middleware(ChatAnthropic(model="claude-sonnet-5", api_key="k"), s(prompt_caching=False)) == []
+
+
+def test_openrouter_middleware_tags_both_system_blocks_and_latest_human_message():
+    msgs = [HumanMessage(content="[You]: please build it")]
+    req = request(msgs, system=[{"type": "text", "text": "stable"}, {"type": "text", "text": "dynamic"}])
+    out = OpenRouterPromptCacheMiddleware()._apply(req)
+    assert out.system_message.content == [
+        {"type": "text", "text": "stable", "cache_control": CACHE_CONTROL},
+        {"type": "text", "text": "dynamic", "cache_control": CACHE_CONTROL},
+    ]
 
 
 def test_openrouter_middleware_tags_system_and_latest_human_message():

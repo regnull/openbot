@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from openbot.db.models import Message
-from openbot.runtime.prompt import build_history, build_system_prompt
+from openbot.runtime.prompt import build_history, build_system_prompt, build_system_prompt_parts
 from tests.factories import bot_actor
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -69,7 +69,10 @@ def test_system_prompt_template_uses_only_the_supported_placeholders():
     from openbot.runtime import prompt as prompt_module
 
     actual = frozenset(Template(prompt_module.SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
+    stable = frozenset(Template(prompt_module.STABLE_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
+    dynamic = frozenset(Template(prompt_module.DYNAMIC_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
     assert actual == prompt_module._SYSTEM_PROMPT_FIELDS
+    assert stable | dynamic == prompt_module._SYSTEM_PROMPT_FIELDS
     assert "repository_instructions" not in actual
 
 
@@ -247,3 +250,15 @@ def test_repository_instructions_are_rendered_through_validated_template(tmp_pat
 
     assert "# Repository instructions\nUse the repository rules." in prompt
     assert "${repository_instructions}" not in prompt
+
+
+def test_system_prompt_parts_keep_stable_prefix_separate():
+    bot = bot_actor("eng", name="Engineer", description="Builds", instructions="Be terse.")
+    bot.id = "e"
+    stable, dynamic = build_system_prompt_parts(bot=bot, all_bots=[bot], participants=["You"], memories=["prefers_dynamic_memory"],
+                                                workspace_root="/w", older_count=2, tool_names=["run_shell"])
+    assert "Engineer" in stable and "Be terse." in stable
+    assert "prefers_dynamic_memory" not in stable and "older messages" not in stable
+    assert "m" in dynamic and "older messages" in dynamic
+    assert build_system_prompt(bot=bot, all_bots=[bot], participants=["You"], memories=["prefers_dynamic_memory"],
+                               workspace_root="/w", older_count=2, tool_names=["run_shell"]) == stable + dynamic

@@ -16,7 +16,7 @@ from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
     SummarizationMiddleware,
 )
-from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, SystemMessage, ToolMessage
 from langchain_core.tracers.context import collect_runs
 from langgraph.types import Command
 from sqlalchemy import func, select
@@ -35,7 +35,7 @@ from openbot.db.models import (
 from openbot.runtime import activity, memory
 from openbot.runtime.caching import caching_middleware
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
-from openbot.runtime.prompt import build_history, build_system_prompt
+from openbot.runtime.prompt import build_history, build_system_prompt_parts
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.runtime.tool_failures import ToolFailureMiddleware
@@ -302,12 +302,13 @@ class Runner:
         query = "\n".join(m.content for m in triggers)
         memories = await memory.relevant_memories(self.s.store, bot.id, query) if self.s.store is not None else []
         workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
-        prompt = build_system_prompt(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
+        stable_prompt, dynamic_prompt = build_system_prompt_parts(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
                                      workspace_root=str(workspace_root), older_count=older,
                                      # Only tools that will actually be bound: an MCP server that is down
                                      # must not be advertised, or the model calls a tool it does not have.
                                      tool_names=[n for n in bot.bot.tool_names if self.s.registry.has(n)],
                                      default_bot_handle=default_bot_handle, scoped=scoped)
+        prompt = SystemMessage(content=[{"type": "text", "text": stable_prompt}, {"type": "text", "text": dynamic_prompt}])
         hop = max([m.hop for m in triggers], default=0) + 1
         return prompt, {"messages": history}, hop
 

@@ -16,7 +16,7 @@ from tests.fakes import ScriptedChatModel, ai
 
 def _calls_for(handle: str) -> list[list]:
     """Model calls made by the bot with this handle, oldest first."""
-    return [call for call in ScriptedChatModel.seen if call and call[0].type == "system" and f"(@{handle})" in call[0].content]
+    return [call for call in ScriptedChatModel.seen if call and call[0].type == "system" and f"(@{handle})" in str(call[0].content)]
 
 
 def _texts(call) -> str:
@@ -56,13 +56,13 @@ async def test_default_bot_sees_everything_and_delegates_see_only_their_slice(se
     assert "fix the lint error" in second and "Opened PR 31" in second and "implement the widget" in second
     assert "please build me a widget" not in second
     assert "(new): @eng PR 31" in second                      # the trigger is still marked
-    sys_prompt = eng_calls[1][0].content
+    sys_prompt = str(eng_calls[1][0].content)
     assert "only the messages addressed to you" in sys_prompt and "read_history" in sys_prompt and "recall_messages" in sys_prompt
     assert "other messages exist" in sys_prompt and "The full thread history is shown" not in sys_prompt
 
     chief_calls = _calls_for("chief_of_staff")
     assert chief_calls and "please build me a widget" in _texts(chief_calls[0])
-    assert "The full thread history is shown" in chief_calls[0][0].content
+    assert "The full thread history is shown" in str(chief_calls[0][0].content)
 
 
 async def test_the_only_bot_in_a_thread_gets_the_full_history(settings):
@@ -80,7 +80,7 @@ async def test_the_only_bot_in_a_thread_gets_the_full_history(settings):
     await services.actors.wait_idle()
     await services.actors.stop()
     calls = _calls_for("eng")
-    assert len(calls) == 2 and "squash merges" in _texts(calls[1]) and "The full thread history is shown" in calls[1][0].content
+    assert len(calls) == 2 and "squash merges" in _texts(calls[1]) and "The full thread history is shown" in str(calls[1][0].content)
 
 
 def test_seeded_instructions_explain_the_scoped_view():
