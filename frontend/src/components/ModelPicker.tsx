@@ -81,8 +81,10 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   const [seenProvider, setSeenProvider] = useState(provider);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const suppressFocusOpen = useRef(false);
   const titleId = useId();
+  const dialogId = useId();
   const listId = useId();
   const suggestedSet = useMemo(() => new Set(suggested), [suggested]);
   const configuredUpstreams = useMemo(() => (providers.data?.providers ?? []).filter((p) => p.configured), [providers.data]);
@@ -131,8 +133,18 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
   const status = models.isLoading ? "Loading models…" : models.error ? "Models could not be loaded." : unconfigured ? notConfiguredText(provider) : flat.length ? `${flat.length} models available.` : query ? `No models match ${query}.` : "No models available.";
 
   const dialog = open && createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <section className="flex h-[min(720px,calc(100vh-16px))] w-[min(960px,calc(100vw-16px))] max-w-full flex-col overflow-hidden rounded-ui border border-line bg-surface shadow-[0_24px_60px_-20px_rgb(0_0_0/0.65)] sm:h-[min(720px,calc(100vh-32px))] sm:w-[min(960px,calc(100vw-32px))]" data-positioning="viewport-aware">
+    <div id={dialogId} className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <section ref={dialogRef} onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const boundary = dialogRef.current;
+        if (!boundary) return;
+        const focusable = [...boundary.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex=\"-1\"])")];
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }} className="flex h-[min(720px,calc(100vh-16px))] w-[min(960px,calc(100vw-16px))] max-w-full flex-col overflow-hidden rounded-ui border border-line bg-surface shadow-[0_24px_60px_-20px_rgb(0_0_0/0.65)] sm:h-[min(720px,calc(100vh-32px))] sm:w-[min(960px,calc(100vw-32px))]" data-positioning="viewport-aware">
         <header className="shrink-0 border-b border-line p-4">
           <div className="flex items-start justify-between gap-3"><div><h2 id={titleId} className="text-base font-semibold">Choose a model</h2><p className="mt-1 font-sans text-xs text-muted">Search the catalog or enter a model ID directly.</p></div><button type="button" onClick={close} className="min-h-9 rounded-ui border border-line px-2 text-xs text-muted hover:bg-sunken hover:text-fg">Esc <span aria-hidden>×</span></button></div>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input ref={searchRef} aria-label="Search model IDs, names, or families" placeholder="Search model IDs, names, or families" value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off" spellCheck={false} className="font-mono" />{provider === "openrouter" && configuredUpstreams.length > 0 && <select aria-label="Configured providers" value={selectedUpstreams.length ? selectedUpstreams.join(",") : ""} onChange={(e) => setSelectedUpstreams(e.target.value ? e.target.value.split(",") : [])} className="h-9 rounded-ui border border-line bg-surface px-2 text-xs"><option value="">All configured providers</option>{configuredUpstreams.map((p) => <option key={p.id} value={p.id}>{p.id}</option>)}</select>}</div>
@@ -145,5 +157,5 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
       </section>
     </div>, document.body);
 
-  return <div className="relative"><Input ref={inputRef} role="combobox" aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? titleId : undefined} aria-autocomplete="none" autoComplete="off" spellCheck={false} id={id} required={required} value={value} className={`font-mono ${className}`} onFocus={() => { if (!suppressFocusOpen.current) setOpen(true); }} onClick={() => setOpen(true)} onChange={(e) => { onChange(e.target.value); setQuery(e.target.value); setOpen(true); }} onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); setOpen(true); } if (e.key === "Escape" && open) { e.preventDefault(); close(); } }} />{!known && !models.isLoading && !unconfigured && <div className="mt-1 font-sans text-[11px] text-faint">Not in the catalog; sent to the provider as typed.</div>}{dialog}</div>;
+  return <div className="relative"><Input ref={inputRef} role="combobox" aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? dialogId : undefined} aria-autocomplete="none" autoComplete="off" spellCheck={false} id={id} required={required} value={value} className={`font-mono ${className}`} onFocus={() => { if (!suppressFocusOpen.current) setOpen(true); }} onClick={() => setOpen(true)} onChange={(e) => { onChange(e.target.value); setQuery(e.target.value); setOpen(true); }} onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); setOpen(true); } if (e.key === "Escape" && open) { e.preventDefault(); close(); } }} />{!known && !models.isLoading && !unconfigured && <div className="mt-1 font-sans text-[11px] text-faint">Not in the catalog; sent to the provider as typed.</div>}{dialog}</div>;
 }

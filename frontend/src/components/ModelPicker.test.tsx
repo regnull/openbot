@@ -37,7 +37,7 @@ const dialog = () => document.body.querySelector<HTMLElement>("[role=dialog]");
 const search = () => dialog()!.querySelector<HTMLInputElement>("input[aria-label='Search model IDs, names, or families']")!;
 const options = () => [...document.body.querySelectorAll<HTMLElement>("[role=option]")];
 const click = (element: Element) => act(async () => { element.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-const key = (element: Element, keyName: string) => act(async () => { element.dispatchEvent(new KeyboardEvent("keydown", { key: keyName, bubbles: true })); });
+const key = (element: Element, keyName: string, init: KeyboardEventInit = {}) => act(async () => { element.dispatchEvent(new KeyboardEvent("keydown", { key: keyName, bubbles: true, ...init })); });
 const until = async (predicate: () => boolean, message: string) => { for (let i = 0; i < 20; i += 1) { if (predicate()) return; await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); } throw new Error(message); };
 
 beforeEach(() => {
@@ -97,13 +97,30 @@ it("selects a row, marks it selected, and closes", async () => {
 it("keeps normal Tab traversal inside the modal and Escape restores focus to the picker input", async () => {
   await show(); await click(pickerInput());
   expect(document.activeElement).toBe(search());
-  await key(search(), "Tab");
+  expect(pickerInput().getAttribute("aria-controls")).toBe(dialog()?.id);
+  const buttons = [...dialog()!.querySelectorAll("button")];
+  const first = buttons[0];
+  const cancel = buttons.find((button) => button.textContent?.includes("Cancel"))!;
+  cancel.focus();
+  await key(cancel, "Tab");
+  expect(document.activeElement).toBe(first);
+  await key(first, "Tab");
   expect(dialog()).not.toBeNull();
   expect(document.activeElement).not.toBe(pickerInput());
   await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
   expect(dialog()).toBeNull();
   await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))); });
   expect(document.activeElement).toBe(pickerInput());
+});
+
+it("wraps Shift+Tab from the first modal control to the last control", async () => {
+  await show(); await click(pickerInput());
+  const buttons = [...dialog()!.querySelectorAll("button")];
+  const first = buttons[0];
+  const cancel = buttons.find((button) => button.textContent?.includes("Cancel"))!;
+  first.focus();
+  await key(first, "Tab", { shiftKey: true });
+  expect(document.activeElement).toBe(cancel);
 });
 
 it("announces loading, stale, empty, and error states and supports retry", async () => {
