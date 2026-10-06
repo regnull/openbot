@@ -14,6 +14,7 @@ describe("ThreadOdometer", () => {
     expect(container.textContent).toContain("in12,345 tok");
     expect(container.querySelectorAll(".thread-odometer-digit")).toHaveLength(5);
     expect(container.firstElementChild?.getAttribute("aria-label")).toBe("in: 12,345 tok");
+    expect(container.firstElementChild?.getAttribute("role")).toBe("img");
 
     act(() => root.unmount());
   });

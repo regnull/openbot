@@ -22,7 +22,7 @@ export default function ThreadOdometer({ label, value, prefix = "", suffix = "",
   const accessibleValue = loading ? "loading" : displayValue;
 
   return (
-    <span className="thread-odometer" aria-label={`${label}: ${accessibleValue}`}>
+    <span className="thread-odometer" role="img" aria-label={`${label}: ${accessibleValue}`}>
       <span className="thread-odometer-label">{label}</span>
       <span className={`thread-odometer-value${loading ? " thread-odometer-loading" : ""}`} aria-hidden="true">
         {digits.map((character, index) => (

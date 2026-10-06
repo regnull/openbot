@@ -205,7 +205,7 @@ export default function ThreadPage() {
           <p className="flex flex-wrap items-baseline gap-x-3 text-[11px] leading-4 text-muted">
             <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
             <span className="truncate"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
-            <span className="thread-header-counters" aria-label="Thread usage">
+            <span className="thread-header-counters" role="group" aria-label="Thread usage">
               <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
               <ThreadOdometer label="in" value={usageData?.prompt_tokens} suffix=" tok" loading={usage.isLoading} />
               <ThreadOdometer label="out" value={usageData?.completion_tokens} suffix=" tok" loading={usage.isLoading} />

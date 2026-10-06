@@ -127,6 +127,8 @@ describe("ThreadPage window re-entry", () => {
   it("renders and refreshes live usage counters", async () => {
     await mount("/threads/t1");
     await until(() => text().includes("first reply"), "initial history");
+    expect(el.querySelector('[aria-label="Thread usage"]')?.getAttribute("role")).toBe("group");
+    expect(el.querySelector('[aria-label="calls: 0"]')?.getAttribute("role")).toBe("img");
     expect(el.querySelector('[aria-label="calls: 0"]')).toBeTruthy();
     expect(el.querySelector('[aria-label="in: 0 tok"]')).toBeTruthy();
     expect(el.querySelector('[aria-label="out: 0 tok"]')).toBeTruthy();
