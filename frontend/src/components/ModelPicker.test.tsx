@@ -194,24 +194,26 @@ it("sorts a task by leaderboard rank by default and cycles through newest and ch
   await click([...dialog()!.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Code"))!);
   const ids = () => options().map((row) => row.querySelector(".font-mono")?.textContent);
   const sortButton = () => dialog()!.querySelector<HTMLButtonElement>("button[aria-label='Sort models']")!;
-  expect(sortButton().textContent).toBe("Top ranked");
+  expect(sortButton().textContent).toBe("Sort: Top ranked");
   expect(ids()).toEqual(["b/top-coder", "c/cheap-coder", "a/new-coder"]);
+  expect(options()[0].querySelector("[data-rank=Code]")?.textContent).toBe("#1 code");
+  expect(options()[2].querySelector("[data-rank]")).toBeNull();
   await click(sortButton());
-  expect(sortButton().textContent).toBe("Newest");
+  expect(sortButton().textContent).toBe("Sort: Newest");
   expect(ids()).toEqual(["a/new-coder", "c/cheap-coder", "b/top-coder"]);
   await click(sortButton());
-  expect(sortButton().textContent).toBe("Cheapest");
+  expect(sortButton().textContent).toBe("Sort: Cheapest");
   expect(ids()).toEqual(["c/cheap-coder", "b/top-coder", "a/new-coder"]);
   await click(sortButton());
-  expect(sortButton().textContent).toBe("Top ranked");
+  expect(sortButton().textContent).toBe("Sort: Top ranked");
 });
 
 it("offers no rank sort when the catalog has no leaderboard data", async () => {
   await show(); await click(pickerInput());
   const sortButton = dialog()!.querySelector<HTMLButtonElement>("button[aria-label='Sort models']")!;
-  expect(sortButton.textContent).toBe("Newest");
+  expect(sortButton.textContent).toBe("Sort: Newest");
   await click(sortButton);
-  expect(sortButton.textContent).toBe("Cheapest");
+  expect(sortButton.textContent).toBe("Sort: Cheapest");
   await click(sortButton);
-  expect(sortButton.textContent).toBe("Newest");
+  expect(sortButton.textContent).toBe("Sort: Newest");
 });
