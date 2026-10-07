@@ -1,6 +1,9 @@
 import asyncio
+import difflib
 import os
 import sys
+from itertools import pairwise
+from pathlib import Path
 
 from langchain.tools import ToolRuntime, tool
 
@@ -24,13 +27,19 @@ def _outline(path: str, lines: list[str], size: int, limit: int) -> str:
         shown.append(line)
         used += len(line) + 1
     head = "\n".join(shown)
-    return (f"{path}: {len(lines)} lines, {size} chars; too large to show whole (cap {limit} chars). "
-            f"Read it in parts with start_line/end_line, or grep for what you need. Lines 1-{len(shown)}:\n{head}")
+    return (
+        f"{path}: {len(lines)} lines, {size} chars; too large to show whole (cap {limit} chars). "
+        f"Read it in parts with start_line/end_line, or grep for what you need. Lines 1-{len(shown)}:\n{head}"
+    )
 
 
 @tool
-async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int | None = None,
-                    end_line: int | None = None) -> str:
+async def read_file(
+    path: str,
+    runtime: ToolRuntime[RunContext],
+    start_line: int | None = None,
+    end_line: int | None = None,
+) -> str:
     """Read a UTF-8 text file at a path relative to the workspace root.
 
     Pass `start_line` and/or `end_line` (1-based, inclusive) to read only part of a large file; the
@@ -53,7 +62,9 @@ async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int
     if start > end:
         return f"error: no lines in range {start}-{end} (file has {total} lines)"
     body = "\n".join(lines[start - 1:end])
-    return cap(f"lines {start}-{end} of {total}:\n{body}", limit, hint="ask for a narrower line range")
+    return cap(
+        f"lines {start}-{end} of {total}:\n{body}", limit, hint="ask for a narrower line range"
+    )
 
 
 @tool
@@ -66,6 +77,207 @@ async def write_file(path: str, content: str, runtime: ToolRuntime[RunContext]) 
         return f"wrote {len(content)} chars to {path}"
     except (ValueError, OSError) as e:
         return f"error: {e}"
+
+
+_EDIT_LOCKS: dict[Path, asyncio.Lock] = {}
+
+
+def _edit_lock(path: Path) -> asyncio.Lock:
+    return _EDIT_LOCKS.setdefault(path, asyncio.Lock())
+
+
+def _decode_escapes(text: str) -> str:
+    return bytes(text, "utf-8").decode("unicode_escape")
+
+
+def _normalize_whitespace(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _remove_common_indent(text: str) -> str:
+    lines = text.split("\n")
+    indents = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
+    indent = min(indents, default=0)
+    return "\n".join(line[indent:] if line.strip() else line for line in lines)
+
+
+def _candidate_ranges(content: str, old: str) -> list[tuple[int, int, str]]:
+    """Return (start, end, strategy) candidates, ordered from strict to fuzzy.
+
+    The matcher ladder is adapted from OpenCode's MIT-licensed edit tool.
+    """
+    if not old:
+        return []
+    exact = []
+    start = 0
+    while True:
+        index = content.find(old, start)
+        if index < 0:
+            break
+        exact.append((index, index + len(old), "exact"))
+        start = index + 1
+    if exact:
+        return exact
+
+    content_lines = content.split("\n")
+    old_lines = old.split("\n")
+    if not old_lines:
+        return []
+    decoded_old = _decode_escapes(old)
+    if decoded_old != old:
+        decoded_matches = _candidate_ranges(content, decoded_old)
+        if decoded_matches:
+            return [(start, end, "escape-normalized") for start, end, _ in decoded_matches]
+    if len(old_lines) == 1:
+        normalized_old = _normalize_whitespace(old)
+        found: list[tuple[int, int, str]] = []
+        for line_number in range(len(content_lines)):
+            for end_line in range(line_number, len(content_lines)):
+                if end_line > line_number and not content_lines[end_line]:
+                    continue
+                block = "\n".join(content_lines[line_number : end_line + 1])
+                if _normalize_whitespace(block) == normalized_old:
+                    start = sum(len(item) + 1 for item in content_lines[:line_number])
+                    found.append((start, start + len(block), "whitespace-normalized"))
+        if found:
+            return found
+    strategies = (
+        (
+            "trimmed lines",
+            lambda block: (
+                [line.strip() for line in block.split("\n")] == [line.strip() for line in old_lines]
+            ),
+        ),
+        (
+            "whitespace-normalized",
+            lambda block: _normalize_whitespace(block) == _normalize_whitespace(old),
+        ),
+        (
+            "indentation-flexible",
+            lambda block: _remove_common_indent(block) == _remove_common_indent(old),
+        ),
+        ("escape-normalized", lambda block: block == _decode_escapes(old)),
+    )
+    for strategy, matches in strategies:
+        found: list[tuple[int, int, str]] = []
+        for line_number in range(len(content_lines) - len(old_lines) + 1):
+            block = "\n".join(content_lines[line_number : line_number + len(old_lines)])
+            if matches(block):
+                start = sum(len(line) + 1 for line in content_lines[:line_number])
+                found.append((start, start + len(block), strategy))
+        if found:
+            return found
+
+    if len(old_lines) >= 3:
+        first, last = old_lines[0].strip(), old_lines[-1].strip()
+        found: list[tuple[int, int, str]] = []
+        for line_number in range(len(content_lines)):
+            if content_lines[line_number].strip() != first:
+                continue
+            for end_line in range(line_number + 2, len(content_lines)):
+                if content_lines[end_line].strip() != last:
+                    continue
+                block_lines = content_lines[line_number : end_line + 1]
+                if len(block_lines) != len(old_lines):
+                    continue
+                middle = sum(
+                    a.strip() == b.strip()
+                    for a, b in zip(block_lines[1:-1], old_lines[1:-1], strict=True)
+                )
+                total = sum(
+                    bool(a.strip() or b.strip())
+                    for a, b in zip(block_lines[1:-1], old_lines[1:-1], strict=True)
+                )
+                if not total or middle / total >= 0.5:
+                    start = sum(len(line) + 1 for line in content_lines[:line_number])
+                    block = "\n".join(block_lines)
+                    found.append((start, start + len(block), "first/last-line anchors"))
+        if found:
+            return found
+    return []
+
+
+def _is_disproportionate(candidate: str, old: str) -> bool:
+    return len(candidate) > max(len(old) * 3, len(old) + 200)
+
+
+def _render_edit_diff(path: str, before: str, after: str, limit: int = 4000) -> str:
+    diff = "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile=path,
+            tofile=path,
+        )
+    )
+    return diff[:limit] + ("\n... diff truncated" if len(diff) > limit else "")
+
+
+@tool
+async def edit_file(
+    path: str,
+    old_string: str,
+    new_string: str,
+    runtime: ToolRuntime[RunContext],
+    replace_all: bool = False,
+) -> str:
+    """Replace text in a UTF-8 workspace file using a safe fuzzy matcher ladder."""
+    try:
+        p = resolve_in_workspace(runtime.context.workspace_root, path)
+    except ValueError as e:
+        return f"error: {e}"
+    if not old_string:
+        return "error: 'old_string' must be non-empty"
+
+    async with _edit_lock(p):
+        try:
+            raw = p.read_bytes()
+            bom = raw.startswith(b"\xef\xbb\xbf")
+            content = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            return f"error: {e}"
+
+        newline = "\r\n" if "\r\n" in content else "\n"
+        normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+        old = old_string.replace("\r\n", "\n").replace("\r", "\n")
+        new = new_string.replace("\r\n", "\n").replace("\r", "\n")
+        matches = _candidate_ranges(normalized, old)
+        if not matches:
+            return "error: old_string was not found; re-read the file and provide the intended text"
+        disproportionate = [
+            match for match in matches if _is_disproportionate(normalized[match[0] : match[1]], old)
+        ]
+        if disproportionate:
+            return "error: matched text is much larger than old_string; provide a more specific old_string"
+        if len(matches) > 1 and not replace_all:
+            return f"error: old_string matched {len(matches)} locations; pass replace_all=true or provide more context"
+        if replace_all:
+            ordered_matches = sorted(matches, key=lambda match: match[0])
+            if any(
+                previous[1] > current[0]
+                for previous, current in pairwise(ordered_matches)
+            ):
+                return "error: replace_all cannot apply overlapping matches; provide more context"
+
+        selected = matches if replace_all else matches[:1]
+        result = normalized
+        for start, end, _ in reversed(selected):
+            result = result[:start] + new + result[end:]
+        output = result.replace("\n", newline)
+        encoded = output.encode("utf-8")
+        if bom:
+            encoded = b"\xef\xbb\xbf" + encoded
+        try:
+            p.write_bytes(encoded)
+        except OSError as e:
+            return f"error: {e}"
+        strategy = matches[0][2]
+        diff = _render_edit_diff(path, normalized, result)
+        return (
+            f"edited {path} ({strategy}, {len(selected)} replacement{'s' if len(selected) != 1 else ''})\n{diff}"
+            if diff
+            else f"edited {path} ({strategy})"
+        )
 
 
 async def _apply_patch_command(
@@ -197,4 +409,8 @@ async def list_files(runtime: ToolRuntime[RunContext], path: str = ".", depth: i
         rel = os.path.relpath(dirpath, root)
         for f in sorted(filenames):
             lines.append(f if rel == "." else f"{rel}/{f}")
-    return cap("\n".join(lines) or "(empty)", runtime.context.tool_output_cap, hint="list a subdirectory or a smaller depth")
+    return cap(
+        "\n".join(lines) or "(empty)",
+        runtime.context.tool_output_cap,
+        hint="list a subdirectory or a smaller depth",
+    )
