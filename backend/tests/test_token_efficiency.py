@@ -67,6 +67,14 @@ async def test_read_file_returns_empty_for_empty_files(tmp_path):
     assert await read_file.ainvoke({"path": "empty.txt", "runtime": r}) == ""
 
 
+async def test_read_file_preserves_newline_only_and_final_empty_lines(tmp_path):
+    (tmp_path / "newline.txt").write_text("\n")
+    (tmp_path / "final-empty-line.txt").write_text("line\n")
+    r = rt(tmp_path)
+    assert await read_file.ainvoke({"path": "newline.txt", "runtime": r}) == "1: \n2: "
+    assert await read_file.ainvoke({"path": "final-empty-line.txt", "runtime": r}) == "1: line\n2: "
+
+
 async def test_read_file_supports_line_ranges(tmp_path):
     (tmp_path / "f.txt").write_text("\n".join(f"L{i}" for i in range(1, 51)))
     r = rt(tmp_path)

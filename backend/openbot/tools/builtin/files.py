@@ -100,9 +100,9 @@ async def read_file(
         )
     except OSError as e:
         return _bounded_read_output(f"error: {e}", runtime.context.tool_output_cap)
-    lines = text.splitlines()
-    if not lines:
+    if not text:
         return ""
+    lines = text.split("\n")
     total = len(lines)
     start = max(1, start_line or 1)
     end = min(total, end_line or total)
