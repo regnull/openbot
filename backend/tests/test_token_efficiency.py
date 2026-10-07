@@ -61,22 +61,82 @@ def test_cap_keeps_head_and_tail_and_says_how_much_was_dropped():
     assert cap("short", 800) == "short"
 
 
+async def test_read_file_returns_empty_for_empty_files(tmp_path):
+    (tmp_path / "empty.txt").write_text("")
+    r = rt(tmp_path)
+    assert await read_file.ainvoke({"path": "empty.txt", "runtime": r}) == ""
+
+
+async def test_read_file_preserves_newline_only_and_final_empty_lines(tmp_path):
+    (tmp_path / "newline.txt").write_text("\n")
+    (tmp_path / "final-empty-line.txt").write_text("line\n")
+    r = rt(tmp_path)
+    assert await read_file.ainvoke({"path": "newline.txt", "runtime": r}) == "1: \n2: "
+    assert await read_file.ainvoke({"path": "final-empty-line.txt", "runtime": r}) == "1: line\n2: "
+
+
 async def test_read_file_supports_line_ranges(tmp_path):
     (tmp_path / "f.txt").write_text("\n".join(f"L{i}" for i in range(1, 51)))
     r = rt(tmp_path)
-    assert await read_file.ainvoke({"path": "f.txt", "start_line": 10, "end_line": 12, "runtime": r}) == "lines 10-12 of 50:\nL10\nL11\nL12"
-    assert (await read_file.ainvoke({"path": "f.txt", "start_line": 49, "runtime": r})).startswith("lines 49-50 of 50:")
-    assert (await read_file.ainvoke({"path": "f.txt", "end_line": 2, "runtime": r})) == "lines 1-2 of 50:\nL1\nL2"
+    assert await read_file.ainvoke({"path": "f.txt", "start_line": 10, "end_line": 12, "runtime": r}) == "10: L10\n11: L11\n12: L12\n\nshowing lines 10–12 of 50; use start_line=13 to continue"
+    assert (await read_file.ainvoke({"path": "f.txt", "start_line": 49, "runtime": r})).startswith("49: L49\n50: L50")
+    assert (await read_file.ainvoke({"path": "f.txt", "end_line": 2, "runtime": r})).startswith("1: L1\n2: L2")
     assert "error: no lines in range" in await read_file.ainvoke({"path": "f.txt", "start_line": 60, "runtime": r})
+
+
+async def test_read_file_clips_lines_detects_binary_and_suggests_missing_files(tmp_path):
+    (tmp_path / "long.txt").write_text("x" * 2100 + "\nlast")
+    (tmp_path / "notes.txt").write_text("notes")
+    r = rt(tmp_path)
+    out = await read_file.ainvoke({"path": "long.txt", "runtime": r})
+    assert "1: " in out and "line truncated to 2000 chars" in out and "2: last" in out
+    (tmp_path / "image.bin").write_bytes(b"PNG\x00data")
+    assert "cannot read binary file" in await read_file.ainvoke({"path": "image.bin", "runtime": r})
+    missing = await read_file.ainvoke({"path": "note.txt", "runtime": r})
+    assert "Did you mean" in missing and "notes.txt" in missing
+
+
+async def test_read_file_continuation_hint_uses_next_line(tmp_path):
+    (tmp_path / "f.txt").write_text("\n".join(f"line-{i}" for i in range(1, 20)))
+    out = await read_file.ainvoke({"path": "f.txt", "runtime": rt(tmp_path, cap_chars=40)})
+    assert "showing lines 1–" in out and "use start_line=" in out
 
 
 async def test_tools_honour_the_context_output_cap(tmp_path):
     (tmp_path / "big.txt").write_text("x" * 5000)
     small = rt(tmp_path, cap_chars=1000)
     out = await read_file.ainvoke({"path": "big.txt", "runtime": small})
-    assert len(out) < 1200 and "start_line/end_line" in out
+    assert len(out) < 1200 and "use start_line=" in out
     out = await run_shell.ainvoke({"command": "printf '%5000s' | tr ' ' y", "runtime": small})
     assert len(out) < 1200 and "[truncated" in out and out.startswith("exit code: 0")
+
+
+async def test_read_file_output_cap_includes_continuation_hint(tmp_path):
+    (tmp_path / "long-line.txt").write_text("x" * 5000)
+    out = await read_file.ainvoke({"path": "long-line.txt", "runtime": rt(tmp_path, cap_chars=40)})
+    assert len(out) <= 40
+
+
+async def test_read_file_error_outputs_honour_small_cap(tmp_path, monkeypatch):
+    limit = 24
+    r = rt(tmp_path, cap_chars=limit)
+    (tmp_path / "notes.txt").write_text("notes")
+    (tmp_path / "f.txt").write_text("line")
+    binary_name = "b" * 200 + ".bin"
+    (tmp_path / binary_name).write_bytes(b"PNG\x00data")
+
+    missing = await read_file.ainvoke({"path": "n" * 200, "runtime": r})
+    binary = await read_file.ainvoke({"path": binary_name, "runtime": r})
+    invalid = await read_file.ainvoke({"path": "f.txt", "start_line": 100, "runtime": r})
+    resolution = await read_file.ainvoke({"path": "../" + "x" * 200, "runtime": r})
+    assert len(missing) <= limit
+    assert len(binary) <= limit
+    assert len(invalid) <= limit
+    assert len(resolution) <= limit
+
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(OSError("e" * 200)))
+    filesystem = await read_file.ainvoke({"path": "notes.txt", "runtime": r})
+    assert len(filesystem) <= limit
 
 
 # --- runner: limits, context editing, usage ----------------------------------------------------------
@@ -262,11 +322,11 @@ async def test_whole_file_read_over_the_cap_returns_an_outline_not_a_dump(tmp_pa
     lines = [f"line {i:04d} " + "x" * 60 for i in range(1, 401)]
     (tmp_path / "big.py").write_text("\n".join(lines))
     out = await read_file.ainvoke({"path": "big.py", "runtime": rt(tmp_path, cap_chars=4000)})
-    assert "400 lines" in out and "start_line/end_line" in out
-    assert "line 0001" in out and "line 0400" not in out            # start shown, tail not dumped
-    assert len(out) <= 4000 // 2 + 200                                # well under the cap, not at it
+    assert "showing lines 1–" in out and "use start_line=" in out
+    assert "1: line 0001" in out and "400: line 0400" not in out
+    assert len(out) <= 4000
     small = await read_file.ainvoke({"path": "big.py", "start_line": 1, "end_line": 3, "runtime": rt(tmp_path, cap_chars=4000)})
-    assert small.startswith("lines 1-3 of 400:")
+    assert small.startswith("1: line 0001")
 
 
 # --- context editing: defaults that fire, and written content that goes away --------------------------

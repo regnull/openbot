@@ -11,26 +11,59 @@ from openbot.tools.builtin.git_for_windows import INSTALL_HINT, find_git_patch
 from openbot.tools.builtin.workspace import STATE_DIR, cap, resolve_in_workspace
 from openbot.tools.context import RunContext
 
+_MAX_LINE_LENGTH = 2000
+_LINE_SUFFIX = f"... (line truncated to {_MAX_LINE_LENGTH} chars)"
+_BINARY_SAMPLE_SIZE = 4096
 
-def _outline(path: str, lines: list[str], size: int, limit: int) -> str:
-    """What a whole-file read returns when the file is over the cap.
 
-    A head-and-tail dump at the cap is content the model cannot use, and in practice it re-reads the
-    file by ranges straight after, so the dump is paid for twice on every later turn. Show the size,
-    the start (a third of the cap at most), and how to read the rest."""
-    budget = limit // 3
-    shown: list[str] = []
+def _numbered_line(number: int, line: str) -> str:
+    if len(line) > _MAX_LINE_LENGTH:
+        line = line[:_MAX_LINE_LENGTH] + _LINE_SUFFIX
+    return f"{number}: {line}"
+
+
+def _bounded_read_output(message: str, limit: int) -> str:
+    return message[: max(0, limit)]
+
+
+def _missing_file_message(path: str, resolved: Path) -> str:
+    try:
+        names = [candidate.name for candidate in resolved.parent.iterdir()]
+        suggestions = difflib.get_close_matches(resolved.name, names, n=3, cutoff=0.4)
+    except OSError:
+        suggestions = []
+    if suggestions:
+        return f"error: file not found: {path}\n\nDid you mean one of these?\n" + "\n".join(suggestions)
+    return f"error: file not found: {path}"
+
+
+def _read_output(lines: list[str], start: int, end: int, total: int, limit: int) -> str:
+    rendered: list[str] = []
     used = 0
-    for line in lines:
-        if used + len(line) + 1 > budget:
+    last = start - 1
+    clipped = False
+    continuation = f"\n\nshowing lines {start}–{{last}} of {total}; use start_line={{next}} to continue"
+    reserve = len(continuation.format(last=0, next=1)) if end < total or start < end else 0
+    for number in range(start, end + 1):
+        line = _numbered_line(number, lines[number - 1])
+        extra = len(line) + (1 if rendered else 0)
+        if rendered and used + extra + reserve > limit:
             break
-        shown.append(line)
-        used += len(line) + 1
-    head = "\n".join(shown)
-    return (
-        f"{path}: {len(lines)} lines, {size} chars; too large to show whole (cap {limit} chars). "
-        f"Read it in parts with start_line/end_line, or grep for what you need. Lines 1-{len(shown)}:\n{head}"
-    )
+        if not rendered and len(line) + reserve > limit:
+            line = line[: max(1, limit - reserve - 3)] + "..."
+            clipped = True
+        rendered.append(line)
+        used += extra
+        last = number
+    output = "\n".join(rendered)
+    if last < end or last < total or clipped:
+        output += continuation.format(last=last, next=last + 1)
+    if len(output) <= limit:
+        return output
+    compact_hint = f"\nshowing lines {start}–{last}; use start_line={last + 1}"
+    if len(compact_hint) >= limit:
+        return compact_hint[:limit]
+    return output[: limit - len(compact_hint)] + compact_hint
 
 
 @tool
@@ -40,31 +73,45 @@ async def read_file(
     start_line: int | None = None,
     end_line: int | None = None,
 ) -> str:
-    """Read a UTF-8 text file at a path relative to the workspace root.
+    """Read a UTF-8 text file relative to the workspace root.
 
-    Pass `start_line` and/or `end_line` (1-based, inclusive) to read only part of a large file; the
-    reply says how many lines the file has. Long results are truncated, so prefer a range over
-    re-reading a file you have already seen."""
+    Each returned line starts with its 1-based line number (`N: content`), which `edit_file` users
+    can strip before applying edits. Use `start_line` and `end_line` (1-based, inclusive) for large
+    files; long lines are clipped at 2,000 characters. A continuation hint tells you where to resume.
+    When reading several files, call this tool for them in parallel when useful.
+
+    Adapted from OpenCode's MIT-licensed read tool."""
     try:
         p = resolve_in_workspace(runtime.context.workspace_root, path)
-        text = p.read_text(encoding="utf-8", errors="replace")
     except (ValueError, OSError) as e:
-        return f"error: {e}"
-    limit = runtime.context.tool_output_cap
-    lines = text.splitlines()
+        return _bounded_read_output(f"error: {e}", runtime.context.tool_output_cap)
+    if not p.is_file():
+        return _bounded_read_output(_missing_file_message(path, p), runtime.context.tool_output_cap)
+    try:
+        data = p.read_bytes()
+        if b"\x00" in data[:_BINARY_SAMPLE_SIZE]:
+            return _bounded_read_output(
+                f"error: cannot read binary file: {path}", runtime.context.tool_output_cap
+            )
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return _bounded_read_output(
+            f"error: cannot read binary file: {path}", runtime.context.tool_output_cap
+        )
+    except OSError as e:
+        return _bounded_read_output(f"error: {e}", runtime.context.tool_output_cap)
+    if not text:
+        return ""
+    lines = text.split("\n")
     total = len(lines)
-    if start_line is None and end_line is None:
-        if len(text) <= limit:
-            return text
-        return _outline(path, lines, len(text), limit)
     start = max(1, start_line or 1)
     end = min(total, end_line or total)
     if start > end:
-        return f"error: no lines in range {start}-{end} (file has {total} lines)"
-    body = "\n".join(lines[start - 1:end])
-    return cap(
-        f"lines {start}-{end} of {total}:\n{body}", limit, hint="ask for a narrower line range"
-    )
+        return _bounded_read_output(
+            f"error: no lines in range {start}-{end} (file has {total} lines)",
+            runtime.context.tool_output_cap,
+        )
+    return _read_output(lines, start, end, total, runtime.context.tool_output_cap)
 
 
 @tool
