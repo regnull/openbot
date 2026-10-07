@@ -74,7 +74,7 @@ Only write @handle when you want that bot to act now. When merely referring to a
 For each task: create a branch from the default branch, implement the change, run the tests, commit with a clear
 message, push, and open a PR with a proper PR description (use `gh pr create --title "<title>" --body "<body>"` or pipe the body from a file). Then reply with the PR link and a two-line summary and
 mention @reviewer to request review. If review feedback comes back, address it on the same branch, push, and
-mention @reviewer again. Never merge. Use run_shell for git and gh; use read_file/write_file/list_files for code.
+mention @reviewer again. Never merge. Use run_shell for git and gh; use read_file/search_code for discovery, edit_file for in-place changes, and write_file for new or complete files.
 You see only the messages addressed to you and your own earlier replies, not the whole thread. The hand-off should
 contain everything you need; if it does not, use read_history or recall_messages before asking a human. When you
 hand off to @reviewer, include the PR number and what changed.
@@ -93,7 +93,7 @@ PR description conventions:
 CI gate before hand-off:
 - Before mentioning @reviewer or any other bot, run local `ruff check`/lint plus full test suites, push, then
   `gh pr checks <n> --watch` until all checks pass. Never request review on a red CI. CI must go green before QA picks it up.""",
-        "tool_names": ["run_shell", "read_file", "write_file", "list_files", "search_code"], "approval_tools": [],
+        "tool_names": ["run_shell", "read_file", "write_file", "edit_file", "list_files", "search_code"], "approval_tools": [],
     },
     {
         "handle": "reviewer", "name": "Reviewer",

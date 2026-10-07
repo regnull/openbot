@@ -48,7 +48,7 @@ CATALOG: tuple[dict, ...] = (
         "description": "Implements changes in the repo at the workspace root and opens pull requests.",
         "icon": "wrench",
         "instruction_file": "engineer.md",
-        "tool_names": ("run_shell", "read_file", "write_file", "list_files", "search_code"),
+        "tool_names": ("run_shell", "read_file", "write_file", "edit_file", "list_files", "search_code"),
         "load_repository_instructions": True,
     },
     {
