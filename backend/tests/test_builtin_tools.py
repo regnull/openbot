@@ -154,6 +154,22 @@ async def test_edit_file_matchers(tmp_path, old, expected):
     assert (tmp_path / "notes.txt").read_text() == expected + "\n"
 
 
+async def test_edit_file_rejects_ambiguous_anchor_matches(tmp_path):
+    r = rt(tmp_path)
+    original = "START\nKEEP\nA\nEND\nSTART\nKEEP\nB\nEND\n"
+    (tmp_path / "notes.txt").write_text(original)
+    out = await edit_file.ainvoke(
+        {
+            "path": "notes.txt",
+            "old_string": "START\nKEEP\nOLD\nEND",
+            "new_string": "START\nKEEP\nNEW\nEND",
+            "runtime": r,
+        }
+    )
+    assert "matched 2 locations" in out
+    assert (tmp_path / "notes.txt").read_text() == original
+
+
 async def test_edit_file_rejects_ambiguous_and_oversized_matches(tmp_path):
     r = rt(tmp_path)
     (tmp_path / "notes.txt").write_text("same\\nsame\\n")

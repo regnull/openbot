@@ -164,6 +164,7 @@ def _candidate_ranges(content: str, old: str) -> list[tuple[int, int, str]]:
 
     if len(old_lines) >= 3:
         first, last = old_lines[0].strip(), old_lines[-1].strip()
+        found: list[tuple[int, int, str]] = []
         for line_number in range(len(content_lines)):
             if content_lines[line_number].strip() != first:
                 continue
@@ -184,7 +185,9 @@ def _candidate_ranges(content: str, old: str) -> list[tuple[int, int, str]]:
                 if not total or middle / total >= 0.5:
                     start = sum(len(line) + 1 for line in content_lines[:line_number])
                     block = "\n".join(block_lines)
-                    return [(start, start + len(block), "first/last-line anchors")]
+                    found.append((start, start + len(block), "first/last-line anchors"))
+        if found:
+            return found
     return []
 
 
