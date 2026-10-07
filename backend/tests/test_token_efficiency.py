@@ -61,6 +61,12 @@ def test_cap_keeps_head_and_tail_and_says_how_much_was_dropped():
     assert cap("short", 800) == "short"
 
 
+async def test_read_file_returns_empty_for_empty_files(tmp_path):
+    (tmp_path / "empty.txt").write_text("")
+    r = rt(tmp_path)
+    assert await read_file.ainvoke({"path": "empty.txt", "runtime": r}) == ""
+
+
 async def test_read_file_supports_line_ranges(tmp_path):
     (tmp_path / "f.txt").write_text("\n".join(f"L{i}" for i in range(1, 51)))
     r = rt(tmp_path)

@@ -88,6 +88,8 @@ async def read_file(
     except OSError as e:
         return f"error: {e}"
     lines = text.splitlines()
+    if not lines:
+        return ""
     total = len(lines)
     start = max(1, start_line or 1)
     end = min(total, end_line or total)
