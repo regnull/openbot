@@ -114,7 +114,7 @@ def _candidate_ranges(content: str, old: str) -> list[tuple[int, int, str]]:
         if index < 0:
             break
         exact.append((index, index + len(old), "exact"))
-        start = index + max(1, len(old))
+        start = index + 1
     if exact:
         return exact
 
@@ -129,12 +129,17 @@ def _candidate_ranges(content: str, old: str) -> list[tuple[int, int, str]]:
             return [(start, end, "escape-normalized") for start, end, _ in decoded_matches]
     if len(old_lines) == 1:
         normalized_old = _normalize_whitespace(old)
+        found: list[tuple[int, int, str]] = []
         for line_number in range(len(content_lines)):
             for end_line in range(line_number, len(content_lines)):
+                if end_line > line_number and not content_lines[end_line]:
+                    continue
                 block = "\n".join(content_lines[line_number : end_line + 1])
                 if _normalize_whitespace(block) == normalized_old:
                     start = sum(len(item) + 1 for item in content_lines[:line_number])
-                    return [(start, start + len(block), "whitespace-normalized")]
+                    found.append((start, start + len(block), "whitespace-normalized"))
+        if found:
+            return found
     strategies = (
         (
             "trimmed lines",

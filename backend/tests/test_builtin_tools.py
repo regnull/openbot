@@ -194,6 +194,22 @@ async def test_edit_file_rejects_ambiguous_and_oversized_matches(tmp_path):
     assert "matched 1000 locations" in out
 
 
+@pytest.mark.parametrize(
+    ("content", "old"),
+    [("aaa", "aa"), ("alpha  beta\nalpha   beta", "alpha beta")],
+)
+async def test_edit_file_rejects_overlapping_or_normalized_ambiguous_matches(
+    tmp_path, content, old
+):
+    r = rt(tmp_path)
+    (tmp_path / "notes.txt").write_text(content)
+    out = await edit_file.ainvoke(
+        {"path": "notes.txt", "old_string": old, "new_string": "changed", "runtime": r}
+    )
+    assert "matched 2 locations" in out
+    assert (tmp_path / "notes.txt").read_text() == content
+
+
 async def test_edit_file_preserves_crlf_and_bom(tmp_path):
     r = rt(tmp_path)
     (tmp_path / "windows.txt").write_bytes(b"\xef\xbb\xbffirst\r\nsecond\r\n")
