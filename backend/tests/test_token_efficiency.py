@@ -103,6 +103,12 @@ async def test_tools_honour_the_context_output_cap(tmp_path):
     assert len(out) < 1200 and "[truncated" in out and out.startswith("exit code: 0")
 
 
+async def test_read_file_output_cap_includes_continuation_hint(tmp_path):
+    (tmp_path / "long-line.txt").write_text("x" * 5000)
+    out = await read_file.ainvoke({"path": "long-line.txt", "runtime": rt(tmp_path, cap_chars=40)})
+    assert len(out) <= 40
+
+
 # --- runner: limits, context editing, usage ----------------------------------------------------------
 
 def _shell_loop(n: int):

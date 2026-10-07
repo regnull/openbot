@@ -54,7 +54,12 @@ def _read_output(lines: list[str], start: int, end: int, total: int, limit: int)
     output = "\n".join(rendered)
     if last < end or last < total or clipped:
         output += continuation.format(last=last, next=last + 1)
-    return output
+    if len(output) <= limit:
+        return output
+    compact_hint = f"\nshowing lines {start}–{last}; use start_line={last + 1}"
+    if len(compact_hint) >= limit:
+        return compact_hint[:limit]
+    return output[: limit - len(compact_hint)] + compact_hint
 
 
 @tool
