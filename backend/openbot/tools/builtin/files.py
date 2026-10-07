@@ -2,6 +2,7 @@ import asyncio
 import difflib
 import os
 import sys
+from itertools import pairwise
 from pathlib import Path
 
 from langchain.tools import ToolRuntime, tool
@@ -250,6 +251,13 @@ async def edit_file(
             return "error: matched text is much larger than old_string; provide a more specific old_string"
         if len(matches) > 1 and not replace_all:
             return f"error: old_string matched {len(matches)} locations; pass replace_all=true or provide more context"
+        if replace_all:
+            ordered_matches = sorted(matches, key=lambda match: match[0])
+            if any(
+                previous[1] > current[0]
+                for previous, current in pairwise(ordered_matches)
+            ):
+                return "error: replace_all cannot apply overlapping matches; provide more context"
 
         selected = matches if replace_all else matches[:1]
         result = normalized

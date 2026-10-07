@@ -210,6 +210,23 @@ async def test_edit_file_rejects_overlapping_or_normalized_ambiguous_matches(
     assert (tmp_path / "notes.txt").read_text() == content
 
 
+async def test_edit_file_rejects_overlapping_replace_all_matches(tmp_path):
+    r = rt(tmp_path)
+    content = "aaa"
+    (tmp_path / "notes.txt").write_text(content)
+    out = await edit_file.ainvoke(
+        {
+            "path": "notes.txt",
+            "old_string": "aa",
+            "new_string": "changed",
+            "runtime": r,
+            "replace_all": True,
+        }
+    )
+    assert "replace_all cannot apply overlapping matches" in out
+    assert (tmp_path / "notes.txt").read_text() == content
+
+
 async def test_edit_file_preserves_crlf_and_bom(tmp_path):
     r = rt(tmp_path)
     (tmp_path / "windows.txt").write_bytes(b"\xef\xbb\xbffirst\r\nsecond\r\n")
