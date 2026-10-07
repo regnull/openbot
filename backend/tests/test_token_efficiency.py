@@ -15,7 +15,7 @@ from openbot.runtime.runner import CLEARED_TOOL_RESULT, Runner
 from openbot.seed import DEMO_BOTS, seed_demo_bots
 from openbot.tools.builtin.files import read_file
 from openbot.tools.builtin.shell import run_shell
-from openbot.tools.builtin.workspace import cap
+from openbot.tools.builtin.workspace import TOOL_OUTPUT_DIR, TOOL_OUTPUT_RETENTION_SECONDS, cap
 from openbot.tools.context import RunContext
 from tests.fakes import ScriptedChatModel, ai, call
 from tests.test_runner import events, get, make, messages
@@ -59,6 +59,23 @@ def test_cap_keeps_head_and_tail_and_says_how_much_was_dropped():
     assert out.startswith("line0000\n") and out.endswith("line0999\n")
     assert "[truncated" in out and "use a range" in out and f"of {len(text)}" in out
     assert cap("short", 800) == "short"
+
+
+def test_cap_saves_full_output_and_cleans_old_files(tmp_path):
+    output_dir = tmp_path / TOOL_OUTPUT_DIR
+    output_dir.mkdir(parents=True)
+    old = output_dir / "old.txt"
+    old.write_text("old")
+    old_time = old.stat().st_mtime - TOOL_OUTPUT_RETENTION_SECONDS - 1
+    import os
+    os.utime(old, (old_time, old_time))
+
+    text = "head\n" + "middle\n" * 1000 + "tail\n"
+    out = cap(text, 500, workspace_root=tmp_path)
+    saved = list(output_dir.glob("output-*.txt"))
+    assert len(saved) == 1 and saved[0].read_text() == text
+    assert not old.exists()
+    assert f"full output in {TOOL_OUTPUT_DIR}/{saved[0].name}" in out
 
 
 async def test_read_file_returns_empty_for_empty_files(tmp_path):

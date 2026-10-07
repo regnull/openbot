@@ -84,7 +84,7 @@ def _drop_unset(args: dict[str, Any], required: set[str]) -> dict[str, Any]:
     return {k: v for k, v in args.items() if k in required or (v is not None and v != "")}
 
 
-def _wrap(tool: BaseTool, name: str, cap_chars: int) -> BaseTool:
+def _wrap(tool: BaseTool, name: str, cap_chars: int, workspace_root=None) -> BaseTool:
     """The registered face of an MCP tool: same schema, capped text output, and every failure (the
     server's isError, a dead transport, a lapsed authorization) returned as an "error: ..." result
     the model can react to, instead of an exception that fails the whole run. Optional arguments left
@@ -102,11 +102,11 @@ def _wrap(tool: BaseTool, name: str, cap_chars: int) -> BaseTool:
             # the adapter surfaces the server's isError status.
             msg = await tool.ainvoke({"name": tool.name, "args": kwargs, "id": "mcp", "type": "tool_call"})
         except Exception as e:  # noqa: BLE001 - see docstring
-            return cap(f"error: {type(e).__name__}: {e}", cap_chars)
+            return cap(f"error: {type(e).__name__}: {e}", cap_chars, workspace_root=workspace_root)
         text = _flatten(msg.content if isinstance(msg, ToolMessage) else msg)
         if isinstance(msg, ToolMessage) and msg.status == "error":
             text = f"error: {text}"
-        return cap(text, cap_chars, hint="ask the tool for less, or page through results")
+        return cap(text, cap_chars, hint="ask the tool for less, or page through results", workspace_root=workspace_root)
 
     return StructuredTool.from_function(coroutine=run, name=name, description=description,
                                         args_schema=tool.args_schema)
@@ -313,7 +313,7 @@ class McpManager:
         names = []
         for t in raw_tools:
             full = tool_name(name, t.name)
-            self._registry.register(_wrap(t, full, int(self._settings.tool_output_cap)), source=source)
+            self._registry.register(_wrap(t, full, int(self._settings.tool_output_cap), getattr(self._settings, "workspace_root", None)), source=source)
             names.append(full)
         st = self._status[name]
         st.tools, st.status, st.error = sorted(names), "connected", None
