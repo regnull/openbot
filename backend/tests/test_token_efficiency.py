@@ -459,6 +459,15 @@ async def test_run_shell_uses_its_own_cap(tmp_path):
     assert len(out) < 1200 and "[truncated" in out
 
 
+async def test_run_shell_persists_full_output_and_returns_relative_hint(tmp_path):
+    r = rt(tmp_path, cap_chars=8000, shell_cap_chars=1000)
+    out = await run_shell.ainvoke({"command": "printf '%5000s' | tr ' ' y", "runtime": r})
+    saved = list((tmp_path / TOOL_OUTPUT_DIR).glob("output-*.txt"))
+    assert len(saved) == 1
+    assert saved[0].read_text() == "exit code: 0\nstdout:\n" + "y" * 5000
+    assert f"full output in {TOOL_OUTPUT_DIR}/{saved[0].name}" in out
+
+
 def test_engineer_reviewer_and_qa_are_told_not_to_dump_files_through_the_shell():
     bots = {b["handle"]: b for b in DEMO_BOTS}
     for h in ("engineer", "reviewer"):
