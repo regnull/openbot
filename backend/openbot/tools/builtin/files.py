@@ -22,6 +22,10 @@ def _numbered_line(number: int, line: str) -> str:
     return f"{number}: {line}"
 
 
+def _bounded_read_output(message: str, limit: int) -> str:
+    return message[: max(0, limit)]
+
+
 def _missing_file_message(path: str, resolved: Path) -> str:
     try:
         names = [candidate.name for candidate in resolved.parent.iterdir()]
@@ -80,18 +84,22 @@ async def read_file(
     try:
         p = resolve_in_workspace(runtime.context.workspace_root, path)
     except (ValueError, OSError) as e:
-        return f"error: {e}"
+        return _bounded_read_output(f"error: {e}", runtime.context.tool_output_cap)
     if not p.is_file():
-        return _missing_file_message(path, p)
+        return _bounded_read_output(_missing_file_message(path, p), runtime.context.tool_output_cap)
     try:
         data = p.read_bytes()
         if b"\x00" in data[:_BINARY_SAMPLE_SIZE]:
-            return f"error: cannot read binary file: {path}"
+            return _bounded_read_output(
+                f"error: cannot read binary file: {path}", runtime.context.tool_output_cap
+            )
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        return f"error: cannot read binary file: {path}"
+        return _bounded_read_output(
+            f"error: cannot read binary file: {path}", runtime.context.tool_output_cap
+        )
     except OSError as e:
-        return f"error: {e}"
+        return _bounded_read_output(f"error: {e}", runtime.context.tool_output_cap)
     lines = text.splitlines()
     if not lines:
         return ""
@@ -99,7 +107,10 @@ async def read_file(
     start = max(1, start_line or 1)
     end = min(total, end_line or total)
     if start > end:
-        return f"error: no lines in range {start}-{end} (file has {total} lines)"
+        return _bounded_read_output(
+            f"error: no lines in range {start}-{end} (file has {total} lines)",
+            runtime.context.tool_output_cap,
+        )
     return _read_output(lines, start, end, total, runtime.context.tool_output_cap)
 
 

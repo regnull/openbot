@@ -109,6 +109,28 @@ async def test_read_file_output_cap_includes_continuation_hint(tmp_path):
     assert len(out) <= 40
 
 
+async def test_read_file_error_outputs_honour_small_cap(tmp_path, monkeypatch):
+    limit = 24
+    r = rt(tmp_path, cap_chars=limit)
+    (tmp_path / "notes.txt").write_text("notes")
+    (tmp_path / "f.txt").write_text("line")
+    binary_name = "b" * 200 + ".bin"
+    (tmp_path / binary_name).write_bytes(b"PNG\x00data")
+
+    missing = await read_file.ainvoke({"path": "n" * 200, "runtime": r})
+    binary = await read_file.ainvoke({"path": binary_name, "runtime": r})
+    invalid = await read_file.ainvoke({"path": "f.txt", "start_line": 100, "runtime": r})
+    resolution = await read_file.ainvoke({"path": "../" + "x" * 200, "runtime": r})
+    assert len(missing) <= limit
+    assert len(binary) <= limit
+    assert len(invalid) <= limit
+    assert len(resolution) <= limit
+
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(OSError("e" * 200)))
+    filesystem = await read_file.ainvoke({"path": "notes.txt", "runtime": r})
+    assert len(filesystem) <= limit
+
+
 # --- runner: limits, context editing, usage ----------------------------------------------------------
 
 def _shell_loop(n: int):
