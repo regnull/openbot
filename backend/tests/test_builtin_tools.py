@@ -127,7 +127,7 @@ async def test_files_roundtrip(tmp_path):
     assert "wrote" in await write_file.ainvoke(
         {"path": "a/hello.txt", "content": "hi", "runtime": r}
     )
-    assert await read_file.ainvoke({"path": "a/hello.txt", "runtime": r}) == "hi"
+    assert await read_file.ainvoke({"path": "a/hello.txt", "runtime": r}) == "1: hi"
     out = await list_files.ainvoke({"path": ".", "depth": 2, "runtime": r})
     assert "a/hello.txt" in out
     out = await read_file.ainvoke({"path": "../secret", "runtime": r})
