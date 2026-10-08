@@ -35,7 +35,7 @@ async def test_servers_are_listed_with_status_and_tools_and_show_up_in_the_tool_
     })
     async with LifespanManager(app), AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         rows = {r["name"]: r for r in (await c.get("/api/v1/mcp/servers")).json()}
-        assert rows["stub"]["status"] == "connected" and rows["stub"]["tools"] == ["stub__add", "stub__echo"] and rows["stub"]["oauth"] is False
+        assert rows["stub"]["status"] == "connected" and rows["stub"]["tools"] == ["stub__add", "stub__echo", "stub__fail"] and rows["stub"]["oauth"] is False
         assert rows["remote"]["status"] == "needs_auth" and rows["remote"]["oauth"] is True and rows["remote"]["tools"] == []
         assert rows["off"]["status"] == "disabled"
         tools = {t["name"]: t for t in (await c.get("/api/v1/tools")).json()["tools"]}

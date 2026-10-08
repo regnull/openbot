@@ -18,13 +18,18 @@ class _Settings:
     public_url = "http://127.0.0.1:8000"
 
 
+class _LegacySettings:
+    tool_output_cap = 60
+    public_url = "http://127.0.0.1:8000"
+
+
 async def test_connects_registers_prefixed_tools_and_calls_them():
     reg = ToolRegistry()
     mgr = McpManager(servers=[_stub()], registry=reg, settings=_Settings(), storage=None)
     await mgr.start()
     try:
         st = mgr.status("stub")
-        assert st.status == "connected" and sorted(st.tools) == ["stub__add", "stub__echo"] and st.error is None
+        assert st.status == "connected" and sorted(st.tools) == ["stub__add", "stub__echo", "stub__fail"] and st.error is None
         assert reg.has("stub__add") and reg.specs()[0].source == "mcp:stub"
         out = await reg.get("stub__add").ainvoke({"a": 2, "b": 3})
         assert "5" in str(out)
@@ -42,6 +47,50 @@ async def test_results_are_capped_like_builtin_tools():
         assert len(str(out)) < 200 and "[truncated" in str(out)
     finally:
         await mgr.stop()
+
+
+async def test_mcp_success_persists_full_output_and_returns_relative_hint(tmp_path):
+    settings = _Settings()
+    settings.tool_output_cap = 300
+    settings.workspace_root = tmp_path
+    reg = ToolRegistry()
+    mgr = McpManager(servers=[_stub()], registry=reg, settings=settings, storage=None)
+    await mgr.start()
+    try:
+        out = await reg.get("stub__echo").ainvoke({"text": "y" * 500})
+        saved = list((tmp_path / ".openbot" / "tool-output").glob("output-*.txt"))
+        assert len(saved) == 1
+        assert saved[0].read_text() == "echo: " + "y" * 500
+        assert f"full output in .openbot/tool-output/{saved[0].name}" in str(out)
+    finally:
+        await mgr.stop()
+
+
+async def test_mcp_error_persists_full_output_and_legacy_settings_still_work(tmp_path):
+    settings = _Settings()
+    settings.tool_output_cap = 300
+    settings.workspace_root = tmp_path
+    reg = ToolRegistry()
+    mgr = McpManager(servers=[_stub()], registry=reg, settings=settings, storage=None)
+    await mgr.start()
+    try:
+        out = await reg.get("stub__fail").ainvoke({"text": "z" * 500})
+        saved = list((tmp_path / ".openbot" / "tool-output").glob("output-*.txt"))
+        assert len(saved) == 1
+        assert saved[0].read_text().startswith("error:")
+        assert "z" * 500 in saved[0].read_text()
+        assert f"full output in .openbot/tool-output/{saved[0].name}" in str(out)
+    finally:
+        await mgr.stop()
+
+    legacy_reg = ToolRegistry()
+    legacy_mgr = McpManager(servers=[_stub("legacy")], registry=legacy_reg, settings=_LegacySettings(), storage=None)
+    await legacy_mgr.start()
+    try:
+        out = await legacy_reg.get("legacy__echo").ainvoke({"text": "y" * 500})
+        assert "[truncated" in str(out)
+    finally:
+        await legacy_mgr.stop()
 
 
 async def test_a_broken_server_is_reported_without_stopping_the_others():

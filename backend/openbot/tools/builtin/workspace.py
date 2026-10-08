@@ -1,14 +1,45 @@
 import os
+import time
+import uuid
 from pathlib import Path
 
 OUTPUT_CAP = 8000
 HEAD_SHARE = 0.7
+TOOL_OUTPUT_DIR = ".openbot/tool-output"
+TOOL_OUTPUT_RETENTION_SECONDS = 3 * 24 * 60 * 60
 # Where OpenBot keeps its own state under a root directory (see config.py): the live SQLite files.
 # No in-process tool may open anything in it. Opening the WAL index (openbot.db-shm) from the backend
 # process, even read-only, drops the process's POSIX locks on it; the next `sqlite3` a bot runs then
 # takes itself for the only connection, checkpoints under the backend, and every open connection
 # fails with "database disk image is malformed" (or SIGBUS when the shm is truncated under an mmap).
 STATE_DIR = ".openbot"
+
+
+def _tool_output_path(root: Path) -> Path:
+    return root / TOOL_OUTPUT_DIR
+
+
+def _cleanup_tool_outputs(directory: Path, now: float) -> None:
+    try:
+        for path in directory.iterdir():
+            if path.is_file() and now - path.stat().st_mtime > TOOL_OUTPUT_RETENTION_SECONDS:
+                path.unlink()
+    except OSError:
+        return
+
+
+def _save_tool_output(text: str, root: Path) -> str | None:
+    directory = _tool_output_path(root)
+    now = time.time()
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        _cleanup_tool_outputs(directory, now)
+        filename = f"output-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(now))}-{uuid.uuid4().hex}.txt"
+        path = directory / filename
+        path.write_text(text, encoding="utf-8")
+        return f"{TOOL_OUTPUT_DIR}/{filename}"
+    except OSError:
+        return None
 
 
 def expand_path(path: str | None) -> str | None:
@@ -25,18 +56,32 @@ def resolve_in_workspace(root: Path, path: str | None) -> Path:
     target = Path(expanded).resolve() if expanded and Path(expanded).is_absolute() else (root / expanded).resolve() if expanded else root
     if target != root and root not in target.parents:
         raise ValueError(f"path escapes workspace root: {path}")
-    if STATE_DIR in target.relative_to(root).parts:
+    relative = target.relative_to(root)
+    if STATE_DIR in relative.parts and not (relative.parts[:2] == tuple(TOOL_OUTPUT_DIR.split("/"))):
         raise ValueError(f"path is inside the OpenBot state directory ({STATE_DIR}), which tools must not touch: {path}")
     return target
 
 
-def cap(text: str, limit: int = OUTPUT_CAP, hint: str = "narrow the command or read a smaller range") -> str:
+def cap(text: str, limit: int = OUTPUT_CAP, hint: str = "narrow the command or read a smaller range",
+        workspace_root: Path | None = None) -> str:
     if len(text) <= limit:
         return text
-    head = int(limit * HEAD_SHARE)
-    tail = limit - head
-    dropped = len(text) - head - tail
-    return text[:head] + f"\n... [truncated {dropped} chars of {len(text)}; {hint}] ...\n" + text[-tail:]
+    full_output = _save_tool_output(text, workspace_root) if workspace_root is not None else None
+    file_hint = f"; full output in {full_output}" if full_output else ""
+    available = max(0, limit)
+    while True:
+        head = int(available * HEAD_SHARE)
+        tail = available - head
+        dropped = len(text) - available
+        # Adapted from OpenCode's MIT-licensed tool/truncate.ts.
+        marker = f"\n... [truncated {dropped} chars of {len(text)}{file_hint}; {hint}] ...\n"
+        next_available = limit - len(marker)
+        if next_available >= available or next_available <= 0:
+            if next_available <= 0:
+                return marker[:limit]
+            break
+        available = next_available
+    return text[:head] + marker + text[-tail:]
 
 
 def validate_workspace_directory(root: Path, directory: str | None) -> str | None:

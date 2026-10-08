@@ -118,7 +118,7 @@ async def test_patch_returns_promptly_and_connects_in_the_background(settings, t
             if (await c.get("/api/v1/mcp/servers")).json()[0]["status"] == "connected":
                 break
             await asyncio.sleep(0.05)
-        assert (await c.get("/api/v1/mcp/servers")).json()[0]["tools"] == ["stub__add", "stub__echo"]
+        assert (await c.get("/api/v1/mcp/servers")).json()[0]["tools"] == ["stub__add", "stub__echo", "stub__fail"]
 
 
 async def test_downgrade_survives_stdio_rows(tmp_path):

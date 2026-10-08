@@ -76,7 +76,7 @@ async def test_api_manages_stdio_and_http_servers_with_masked_secrets(settings, 
             if row["status"] == "connected":
                 break
             await asyncio.sleep(0.05)
-        assert row["status"] == "connected" and row["transport"] == "stdio" and row["tools"] == ["stub__add", "stub__echo"]
+        assert row["status"] == "connected" and row["transport"] == "stdio" and row["tools"] == ["stub__add", "stub__echo", "stub__fail"]
         assert row["command"] == sys.executable and row["args"] == [STUB] and row["env"] == {"GREETING": "••••••••"}
         r = await c.post("/api/v1/mcp/servers", json={"name": "linear", "url": "https://mcp.example.invalid/mcp", "headers": {"Authorization": "Bearer k"}})
         assert r.status_code == 201 and r.json()["headers"] == {"Authorization": "••••••••"} and r.json()["oauth"] is False

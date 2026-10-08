@@ -16,5 +16,11 @@ def echo(text: str) -> str:
     return f"echo: {text}"
 
 
+@mcp.tool()
+def fail(text: str) -> str:
+    """Raise an error for wrapper failure tests."""
+    raise RuntimeError(text)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
