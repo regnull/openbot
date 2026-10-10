@@ -132,7 +132,8 @@ async def test_runner_uses_thread_working_directory_for_tools(settings):
     )
     await services.runner.execute(run.id)
 
-    assert str(settings.workspace_root / "project") in str(ScriptedChatModel.seen[0][0].content)
+    # The text of the prompt: str() of its content blocks is a repr, which doubles Windows backslashes.
+    assert str(settings.workspace_root / "project") in ScriptedChatModel.seen[0][0].text
     assert any(
         e.type == "tool_result" and shown in e.payload["content"]
         for e in await events(services, run.id)
