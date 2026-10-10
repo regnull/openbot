@@ -92,6 +92,11 @@ async def test_read_file_preserves_newline_only_and_final_empty_lines(tmp_path):
     assert await read_file.ainvoke({"path": "final-empty-line.txt", "runtime": r}) == "1: line\n2: "
 
 
+async def test_read_file_shows_a_crlf_file_without_carriage_returns(tmp_path):
+    (tmp_path / "crlf.txt").write_bytes(b"one\r\ntwo\r\n")
+    assert await read_file.ainvoke({"path": "crlf.txt", "runtime": rt(tmp_path)}) == "1: one\n2: two\n3: "
+
+
 async def test_read_file_supports_line_ranges(tmp_path):
     (tmp_path / "f.txt").write_text("\n".join(f"L{i}" for i in range(1, 51)))
     r = rt(tmp_path)

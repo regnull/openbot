@@ -771,7 +771,8 @@ class Runner:
                 )
                 or "-",
             )
-            log.debug("run %s system prompt:\n%s", run.id, system_prompt)
+            # The text, not the message: its repr escapes every newline and backslash of the prompt.
+            log.debug("run %s system prompt:\n%s", run.id, _text(system_prompt))
             await activity.record(
                 self.s,
                 "run.started",
