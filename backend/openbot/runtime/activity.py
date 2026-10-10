@@ -41,7 +41,7 @@ EVENTS = frozenset({
     "worker.notified", "worker.drain.start", "worker.drain.end", "worker.error",
     "worker.slot.wait", "worker.slot.acquired", "worker.parked",
     "run.created", "run.dispatched", "run.started", "run.status", "run.finished", "run.cancel_requested",
-    "run.model_call", "run.tool_call", "run.tool_result", "run.interrupt",
+    "run.model_call", "run.tool_call", "run.tool_result", "run.interrupt", "run.cli_session",
     "webhook.attempt",
 })
 LEVELS = ("debug", "info", "warning", "error")

@@ -9,6 +9,7 @@ from langchain_core.language_models import BaseChatModel
 
 from openbot.config import Settings
 from openbot.db.models import BotProfile
+from openbot.runtime.cli_agents import adapter_for
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +75,9 @@ def effective_bot_profile(bot: BotProfile, settings: Settings) -> tuple[str, str
     whose provider has no key falls back to OpenRouter with the Settings bot model, when OpenRouter
     is configured; otherwise it keeps its provider and fails with a clear "not configured" error.
     """
+    if adapter_for(bot.provider) is not None:
+        # Runs through a local CLI (runtime/cli_agents); an empty model is the CLI's own default.
+        return bot.provider, bot.model
     if bot.provider == AUTO_PROVIDER:
         dp = default_provider(settings)
         if dp is None:
@@ -175,9 +179,22 @@ def provider_chat_model(
     return ChatOpenAI(model=model, api_key=key, request_timeout=timeout, **kwargs)
 
 
+def side_task_profile(bot: BotProfile, settings: Settings) -> tuple[str, str, dict | None]:
+    """Provider, model and model settings for a model call OpenBot makes itself. A CLI bot's own turns
+    run in its CLI and never get here, but the side tasks done on its behalf (thread title, memory
+    extraction) need a chat model, and the CLI is not one: they use the default provider, like an auto
+    bot, and fail like an unconfigured auto bot when there is none."""
+    if adapter_for(bot.provider) is None:
+        return (*effective_bot_profile(bot, settings), bot.model_settings)
+    dp = default_provider(settings)
+    if dp is None:
+        raise ValueError("no provider is configured: set an API key for at least one provider")
+    return (*prefer_direct_anthropic(dp[0], dp[1], settings), None)
+
+
 def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
-    provider, model = effective_bot_profile(bot, settings)
-    return provider_chat_model(provider, model, settings, bot.model_settings)
+    provider, model, model_settings = side_task_profile(bot, settings)
+    return provider_chat_model(provider, model, settings, model_settings)
 
 
 def small_model_name(settings: Settings, provider: str, main_model: str) -> str:
@@ -199,16 +216,16 @@ def small_model_name(settings: Settings, provider: str, main_model: str) -> str:
 
 
 def small_chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
-    provider, main_model = effective_bot_profile(bot, settings)
+    provider, main_model, model_settings = side_task_profile(bot, settings)
     model = small_model_name(settings, provider, main_model)
     try:
         small = provider_chat_model(provider, model, settings)
         if model == main_model or not hasattr(small, "with_fallbacks"):
             return small
-        main = provider_chat_model(provider, main_model, settings, bot.model_settings)
+        main = provider_chat_model(provider, main_model, settings, model_settings)
         return small.with_fallbacks([main])
     except (ValueError, RuntimeError):
-        return provider_chat_model(provider, main_model, settings, bot.model_settings)
+        return provider_chat_model(provider, main_model, settings, model_settings)
 
 
 _WEB_SEARCH_TOOL = {

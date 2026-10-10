@@ -343,6 +343,12 @@ For how these pieces fit together inside the backend, see [docs/architecture.md]
   database file and the secret key, so a command can exfiltrate every stored provider key. There is no
   container, no chroot, no seccomp, and no allowlist — giving a bot `run_shell` is equivalent to
   giving whoever can talk to that bot a shell on the host.
+- **A CLI bot is governed by its CLI, not by OpenBot.** A bot on the `claude-code` provider (see
+  [Bots backed by a coding agent CLI](#bots-backed-by-a-coding-agent-cli)) uses the CLI's own tools,
+  and OpenBot's per-tool approvals don't apply to them. What it may do is set by the bot's
+  permission level, which OpenBot enforces through the CLI's restricted mode: reading the thread
+  working directory by default, or also changing files there. Neither level can run commands. The
+  confinement is the CLI's, not OpenBot's.
 - **Only the file tools are path-confined.** `read_file`, `write_file` and `list_files` resolve
   every path against the thread working directory (the selected subdirectory of `WORKSPACE_ROOT`,
   or `WORKSPACE_ROOT` itself by default) and reject anything that escapes it (`../`, absolute paths,
@@ -399,6 +405,40 @@ def get_time() -> str:
 ```
 
 `GET /api/v1/tools` lists every loaded tool and any load errors.
+
+### Bots backed by a coding agent CLI
+
+A bot can run its turns through a coding agent CLI installed on the machine instead of an
+OpenBot-managed model, so it uses the login you already set up for that CLI. The bot still lives in
+threads, streams into the run card, hands off with `@mentions` and can be stopped like any other.
+Claude Code is supported; other CLIs can be added as adapters (`backend/openbot/runtime/cli_agents`).
+
+Install the CLI and log in once in a terminal, then create the bot through the API (there is no
+editor option for it yet):
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/bots -H 'Content-Type: application/json' -d '{
+  "handle": "coder", "name": "Coder", "provider": "claude-code",
+  "model": "sonnet", "model_settings": {"permission": "read-only"}}'
+```
+
+- `model` is passed to the CLI; empty means the CLI's own default.
+- `model_settings.permission` has two levels. `read-only` (default): the CLI gets its `Read`,
+  `Grep` and `Glob` tools and nothing else. `edit`: also `Edit`, `Write` and `NotebookEdit`.
+  Both run in the CLI's restricted mode (Claude Code 2.1.248 or later): the file tools stay inside
+  the working directory, there is no tool that runs commands or fetches from the web, and your own
+  Claude settings, allow rules, hooks and MCP servers are not loaded, nor the directory's. There is
+  no level that turns the CLI's permission checks off. A bot that has to run tests needs another
+  bot with `run_shell` to do that for it.
+- `model_settings.timeout_seconds` overrides `CLI_AGENT_TIMEOUT` for this bot.
+- The CLI runs in the thread's working directory. Follow-up turns in a thread resume its session.
+- OpenBot starts the installed executable and never reads its credential files or keychain. The
+  CLI uses its own login. OpenBot removes its own settings and keys from the CLI's environment,
+  including an `ANTHROPIC_API_KEY` configured for OpenBot's Anthropic provider: passed on, it would
+  make the CLI bill that key instead of your subscription.
+- OpenBot's own tools (`ask_human`, memory, scheduling, MCP servers configured here) are not
+  available inside the CLI. Thread titles and memory extraction for such a bot use the default
+  provider, when one is configured.
 
 ### MCP servers
 
@@ -561,6 +601,8 @@ as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and
 | `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the confinement root for file tools. `run_shell` only *starts* there. |
 | `SHELL_USER` | *(unset)* | Run `run_shell` commands as this user with a minimal environment, so they don't see the server's keys. Needs `OPENBOT_API_KEY` and a server running as root; `compose.yaml` sets it. |
 | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
+| `CLAUDE_CODE_PATH` | *(unset)* | The `claude` executable for bots on the `claude-code` provider. Unset: looked up on `PATH` and in its usual install locations. |
+| `CLI_AGENT_TIMEOUT` | `1800` | Seconds after which a CLI bot's run is stopped. |
 | `FRONTEND_DIST` | `frontend/dist` | Built frontend served at `/` when it exists. Empty means this default. |
 | `MCP_CONFIG` | `./mcp.json` | Optional `mcpServers` file imported into the database once at startup, then ignored. See [MCP servers](#mcp-servers). |
 | `MAX_CONCURRENT_RUNS` | `4` | Global cap on simultaneous bot runs (the semaphore is created at startup). |

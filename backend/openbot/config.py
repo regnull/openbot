@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     mcp_token_key: str | None = None
     mcp_token_key_file: Path = Path("./mcp_token.key")
 
+    # Bots whose provider is a coding agent CLI (runtime/cli_agents). The CLI is looked up on PATH and in
+    # its usual install locations unless its *_PATH names the executable; a run is stopped after the
+    # timeout (a bot can set its own in model_settings.timeout_seconds).
+    claude_code_path: str | None = None
+    cli_agent_timeout: int = 1800
+
     max_concurrent_runs: int = 4
     max_bot_hops: int = 20
     # Token-efficiency controls. See README "Configuration".
