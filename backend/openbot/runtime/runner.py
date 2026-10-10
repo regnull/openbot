@@ -34,6 +34,8 @@ from openbot.db.models import (
 )
 from openbot.runtime import activity, memory
 from openbot.runtime.caching import caching_middleware
+from openbot.runtime.cli_agents import CliAgentError, adapter_for
+from openbot.runtime.cli_agents.run import execute_cli_turn
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt_parts
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
@@ -790,6 +792,14 @@ class Runner:
                 history_messages=len(inputs.get("messages", [])),
                 model_call_limit=self.model_call_limit(bot),
             )
+            cli = adapter_for(bot.bot.provider)
+            if cli is not None:
+                # The turn runs in a coding agent CLI instead of create_agent (runtime/cli_agents).
+                await execute_cli_turn(
+                    self, cli, bot, thread, run, seq, system_prompt, inputs["messages"],
+                    workspace_root, hop, progress, started,
+                )
+                return
             ctx = RunContext(
                 bot.id,
                 bot.handle,
@@ -890,7 +900,7 @@ class Runner:
             raise
         except Exception as e:
             log.exception("run %s failed", run.id)
-            err = f"{type(e).__name__}: {e}"[:2000]
+            err = (str(e) if isinstance(e, CliAgentError) else f"{type(e).__name__}: {e}")[:2000]
             # Status first: the bookkeeping below is best-effort and must never leave the run in "running".
             await self._set_status(run.id, "failed", error=err)
             try:
