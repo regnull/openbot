@@ -15,6 +15,17 @@ function isApprovedExternalUrl(rawUrl) {
 }
 
 /**
+ * A link the app asks to open in a new window (a link in a message, a model's source page) goes to
+ * the system browser, but only on the web. shell.openExternal hands any scheme to the OS, which
+ * would also open file: and smb: URLs or launch custom app-protocol handlers.
+ */
+function isWebUrl(rawUrl) {
+  let url;
+  try { url = new URL(rawUrl); } catch { return false; }
+  return url.protocol === "https:" || url.protocol === "http:";
+}
+
+/**
  * Origin of a URL as Chromium sees it. Node's URL parser gives non-special schemes such as
  * app://openbot the opaque origin "null", but a scheme registered as standard is a real origin
  * in the renderer, so rebuild it from scheme and host.
@@ -45,4 +56,4 @@ function contentSecurityPolicy(configuredOrigin, apiOrigin = configuredOrigin) {
   ].join("; ");
 }
 
-module.exports = { contentSecurityPolicy, isApprovedExternalUrl, isSameOrigin, originOf };
+module.exports = { contentSecurityPolicy, isApprovedExternalUrl, isSameOrigin, isWebUrl, originOf };

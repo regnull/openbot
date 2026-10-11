@@ -201,3 +201,19 @@ describe("Electron status page", () => {
     expect(builderSource).toContain("electron/**/*");
   });
 });
+
+describe("Electron link handling", () => {
+  const line = (marker: string) => mainSource.split("\n").find((l) => l.includes(marker)) ?? "";
+
+  it("opens web links from new-window requests, such as links in messages, in the system browser", () => {
+    const openHandler = line("setWindowOpenHandler(");
+    expect(openHandler).toContain("if (isWebUrl(url)) void shell.openExternal(url)");
+    expect(openHandler).toContain('return { action: "deny" }');
+  });
+
+  it("keeps navigating the window itself limited to the approved external URLs", () => {
+    const navigate = line('"will-navigate"');
+    expect(navigate).toContain("event.preventDefault(); openApprovedExternal(url);");
+    expect(navigate).not.toContain("isWebUrl");
+  });
+});

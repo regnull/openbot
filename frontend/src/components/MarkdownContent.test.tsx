@@ -45,6 +45,29 @@ describe("MarkdownContent", () => {
     expect(rendered.container.querySelector('a[href^="javascript:"]')).toBeNull();
   });
 
+  it("opens links that point outside the app in a new tab", async () => {
+    const rendered = await renderContent("See [the PR](https://github.com/regnull/openbot/pull/1), www.example.test and a@example.test");
+    cleanup = rendered.cleanup;
+    const links = [...rendered.container.querySelectorAll("a")];
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([
+      "https://github.com/regnull/openbot/pull/1", "http://www.example.test", "mailto:a@example.test"]);
+    for (const a of links) {
+      expect(a.getAttribute("target")).toBe("_blank");
+      expect(a.getAttribute("rel")).toBe("noopener noreferrer");
+    }
+  });
+
+  it("keeps relative and same-origin links in the app", async () => {
+    const rendered = await renderContent(`[thread](/threads/1), [notes](notes/plan.md) and [here](${window.location.origin}/inbox)`);
+    cleanup = rendered.cleanup;
+    const links = [...rendered.container.querySelectorAll("a")];
+    expect(links).toHaveLength(3);
+    for (const a of links) {
+      expect(a.hasAttribute("target")).toBe(false);
+      expect(a.hasAttribute("rel")).toBe(false);
+    }
+  });
+
   it("themes inline code through the shared palette tokens, in both theme mechanisms", () => {
     const css = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
     // Colors are semantic tokens flipped per theme. The toggle pins a theme with

@@ -2,7 +2,7 @@ const { app, BrowserWindow, dialog, Menu, net, protocol, session, shell } = requ
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
-const { contentSecurityPolicy, isApprovedExternalUrl, isSameOrigin, originOf } = require("./security.cjs");
+const { contentSecurityPolicy, isApprovedExternalUrl, isSameOrigin, isWebUrl, originOf } = require("./security.cjs");
 const { appIconPath } = require("./icon.cjs");
 const { parseBackendUrl, resolveApiOrigin } = require("./origin.cjs");
 const { APP_SCHEME, APP_URL, createAppProtocolHandler, schemePrivileges } = require("./scheme.cjs");
@@ -93,7 +93,9 @@ function loadApp(window) {
 }
 function createWindow({ waitingForBackend = false } = {}) {
   const window = new BrowserWindow({ width: 1440, height: 900, minWidth: 900, minHeight: 600, backgroundColor: "#111827", icon: appIconPath, webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
-  window.webContents.setWindowOpenHandler(({ url }) => { if (sameOrigin(url)) return { action: "allow" }; openApprovedExternal(url); return { action: "deny" }; });
+  // New-window requests (target="_blank" links, such as links in messages) open web URLs in the
+  // system browser. Navigating the window itself stays limited to the approved URLs below.
+  window.webContents.setWindowOpenHandler(({ url }) => { if (sameOrigin(url)) return { action: "allow" }; if (isWebUrl(url)) void shell.openExternal(url); return { action: "deny" }; });
   window.webContents.on("will-navigate", (event, url) => { if (sameOrigin(url)) return; event.preventDefault(); openApprovedExternal(url); });
   // A failed app load (Vite not up yet, OPENBOT_URL unreachable) otherwise leaves a blank window.
   // ERR_ABORTED (-3) is a navigation superseded by another one, not a failure.

@@ -43,4 +43,14 @@ describe("Electron security policy", () => {
     expect(security.isApprovedExternalUrl("https://evil.example.test/phish")).toBe(false);
     expect(security.isApprovedExternalUrl("javascript:alert(1)")).toBe(false);
   });
+
+  it("opens only web URLs in the system browser", () => {
+    expect(security.isWebUrl("https://github.com/regnull/openbot/pull/1")).toBe(true);
+    expect(security.isWebUrl("http://www.example.test/docs")).toBe(true);
+    expect(security.isWebUrl("HTTPS://EXAMPLE.TEST")).toBe(true);
+    for (const url of ["file:///etc/passwd", "smb://host/share", "javascript:alert(1)", "mailto:a@example.test",
+      "vscode://file/tmp/x", "app://openbot/threads/1", "//example.test", "not a url"]) {
+      expect(security.isWebUrl(url), url).toBe(false);
+    }
+  });
 });
