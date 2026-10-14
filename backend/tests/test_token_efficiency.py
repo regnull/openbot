@@ -274,9 +274,17 @@ async def test_migration_adds_usage_columns(tmp_path):
 # --- seeded team --------------------------------------------------------------------------------------
 
 def test_seeded_division_of_labour():
+    from openbot.bots.catalog import CATALOG
+    from openbot.config import Settings
+
+    default_limit = Settings(_env_file=None).max_model_calls_per_run
     bots = {b["handle"]: b for b in DEMO_BOTS}
     assert bots["chief_of_staff"]["tool_names"] == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
-    assert bots["chief_of_staff"]["model_settings"] == {"max_model_calls": 6}
+    assert bots["chief_of_staff"].get("model_settings", {}) == {}
+    for collection in (DEMO_BOTS, CATALOG):
+        for entry in collection:
+            cap = (entry.get("model_settings") or {}).get("max_model_calls")
+            assert cap is None or cap >= default_limit, entry["handle"]
     assert "first reply" in bots["chief_of_staff"]["instructions"]
     assert "Do not run the test suite" in bots["reviewer"]["instructions"]
     assert "--name-only" in bots["reviewer"]["instructions"]
@@ -292,9 +300,9 @@ async def test_seed_persists_model_settings(services):
     assert await seed_demo_bots(services) == 4
     async with services.session_factory() as s:
         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
-    assert chief.bot.model_settings == {"max_model_calls": 6}
+    assert chief.bot.model_settings == {}
     assert chief.bot.tool_names == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
-    assert services.runner.model_call_limit(chief) == 6
+    assert services.runner.model_call_limit(chief) == services.settings.max_model_calls_per_run
 
 
 async def test_thread_usage_sums_all_runs(client, services):

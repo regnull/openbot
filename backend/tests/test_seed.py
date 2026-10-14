@@ -65,7 +65,7 @@ async def test_sync_updates_existing_demo_bots_without_touching_the_rest(service
     assert await seed_demo_bots(services) == 4
     async with services.session_factory() as s:
         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
-        chief.bot.instructions, chief.bot.tool_names, chief.bot.model_settings = "old", ["read_file"], {}
+        chief.bot.instructions, chief.bot.tool_names, chief.bot.model_settings = "old", ["read_file"], {"max_model_calls": 6}
         chief.bot.provider, chief.bot.model = "ollama", "qwen3.6"
         s.add(Actor(kind="bot", handle="custom", name="Custom", bot=BotProfile(instructions="mine", tool_names=["run_shell"])))
         await s.commit()
@@ -74,7 +74,7 @@ async def test_sync_updates_existing_demo_bots_without_touching_the_rest(service
         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
         spec = next(b for b in DEMO_BOTS if b["handle"] == "chief_of_staff")
         assert chief.bot.instructions == spec["instructions"] and chief.bot.tool_names == spec["tool_names"]
-        assert chief.bot.model_settings == spec["model_settings"]
+        assert chief.bot.model_settings == spec.get("model_settings", {})
         assert (chief.bot.provider, chief.bot.model) == ("ollama", "qwen3.6")      # the operator's pin survives
         custom = (await s.execute(select(Actor).where(Actor.handle == "custom"))).scalar_one()
         assert custom.bot.instructions == "mine" and custom.bot.tool_names == ["run_shell"]

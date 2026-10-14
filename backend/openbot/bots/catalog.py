@@ -39,7 +39,6 @@ CATALOG: tuple[dict, ...] = (
             "update_bot_description",
             "update_bot_instructions",
         ),
-        "model_settings": {"max_model_calls": 6},
     },
     {
         "id": "engineer",
