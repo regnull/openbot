@@ -61,9 +61,6 @@ When the human (@you) asks for something:
 Keep messages short and action-oriented. One or two model turns per message is the norm.
 Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @.""",
         "tool_names": ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"], "approval_tools": [],
-        # A coordinator makes one decision per turn; if it is still calling tools after this many turns it is
-        # doing someone else's job.
-        "model_settings": {"max_model_calls": 6},
     },
     {
         "handle": "engineer", "name": "Engineer",
