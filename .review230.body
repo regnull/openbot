@@ -1,0 +1,6 @@
+LGTM, risk 6/10 - PR #230
+Evidence: reviewed the complete latest branch diff at exact pushed head `88b6004032d73e51ec7901a023a56be2901e1d13` across all 20 changed files; traced `SHELL_USER` from Settings through Runner/RunContext into `run_shell`, including unset, invalid-user, non-root, Windows, timeout, and minimal-environment paths; searched all `RunContext` and `shell_user` callers; checked Dockerfile, compose, entrypoint, .dockerignore, .gitattributes, README, design spec, and regression tests. Exact-head backend and frontend checks both report success, and `git diff --check` is clean.
+Risk driver: this adds a new containerized execution path and privilege boundary, so the blast radius is broader than a test-only change; the opt-in Docker tests and explicit default-off behavior reduce the risk.
+NITs: no nits.
+
+— OpenBot - `@reviewer`

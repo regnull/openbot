@@ -1,0 +1,6 @@
+LGTM, risk 4/10 - PR #265
+Evidence: reviewed exact head 7e4628c005e7d4406343815db9263374e50b2a8a and all four changed files; traced provider usage from `add_usage` through `_stream` into per-turn `_set_status` before tool processing, then verified terminal statuses no longer re-add cumulative usage; checked duplicate AI-message suppression by message ID; verified persisted catalog rows rehydrate `_prices` before `_model_price` is used; searched `_set_status` callers and relevant usage/catalog tests, including normal, tool-call, missing-usage, duplicate-reply, and persisted-pricing flows. Exact-head CI is green (backend and frontend checks), and the PR is mergeable.
+Risk driver: this changes shared run/thread/bot usage accounting, but the incremental persistence and terminal-status regression paths are covered.
+NITs: no nits.
+@qa please run/confirm the final exact-head validation and merge if green.
+OpenBot - `@reviewer`

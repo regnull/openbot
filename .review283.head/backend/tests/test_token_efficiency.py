@@ -1,0 +1,597 @@
+"""Controls that keep a run's token bill bounded: capped tool output with line-range reads, a per-run
+model-call limit, clearing of old tool results, per-run usage accounting, and the seeded team's
+division of labour."""
+import json
+import logging
+from pathlib import Path
+
+from langchain.tools import ToolRuntime
+from langchain_core.messages import AIMessage
+from sqlalchemy import inspect, select
+
+from openbot.db.models import Actor, Run
+from openbot.db.session import make_engine, run_migrations
+from openbot.runtime.runner import CLEARED_TOOL_RESULT, Runner
+from openbot.seed import DEMO_BOTS, seed_demo_bots
+from openbot.tools.builtin.files import read_file
+from openbot.tools.builtin.shell import run_shell
+from openbot.tools.builtin.workspace import TOOL_OUTPUT_DIR, TOOL_OUTPUT_RETENTION_SECONDS, cap
+from openbot.tools.context import RunContext
+from tests.fakes import ScriptedChatModel, ai, call
+from tests.test_runner import events, get, make, messages
+
+
+def rt(root: Path, cap_chars: int = 8000, shell_cap_chars: int | None = None) -> ToolRuntime:
+    root.mkdir(parents=True, exist_ok=True)
+    ctx = RunContext("b", "bot", "Bot", "t", "r", root.resolve(), None, tool_output_cap=cap_chars,
+                     shell_output_cap=shell_cap_chars if shell_cap_chars is not None else cap_chars)
+    return ToolRuntime(context=ctx, store=None, state={}, tool_call_id="c", config={}, stream_writer=lambda *_: None)
+
+
+# --- usage accounting ---------------------------------------------------------------------------------
+
+def test_add_usage_tracks_cache_reasoning_and_tiered_cost():
+    from openbot.runtime.runner import add_usage, empty_usage
+    message = ai("done")
+    message.usage_metadata = {
+        "input_tokens": 250_000,
+        "output_tokens": 1_000,
+        "total_tokens": 251_000,
+        "input_token_details": {"cache_read": 100_000, "cache_write": 20_000},
+        "output_token_details": {"reasoning": 400},
+    }
+    usage = empty_usage()
+    inc = add_usage(usage, message, {"input": 1.0, "output": 2.0, "cache_read": 0.1, "cache_write": 0.2,
+                                    "tiers": [{"tier": {"size": 200_000}, "input": 2.0, "output": 3.0,
+                                               "cache_read": 0.2, "cache_write": 0.4}]})
+    assert inc == {"prompt_tokens": 250_000, "completion_tokens": 1_000, "cache_read_tokens": 100_000,
+                   "cache_write_tokens": 20_000, "reasoning_tokens": 400, "total_tokens": 251_000,
+                   "model_calls": 1, "cost_usd": 0.291}
+    assert usage == {**inc, "cost_usd": 0.291}
+
+
+# --- tool output ------------------------------------------------------------------------------------
+
+def test_cap_keeps_head_and_tail_and_says_how_much_was_dropped():
+    text = "".join(f"line{i:04d}\n" for i in range(1000))
+    out = cap(text, 800, hint="use a range")
+    assert len(out) < 1000
+    assert out.startswith("line0000\n") and out.endswith("line0999\n")
+    assert "[truncated" in out and "use a range" in out and f"of {len(text)}" in out
+    assert cap("short", 800) == "short"
+
+
+def test_cap_saves_full_output_and_cleans_old_files(tmp_path):
+    output_dir = tmp_path / TOOL_OUTPUT_DIR
+    output_dir.mkdir(parents=True)
+    old = output_dir / "old.txt"
+    old.write_text("old")
+    old_time = old.stat().st_mtime - TOOL_OUTPUT_RETENTION_SECONDS - 1
+    import os
+    os.utime(old, (old_time, old_time))
+
+    text = "head\n" + "middle\n" * 1000 + "tail\n"
+    out = cap(text, 500, workspace_root=tmp_path)
+    saved = list(output_dir.glob("output-*.txt"))
+    assert len(saved) == 1 and saved[0].read_text() == text
+    assert not old.exists()
+    assert f"full output in {TOOL_OUTPUT_DIR}/{saved[0].name}" in out
+
+
+async def test_read_file_returns_empty_for_empty_files(tmp_path):
+    (tmp_path / "empty.txt").write_text("")
+    r = rt(tmp_path)
+    assert await read_file.ainvoke({"path": "empty.txt", "runtime": r}) == ""
+
+
+async def test_read_file_preserves_newline_only_and_final_empty_lines(tmp_path):
+    (tmp_path / "newline.txt").write_text("\n")
+    (tmp_path / "final-empty-line.txt").write_text("line\n")
+    r = rt(tmp_path)
+    assert await read_file.ainvoke({"path": "newline.txt", "runtime": r}) == "1: \n2: "
+    assert await read_file.ainvoke({"path": "final-empty-line.txt", "runtime": r}) == "1: line\n2: "
+
+
+async def test_read_file_supports_line_ranges(tmp_path):
+    (tmp_path / "f.txt").write_text("\n".join(f"L{i}" for i in range(1, 51)))
+    r = rt(tmp_path)
+    assert await read_file.ainvoke({"path": "f.txt", "start_line": 10, "end_line": 12, "runtime": r}) == "10: L10\n11: L11\n12: L12\n\nshowing lines 10–12 of 50; use start_line=13 to continue"
+    assert (await read_file.ainvoke({"path": "f.txt", "start_line": 49, "runtime": r})).startswith("49: L49\n50: L50")
+    assert (await read_file.ainvoke({"path": "f.txt", "end_line": 2, "runtime": r})).startswith("1: L1\n2: L2")
+    assert "error: no lines in range" in await read_file.ainvoke({"path": "f.txt", "start_line": 60, "runtime": r})
+
+
+async def test_read_file_clips_lines_detects_binary_and_suggests_missing_files(tmp_path):
+    (tmp_path / "long.txt").write_text("x" * 2100 + "\nlast")
+    (tmp_path / "notes.txt").write_text("notes")
+    r = rt(tmp_path)
+    out = await read_file.ainvoke({"path": "long.txt", "runtime": r})
+    assert "1: " in out and "line truncated to 2000 chars" in out and "2: last" in out
+    (tmp_path / "image.bin").write_bytes(b"PNG\x00data")
+    assert "cannot read binary file" in await read_file.ainvoke({"path": "image.bin", "runtime": r})
+    missing = await read_file.ainvoke({"path": "note.txt", "runtime": r})
+    assert "Did you mean" in missing and "notes.txt" in missing
+
+
+async def test_read_file_continuation_hint_uses_next_line(tmp_path):
+    (tmp_path / "f.txt").write_text("\n".join(f"line-{i}" for i in range(1, 20)))
+    out = await read_file.ainvoke({"path": "f.txt", "runtime": rt(tmp_path, cap_chars=40)})
+    assert "showing lines 1–" in out and "use start_line=" in out
+
+
+async def test_tools_honour_the_context_output_cap(tmp_path):
+    (tmp_path / "big.txt").write_text("x" * 5000)
+    small = rt(tmp_path, cap_chars=1000)
+    out = await read_file.ainvoke({"path": "big.txt", "runtime": small})
+    assert len(out) < 1200 and "use start_line=" in out
+    out = await run_shell.ainvoke({"command": "printf '%5000s' | tr ' ' y", "runtime": small})
+    assert len(out) < 1200 and "[truncated" in out and out.startswith("exit code: 0")
+
+
+async def test_read_file_output_cap_includes_continuation_hint(tmp_path):
+    (tmp_path / "long-line.txt").write_text("x" * 5000)
+    out = await read_file.ainvoke({"path": "long-line.txt", "runtime": rt(tmp_path, cap_chars=40)})
+    assert len(out) <= 40
+
+
+async def test_read_file_error_outputs_honour_small_cap(tmp_path, monkeypatch):
+    limit = 24
+    r = rt(tmp_path, cap_chars=limit)
+    (tmp_path / "notes.txt").write_text("notes")
+    (tmp_path / "f.txt").write_text("line")
+    binary_name = "b" * 200 + ".bin"
+    (tmp_path / binary_name).write_bytes(b"PNG\x00data")
+
+    missing = await read_file.ainvoke({"path": "n" * 200, "runtime": r})
+    binary = await read_file.ainvoke({"path": binary_name, "runtime": r})
+    invalid = await read_file.ainvoke({"path": "f.txt", "start_line": 100, "runtime": r})
+    resolution = await read_file.ainvoke({"path": "../" + "x" * 200, "runtime": r})
+    assert len(missing) <= limit
+    assert len(binary) <= limit
+    assert len(invalid) <= limit
+    assert len(resolution) <= limit
+
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(OSError("e" * 200)))
+    filesystem = await read_file.ainvoke({"path": "notes.txt", "runtime": r})
+    assert len(filesystem) <= limit
+
+
+# --- runner: limits, context editing, usage ----------------------------------------------------------
+
+def _shell_loop(n: int):
+    return [ai(tool_calls=[call("run_shell", cid=f"c{i}", command=f"echo step{i}")]) for i in range(n)]
+
+
+async def test_model_call_limit_ends_the_run_with_a_notice(settings):
+    settings.max_model_calls_per_run = 3
+    services, _eng, t, run = await make(settings, {"eng": _shell_loop(10) + [ai("never reached")]}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert run.status == "completed"
+    assert [e.type for e in await events(services, run.id)].count("tool_call") == 3
+    last = (await messages(services, t.id))[-1]
+    assert "limit" in last.content.lower()
+
+
+async def test_bot_model_settings_can_lower_the_model_call_limit(settings):
+    settings.max_model_calls_per_run = 40
+    services, _eng, t, run = await make(settings, {"eng": _shell_loop(10) + [ai("never reached")]}, tool_names=["run_shell"],
+                                        model_settings={"max_model_calls": 2})
+    await services.runner.execute(run.id)
+    assert [e.type for e in await events(services, run.id)].count("tool_call") == 2
+    assert "limit" in (await messages(services, t.id))[-1].content.lower()
+
+
+async def test_old_tool_results_are_cleared_once_context_passes_the_trigger(settings):
+    settings.context_trigger_tokens = 50   # tiny, so five small tool results are enough to trip it
+    ScriptedChatModel.seen.clear()
+    services, _eng, _t, run = await make(settings, {"eng": _shell_loop(6) + [ai("done")]}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    final_prompt = ScriptedChatModel.seen[-1]
+    tool_contents = [m.content for m in final_prompt if m.type == "tool"]
+    assert tool_contents, "expected tool messages in the final model call"
+    assert tool_contents[0] == CLEARED_TOOL_RESULT            # the oldest result was replaced
+    assert tool_contents[-1] != CLEARED_TOOL_RESULT           # the most recent ones are kept
+    # ...but the run's own event log still has the real output
+    real = [e for e in await events(services, run.id) if e.type == "tool_result"]
+    assert "step0" in real[0].payload["content"]
+
+
+async def test_usage_is_summed_logged_and_stored(settings, caplog):
+    caplog.set_level(logging.INFO, logger="openbot")
+    usage1 = {"input_tokens": 1000, "output_tokens": 50, "total_tokens": 1050, "input_token_details": {"cache_read": 800}}
+    usage2 = {"input_tokens": 1200, "output_tokens": 30, "total_tokens": 1230}
+    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command="echo hi")], usage=usage1),
+                                                            ai("done", usage=usage2)]}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert (run.prompt_tokens, run.completion_tokens, run.cache_read_tokens, run.total_tokens, run.model_calls) == (2200, 80, 800, 2280, 2)
+    lines = [r.getMessage() for r in caplog.records if r.name == "openbot.runtime.runner"]
+    assert any(l.startswith(f"run {run.id} model call 1:") and "prompt=1000 (cache_read=800) completion=50" in l for l in lines)
+    assert any(l.startswith(f"run {run.id} completed") and "model_calls=2 prompt_tokens=2200 cache_read_tokens=800 completion_tokens=80" in l
+               for l in lines)
+
+
+async def test_usage_is_persisted_after_each_model_return(settings):
+    usage1 = {"input_tokens": 1000, "output_tokens": 50, "total_tokens": 1050}
+    usage2 = {"input_tokens": 1200, "output_tokens": 30, "total_tokens": 1230}
+    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command="echo hi")], usage=usage1),
+                                                            ai("done", usage=usage2)]}, tool_names=["run_shell"])
+    original = services.runner._set_status
+    snapshots = []
+
+    async def capture(run_id, status, **kwargs):
+        result = await original(run_id, status, **kwargs)
+        if kwargs.get("usage"):
+            snapshots.append((result.model_calls, result.prompt_tokens, result.cost_usd))
+        return result
+
+    services.runner._set_status = capture
+    await services.runner.execute(run.id)
+    assert [(calls, prompt) for calls, prompt, _cost in snapshots] == [(1, 1000), (2, 2200)]
+
+
+async def test_usage_stays_null_when_the_model_reports_none(settings):
+    services, _eng, _t, run = await make(settings, {"eng": [ai("done")]})
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert run.prompt_tokens is None and run.model_calls is None
+
+
+async def test_runs_api_exposes_usage(client, services):
+    from openbot.db.models import Thread
+    from tests.factories import bot_actor
+    async with services.session_factory() as s:
+        eng, thread = bot_actor("eng"), Thread(title="t")
+        s.add_all([eng, thread])
+        await s.flush()
+        run = Run(actor_id=eng.id, thread_id=thread.id, status="completed", prompt_tokens=10, completion_tokens=2,
+                  cache_read_tokens=5, total_tokens=12, model_calls=1)
+        s.add(run)
+        await s.commit()
+        run_id = run.id
+    r = await client.get(f"/api/v1/runs/{run_id}")
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["prompt_tokens"], body["completion_tokens"], body["cache_read_tokens"], body["total_tokens"], body["model_calls"]) == (10, 2, 5, 12, 1)
+
+
+async def test_migration_adds_usage_columns(tmp_path):
+    url = f"sqlite+aiosqlite:///{tmp_path}/m.db"
+    await run_migrations(url)
+    engine = make_engine(url)
+    async with engine.connect() as conn:
+        cols = await conn.run_sync(lambda c: {col["name"] for col in inspect(c).get_columns("runs")})
+    await engine.dispose()
+    assert {"prompt_tokens", "completion_tokens", "cache_read_tokens", "total_tokens", "model_calls"} <= cols
+
+
+# --- seeded team --------------------------------------------------------------------------------------
+
+def test_seeded_division_of_labour():
+    bots = {b["handle"]: b for b in DEMO_BOTS}
+    assert bots["chief_of_staff"]["tool_names"] == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
+    assert bots["chief_of_staff"]["model_settings"] == {"max_model_calls": 6}
+    assert "first reply" in bots["chief_of_staff"]["instructions"]
+    assert "Do not run the test suite" in bots["reviewer"]["instructions"]
+    assert "--name-only" in bots["reviewer"]["instructions"]
+    assert "own running the tests" in bots["qa"]["instructions"]
+    assert "start_line/end_line" in bots["engineer"]["instructions"]
+    for h in ("engineer", "reviewer", "qa"):
+        assert "search_code" in bots[h]["tool_names"], h
+    assert "search_code" in bots["engineer"]["instructions"] and "search_code" in bots["reviewer"]["instructions"]
+
+
+async def test_seed_persists_model_settings(services):
+    services.settings.openrouter_api_key = "k"
+    assert await seed_demo_bots(services) == 4
+    async with services.session_factory() as s:
+        chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
+    assert chief.bot.model_settings == {"max_model_calls": 6}
+    assert chief.bot.tool_names == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
+    assert services.runner.model_call_limit(chief) == 6
+
+
+async def test_thread_usage_sums_all_runs(client, services):
+    """The thread header shows running totals over every run, finished or not, and treats
+    runs that never reported usage as zero."""
+    from openbot.db.models import Thread
+    from tests.factories import bot_actor
+    async with services.session_factory() as s:
+        eng, thread, other = bot_actor("eng"), Thread(title="t"), Thread(title="other")
+        s.add_all([eng, thread, other])
+        await s.flush()
+        s.add_all([
+            Run(actor_id=eng.id, thread_id=thread.id, status="completed", prompt_tokens=10, completion_tokens=2,
+                cache_read_tokens=5, total_tokens=12, model_calls=1),
+            Run(actor_id=eng.id, thread_id=thread.id, status="waiting_human", prompt_tokens=100, completion_tokens=20,
+                cache_read_tokens=0, total_tokens=120, model_calls=3),
+            Run(actor_id=eng.id, thread_id=thread.id, status="queued"),
+            Run(actor_id=eng.id, thread_id=other.id, status="completed", prompt_tokens=999, completion_tokens=999,
+                cache_read_tokens=999, total_tokens=1998, model_calls=9),
+        ])
+        await s.commit()
+        thread_id = thread.id
+    r = await client.get(f"/api/v1/threads/{thread_id}/usage")
+    assert r.status_code == 200
+    assert r.json() == {"model_calls": 4, "prompt_tokens": 110, "completion_tokens": 22, "cache_read_tokens": 5, "cache_write_tokens": 0, "reasoning_tokens": 0, "cost_usd": 0.0}
+
+
+async def test_thread_usage_is_zero_for_thread_without_runs(client, services):
+    from openbot.db.models import Thread
+    async with services.session_factory() as s:
+        thread = Thread(title="t")
+        s.add(thread)
+        await s.commit()
+        thread_id = thread.id
+    r = await client.get(f"/api/v1/threads/{thread_id}/usage")
+    assert r.status_code == 200
+    assert r.json() == {"model_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0, "reasoning_tokens": 0, "cost_usd": 0.0}
+    assert (await client.get("/api/v1/threads/nope/usage")).status_code == 404
+
+
+# --- read_file: oversized whole-file reads --------------------------------------------------------------
+
+async def test_whole_file_read_over_the_cap_returns_an_outline_not_a_dump(tmp_path):
+    """An 8k head-and-tail dump of a large file is content the model cannot use, and in practice it
+    re-reads the file by ranges right after, paying twice. Over the cap, a whole-file read says how
+    big the file is, shows only the start, and points at start_line/end_line."""
+    lines = [f"line {i:04d} " + "x" * 60 for i in range(1, 401)]
+    (tmp_path / "big.py").write_text("\n".join(lines))
+    out = await read_file.ainvoke({"path": "big.py", "runtime": rt(tmp_path, cap_chars=4000)})
+    assert "showing lines 1–" in out and "use start_line=" in out
+    assert "1: line 0001" in out and "400: line 0400" not in out
+    assert len(out) <= 4000
+    small = await read_file.ainvoke({"path": "big.py", "start_line": 1, "end_line": 3, "runtime": rt(tmp_path, cap_chars=4000)})
+    assert small.startswith("1: line 0001")
+
+
+# --- context editing: defaults that fire, and written content that goes away --------------------------
+
+def test_context_editing_defaults_leave_room_for_a_few_turns_of_reading():
+    """A coding bot reads ~10 files per turn, about 10k tokens and 11 messages. With a 12k trigger one
+    such turn tripped clearing and summarization at once and the bot re-read what it lost, so the run
+    cycled without writing (2026-09-17). The defaults now allow three or four turns of reading before
+    anything is touched, and each clearing reclaims a big chunk so clearings stay rare (cache warm)."""
+    from openbot.config import Settings
+    s = Settings(_env_file=None)
+    assert 30000 <= s.context_trigger_tokens <= 60000
+    assert 8000 <= s.context_clear_at_least <= s.context_trigger_tokens // 2
+
+
+async def test_clearing_also_drops_write_file_contents_from_the_transcript(settings):
+    """Half the transcript growth was the bot's own write_file arguments: every file it wrote stayed in
+    context in full. Once the tool succeeded that content is on disk; the call parameters go too."""
+    settings.context_trigger_tokens = 50
+    settings.context_clear_at_least = 0
+    ScriptedChatModel.seen.clear()
+    body = "x" * 600
+    script = [ai(tool_calls=[call("write_file", cid=f"w{i}", path=f"f{i}.txt", content=body)]) for i in range(5)] + [ai("done")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["write_file"])
+    await services.runner.execute(run.id)
+    final_prompt = ScriptedChatModel.seen[-1]
+    first_ai = next(m for m in final_prompt if m.type == "ai")
+    assert first_ai.tool_calls and body not in json.dumps(first_ai.tool_calls[0]["args"])   # oldest args cleared
+    last_ai = [m for m in final_prompt if m.type == "ai"][-1]
+    assert body in json.dumps(last_ai.tool_calls[0]["args"])                                  # recent ones kept
+
+
+async def test_ask_human_and_memory_results_are_never_cleared(settings):
+    settings.context_trigger_tokens = 50
+    settings.context_clear_at_least = 0
+    ScriptedChatModel.seen.clear()
+    script = [ai(tool_calls=[call("manage_memory", cid="m1", content="always wait for CI")])] + _shell_loop(5) + [ai("done")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    final_prompt = ScriptedChatModel.seen[-1]
+    mem = next(m for m in final_prompt if m.type == "tool" and m.name == "manage_memory")
+    assert mem.content != CLEARED_TOOL_RESULT
+
+
+# --- summarization: the second tier -------------------------------------------------------------------
+
+class SummarizingScriptedModel(ScriptedChatModel):
+    """Answers the summarization middleware's request with a fixed summary; everything else follows the script."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if any("Messages to summarize" in str(m.content) for m in messages):
+            ScriptedChatModel.seen.append(list(messages))
+            from langchain_core.outputs import ChatGeneration, ChatResult
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="SUMMARY: ran steps 0-3; nothing left but to finish"))])
+        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+
+def test_middleware_order_is_limit_then_summarize_then_clear(settings):
+    """LangChain's guidance: context editing after summarization, so clearing respects what was summarized."""
+    from langchain.agents.middleware import (
+        ContextEditingMiddleware,
+        ModelCallLimitMiddleware,
+        SummarizationMiddleware,
+    )
+
+    from tests.factories import bot_actor
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    runner = Runner(services)
+    mw = runner.build_middleware(bot_actor("eng"), ScriptedChatModel(messages=iter([])))
+    def index_of(kind):
+        return next(i for i, m in enumerate(mw) if isinstance(m, kind))
+    assert index_of(ModelCallLimitMiddleware) < index_of(SummarizationMiddleware) < index_of(ContextEditingMiddleware)
+
+
+def test_summarization_defaults_sit_above_the_clearing_trigger():
+    """Summarize well after clearing, and keep two full turns of ~10 reads (11 messages each) verbatim."""
+    from openbot.config import Settings
+    s = Settings(_env_file=None)
+    assert s.context_trigger_tokens < s.summary_trigger_tokens <= 80000
+    assert 22 <= s.summary_keep_messages <= 40
+
+
+async def test_long_runs_get_their_history_summarized(settings):
+    settings.summary_trigger_tokens = 300
+    settings.summary_keep_messages = 4
+    settings.context_trigger_tokens = 10_000       # keep clearing out of this test
+    ScriptedChatModel.seen.clear()
+    script = [ai(tool_calls=[call("run_shell", cid=f"c{i}", command=f"python3 -c \"print('step{i} ' + 'y'*400)\"")]) for i in range(6)] + [ai("done")]
+    services, _eng, t, run = await make(settings, {"eng": []}, tool_names=["run_shell"])
+    services.model_factory = lambda actor: SummarizingScriptedModel(messages=iter(script))
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "completed"
+    assert (await messages(services, t.id))[-1].content == "done"
+    final_prompt = ScriptedChatModel.seen[-1]
+    assert any("SUMMARY: ran steps" in str(m.content) for m in final_prompt), "summary should replace the old history"
+    assert not any("step0 " in str(m.content) for m in final_prompt if m.type == "tool"), "the summarized tool output is gone"
+    assert len(final_prompt) < 12
+
+
+# --- shell bypass: cat/git show around read_file's outline ---------------------------------------------
+
+def test_shell_output_cap_is_tighter_than_the_file_cap():
+    """Bots route around read_file's outline with `cat` and `git show`, which used the same 8k cap. A
+    tighter shell cap makes dumping a file through the shell worse than reading a range."""
+    from openbot.config import Settings
+    st = Settings(_env_file=None)
+    assert st.shell_output_cap <= 4000 < st.tool_output_cap
+
+
+async def test_run_shell_uses_its_own_cap(tmp_path):
+    r = rt(tmp_path, cap_chars=8000, shell_cap_chars=1000)
+    out = await run_shell.ainvoke({"command": "printf '%5000s' | tr ' ' y", "runtime": r})
+    assert len(out) < 1200 and "[truncated" in out
+
+
+async def test_run_shell_persists_full_output_and_returns_relative_hint(tmp_path):
+    r = rt(tmp_path, cap_chars=8000, shell_cap_chars=1000)
+    out = await run_shell.ainvoke({"command": "printf '%5000s' | tr ' ' y", "runtime": r})
+    saved = list((tmp_path / TOOL_OUTPUT_DIR).glob("output-*.txt"))
+    assert len(saved) == 1
+    assert saved[0].read_text() == "exit code: 0\nstdout:\n" + "y" * 5000
+    assert f"full output in {TOOL_OUTPUT_DIR}/{saved[0].name}" in out
+
+
+def test_engineer_reviewer_and_qa_are_told_not_to_dump_files_through_the_shell():
+    bots = {b["handle"]: b for b in DEMO_BOTS}
+    for h in ("engineer", "reviewer"):
+        text = bots[h]["instructions"]
+        assert "cat" in text and "git show" in text and "start_line/end_line" in text, h
+    assert "gh pr diff <n> -- <path>" in bots["reviewer"]["instructions"]
+    assert "tail" in bots["qa"]["instructions"]
+
+
+async def test_model_call_limit_is_reached_before_the_graph_recursion_limit(settings):
+    """A model turn traverses one graph node per middleware hook plus the model and tools nodes, so
+    the recursion limit must follow the real node count. With 40 calls allowed and five nodes per
+    turn the old fixed formula (calls * 4 + 20 = 180) ran out at turn 36 and the run failed with
+    GraphRecursionError instead of ending with the limit notice."""
+    settings.max_model_calls_per_run = 40
+    services, _eng, t, run = await make(settings, {"eng": _shell_loop(60) + [ai("never reached")]}, tool_names=["run_shell"])
+    await services.runner.execute(run.id)
+    run = await get(services, Run, run.id)
+    assert run.status == "completed", run.error
+    assert [e.type for e in await events(services, run.id)].count("tool_call") == 40
+    assert "limit" in (await messages(services, t.id))[-1].content.lower()
+
+
+# --- clearing works in turns: what the model fetched in its last two turns stays -----------------------
+
+def _turn(n: int, prefix: str, size: int) -> list:
+    from langchain_core.messages import ToolMessage
+    calls = [call("read_file", cid=f"{prefix}{i}", path=f"{prefix}{i}.py") for i in range(n)]
+    return [ai(tool_calls=calls)] + [ToolMessage(content="x" * size, tool_call_id=f"{prefix}{i}", name="read_file") for i in range(n)]
+
+
+def _clearing_edit(settings):
+    from langchain.agents.middleware import ContextEditingMiddleware
+
+    from tests.factories import bot_actor
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    mw = Runner(services).build_middleware(bot_actor("eng"), ScriptedChatModel(messages=iter([])))
+    return next(m for m in mw if isinstance(m, ContextEditingMiddleware)).edits[0]
+
+
+def test_clearing_never_touches_the_last_two_turns_of_tool_results(settings):
+    """`keep=3` counts results, not turns: one turn of ten small reads lost seven of them a call later, the
+    model read them again, and the run cycled for 17 minutes without writing a file (STO-2331 attempt).
+    Clearing must protect everything the last two model turns asked for, however many results that is."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    settings.context_trigger_tokens, settings.context_clear_at_least = 1000, 6000
+    edit = _clearing_edit(settings)
+    history = [HumanMessage("task")] + _turn(7, "old", 1200) + _turn(7, "mid", 1200) + _turn(7, "new", 1200)
+    edit.apply(history, count_tokens=count_tokens_approximately)
+    content = {p: [m.content for m in history if isinstance(m, ToolMessage) and m.tool_call_id.startswith(p)] for p in ("old", "mid", "new")}
+    assert all(c == "x" * 1200 for c in content["new"]), "the latest turn's results were cleared"
+    assert all(c == "x" * 1200 for c in content["mid"]), "the previous turn's results were cleared"
+    assert all(c == CLEARED_TOOL_RESULT for c in content["old"]), "older turns are what clearing is for"
+
+
+def test_clearing_reclaims_from_older_turns_and_stops_at_clear_at_least(settings):
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    settings.context_trigger_tokens, settings.context_clear_at_least = 1000, 2500
+    edit = _clearing_edit(settings)
+    history = [HumanMessage("task")] + [m for i in range(6) for m in _turn(1, f"t{i}", 4000)]
+    before = count_tokens_approximately(history)
+    edit.apply(history, count_tokens=count_tokens_approximately)
+    cleared = {m.tool_call_id for m in history if isinstance(m, ToolMessage) and m.content == CLEARED_TOOL_RESULT}
+    assert before - count_tokens_approximately(history) >= 2500
+    assert cleared == {"t00", "t10", "t20"}, "oldest first, and only until enough is reclaimed"
+
+
+def test_clearing_below_the_trigger_does_nothing(settings):
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    settings.context_trigger_tokens = 12000
+    edit = _clearing_edit(settings)
+    history = [HumanMessage("task")] + _turn(3, "a", 1000) + _turn(3, "b", 1000) + _turn(3, "c", 1000)
+    edit.apply(history, count_tokens=count_tokens_approximately)
+    assert all(m.content == "x" * 1000 for m in history if isinstance(m, ToolMessage))
+
+
+# --- summarization must measure the run's messages, not the model's reported prompt size ----------------
+
+def test_summarization_ignores_the_reported_total_that_includes_the_prompt_prefix(settings):
+    """SummarizationMiddleware also fires when the last reply's usage_metadata.total_tokens passes the trigger.
+    That total counts the system prompt and every tool schema (30k+ tokens for a bot with an MCP server), so
+    it fired on every call: each call folded the model's fresh file reads into a summary and the model read
+    them again. Seen on LangSmith: 154 calls, half of them summaries, messages measuring 8.5k tokens."""
+    from langchain.agents.middleware import SummarizationMiddleware
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from tests.factories import bot_actor
+    settings.summary_trigger_tokens = 18000
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    model = ScriptedChatModel(messages=iter([]))
+    mw = next(m for m in Runner(services).build_middleware(bot_actor("eng"), model) if isinstance(m, SummarizationMiddleware))
+    reply = ai(tool_calls=[call("read_file", cid="c1", path="a.py")], usage={"input_tokens": 41000, "output_tokens": 79, "total_tokens": 41079})
+    reply.response_metadata = {"model_provider": model._get_ls_params().get("ls_provider")}
+    small = [HumanMessage("task"), reply, ToolMessage(content="x" * 4000, tool_call_id="c1", name="read_file")]
+    assert mw._should_summarize(small, mw.token_counter(small)) is False, "8.5k tokens of messages must not summarize"
+    big = [HumanMessage("task"), reply] + [ToolMessage(content="x" * 20000, tool_call_id="c1", name="read_file")] * 5
+    assert mw._should_summarize(big, mw.token_counter(big)) is True, "the messages themselves still trigger it"
+
+
+# --- middleware nodes re-emit earlier replies; they are not new model calls -----------------------------
+
+async def test_stream_counts_a_reply_once_even_when_a_middleware_node_re_emits_it(settings):
+    """SummarizationMiddleware rewrites state as [RemoveMessage(all), summary, *kept]; the kept AI messages
+    arrive again in an `updates` chunk. Counting them again inflated model_calls and token totals 3x, logged
+    every old tool_call again, and showed the same reply text twice in the UI."""
+    from langchain_core.messages import HumanMessage, RemoveMessage
+    from langgraph.graph.message import REMOVE_ALL_MESSAGES
+    services, _eng, _t, run = await make(settings, {"eng": []})
+    first = ai("I'm on it", tool_calls=[call("read_file", cid="c1", path="a.py")], usage={"input_tokens": 100, "output_tokens": 10, "total_tokens": 110})
+    first.id = "ai-1"
+    last = ai("done", usage={"input_tokens": 120, "output_tokens": 5, "total_tokens": 125})
+    last.id = "ai-2"
+
+    class Agent:
+        async def astream(self, *_a, **_k):
+            yield "updates", {"model": {"messages": [first]}}
+            yield "updates", {"SummarizationMiddleware.before_model": {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), HumanMessage("summary"), first]}}
+            yield "updates", {"model": {"messages": [last]}}
+
+    final_text, _interrupt, _seq, usage = await services.runner._stream(Agent(), {}, {}, None, run, 0)
+    assert final_text == "done"
+    assert usage["model_calls"] == 2 and usage["prompt_tokens"] == 220
+    kinds = [e.type for e in await events(services, run.id)]
+    assert kinds.count("tool_call") == 1 and kinds.count("text") == 2

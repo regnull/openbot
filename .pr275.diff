@@ -1,0 +1,423 @@
+diff --git a/backend/openbot/api/schemas.py b/backend/openbot/api/schemas.py
+index ed5423e..afc1587 100644
+--- a/backend/openbot/api/schemas.py
++++ b/backend/openbot/api/schemas.py
+@@ -556,6 +556,7 @@ class CatalogModelOut(BaseModel):
+     cost_tiers: list[dict[str, Any]] = []
+     release_date: str = ""
+     status: str | None = None
++    task_ranks: dict[str, int] = Field(default_factory=dict)
+ 
+ 
+ class ModelsOut(BaseModel):
+diff --git a/backend/openbot/runtime/model_catalog.py b/backend/openbot/runtime/model_catalog.py
+index 9d737a9..0387fd9 100644
+--- a/backend/openbot/runtime/model_catalog.py
++++ b/backend/openbot/runtime/model_catalog.py
+@@ -20,6 +20,7 @@
+ log = logging.getLogger(__name__)
+ 
+ MODELS_DEV_URL = "https://models.dev/api.json"
++OPENROUTER_RANKINGS_URL = "https://openrouter.ai/api/frontend/v1/rankings"
+ MIN_CONTEXT = 32_000
+ CATALOG_TTL = timedelta(hours=24)
+ FETCH_TIMEOUT = 20.0
+@@ -69,9 +70,22 @@ def normalize_model(key: str, m: dict) -> dict:
+         "cost_tiers": tiers,
+         "release_date": str(m.get("release_date") or ""),
+         "status": "beta" if m.get("status") == "beta" else None,
++        **({"task_ranks": {str(task): int(rank) for task, rank in (m.get("task_ranks") or {}).items()}} if m.get("task_ranks") else {}),
+     }
+ 
+ 
++def _ranking_models(payload: Any) -> dict[str, int]:
++    """Convert OpenRouter's latest usage series into deterministic leaderboard ranks."""
++    points = payload.get("data") if isinstance(payload, dict) else None
++    latest = points[-1].get("ys") if isinstance(points, list) and points and isinstance(points[-1], dict) else None
++    if not isinstance(latest, dict):
++        return {}
++    ranked = sorted(
++        ((str(model), value) for model, value in latest.items() if isinstance(value, (int, float))),
++        key=lambda item: (-item[1], item[0]),
++    )
++    return {model: rank for rank, (model, _) in enumerate(ranked, 1)}
++
+ def normalize_catalog(raw: Any) -> dict[str, list[dict]]:
+     """models.dev document -> {openbot provider: [normalized model, ...]} for CATALOG_SOURCES only.
+ 
+@@ -167,6 +181,19 @@ async def refresh(self) -> bool:
+             r = await self._http.get(self._url, timeout=FETCH_TIMEOUT)
+             r.raise_for_status()
+             catalog = normalize_catalog(r.json())
++            if "openrouter" in catalog and self._url == MODELS_DEV_URL:
++                rankings: dict[str, dict[str, int]] = {}
++                for task, dataset in (("Code", "tools"), ("Vision", "images")):
++                    try:
++                        ranking = await self._http.get(f"{OPENROUTER_RANKINGS_URL}/{dataset}", timeout=FETCH_TIMEOUT)
++                        ranking.raise_for_status()
++                        rankings[task] = _ranking_models(ranking.json())
++                    except Exception as e:  # noqa: BLE001 - rankings are optional enrichment
++                        log.warning("OpenRouter %s rankings refresh failed: %s", task, e)
++                for model in catalog["openrouter"]:
++                    ranks = {task: rank[model["id"]] for task, rank in rankings.items() if model["id"] in rank}
++                    if ranks:
++                        model["task_ranks"] = ranks
+         except Exception as e:  # noqa: BLE001 - any failure must leave the cached rows in place
+             log.warning("model catalog refresh from %s failed: %s", self._url, e)
+             return False
+diff --git a/backend/tests/test_model_catalog.py b/backend/tests/test_model_catalog.py
+index 3c39a6a..4d666c1 100644
+--- a/backend/tests/test_model_catalog.py
++++ b/backend/tests/test_model_catalog.py
+@@ -3,7 +3,14 @@
+ 
+ import pytest
+ 
+-from openbot.runtime.model_catalog import CATALOG_PROVIDERS, normalize_catalog
++from openbot.runtime.model_catalog import (
++    CATALOG_PROVIDERS,
++    MODELS_DEV_URL,
++    OPENROUTER_RANKINGS_URL,
++    ModelCatalog,
++    _ranking_models,
++    normalize_catalog,
++)
+ 
+ SAMPLE = json.loads((Path(__file__).parent / "fixtures" / "models_dev_sample.json").read_text())
+ 
+@@ -28,6 +35,11 @@ def test_normalized_record_shape():
+     }
+ 
+ 
++def test_ranking_payload_is_deterministic_and_ignores_invalid_values():
++    payload = {"data": [{"ys": {"z-model": 3, "a-model": 3, "bad": "n/a", "negative": -1}}]}
++    assert _ranking_models(payload) == {"a-model": 1, "z-model": 2, "negative": 3}
++
++
+ def test_effort_levels_come_only_from_the_effort_option():
+     by_id = {m["id"]: m for m in normalize_catalog(SAMPLE)["anthropic"]}
+     assert by_id["claude-sonnet-4-5"]["effort_levels"] == []   # budget_tokens only
+@@ -66,7 +78,6 @@ def test_non_dict_block_inside_an_entry_is_skipped_not_fatal():
+ from sqlalchemy import select
+ 
+ from openbot.db.models import ModelCatalogRow, utcnow
+-from openbot.runtime.model_catalog import MODELS_DEV_URL, ModelCatalog
+ 
+ 
+ def _catalog(services, handler) -> tuple[ModelCatalog, httpx.AsyncClient]:
+@@ -102,10 +113,14 @@ async def test_refresh_writes_one_row_per_provider(services):
+ 
+ async def test_get_on_empty_db_returns_none_and_schedules_one_refresh(services):
+     calls = 0
++    catalog_calls = 0
+ 
+     def handler(request: httpx.Request) -> httpx.Response:
+-        nonlocal calls
++        nonlocal calls, catalog_calls
+         calls += 1
++        if str(request.url).startswith(OPENROUTER_RANKINGS_URL):
++            return httpx.Response(200, json={"data": [{"ys": {"z-ai/glm-5.3-flash": 1}}]})
++        catalog_calls += 1
+         return httpx.Response(200, json=SAMPLE)
+ 
+     cat, client = _catalog(services, handler)
+@@ -113,7 +128,8 @@ def handler(request: httpx.Request) -> httpx.Response:
+         assert await cat.get("openai") is None
+         assert await cat.get("anthropic") is None      # second miss while the first fetch is in flight
+         await cat.schedule_refresh()                    # returns the in-flight task; awaiting it waits for the fetch
+-        assert calls == 1
++        assert catalog_calls == 1
++        assert calls == 3
+         got = await cat.get("openai")
+     assert got is not None and got.stale is False and got.models[0]["id"] == "gpt-5.5"
+ 
+diff --git a/frontend/src/api/types.ts b/frontend/src/api/types.ts
+index 3390faa..0db992e 100644
+--- a/frontend/src/api/types.ts
++++ b/frontend/src/api/types.ts
+@@ -26,7 +26,7 @@ export interface PurgeResult { cancelled_runs: number; purged_items: number; }
+ export interface ToolInfo { name: string; description: string; source: string; args_schema: Record<string, unknown>; }
+ export interface ProviderInfo { id: string; configured: boolean; models: string[]; default_model: string; }
+ export interface ProvidersOut { providers: ProviderInfo[]; embedding_model: string; embeddings_configured: boolean; }
+-export interface CatalogModel { id: string; name: string; family: string; description: string; reasoning: boolean; effort_levels: string[]; image_input: boolean; context: number | null; output: number | null; cost_input: number | null; cost_output: number | null; cost_cache_read?: number | null; cost_cache_write?: number | null; cost_tiers?: Record<string, unknown>[]; release_date: string; status: string | null; }
++export interface CatalogModel { id: string; name: string; family: string; description: string; reasoning: boolean; effort_levels: string[]; image_input: boolean; context: number | null; output: number | null; cost_input: number | null; cost_output: number | null; cost_cache_read?: number | null; cost_cache_write?: number | null; cost_tiers?: Record<string, unknown>[]; release_date: string; status: string | null; task_ranks?: Record<string, number>; }
+ export interface ModelsOut { provider: string; configured: boolean; source: "catalog" | "builtin"; stale: boolean; fetched_at: string | null; models: CatalogModel[]; }
+ export interface BusEvent { event: string; thread_id: string | null; data: any; }
+ export interface McpServer { name: string; transport: "stdio" | "http"; status: "connected" | "connecting" | "authorizing" | "needs_auth" | "disconnected" | "error" | "disabled"; enabled: boolean; oauth: boolean; url: string | null; error: string | null; tools: string[]; source: "file" | "db"; authorization_url: string | null; command: string | null; args: string[]; cwd: string | null; env: Record<string, string>; headers: Record<string, string>; }
+diff --git a/frontend/src/components/ModelPicker.test.tsx b/frontend/src/components/ModelPicker.test.tsx
+index 236591b..f48e1f8 100644
+--- a/frontend/src/components/ModelPicker.test.tsx
++++ b/frontend/src/components/ModelPicker.test.tsx
+@@ -60,6 +60,20 @@ it("opens on focus, lists the catalog grouped by family newest first, and filter
+   expect(last).toBe("HAIKU");
+ });
+ 
++it("resets task mode when the provider changes", async () => {
++  await show({ provider: "openrouter" });
++  await focus();
++  expect(el.querySelector("button")?.textContent).toBe("By task");
++  await press(el.querySelector("button")!);
++  expect(el.querySelector("button")?.textContent).toBe("By family");
++
++  await act(async () => root.render(<QueryClientProvider client={qc}><Host provider="anthropic" /></QueryClientProvider>));
++  expect(el.querySelector("button")?.textContent).toBe("Reasoning");
++
++  await act(async () => root.render(<QueryClientProvider client={qc}><Host provider="openrouter" /></QueryClientProvider>));
++  expect(el.querySelector("button")?.textContent).toBe("By task");
++});
++
+ it("keeps free text as the value and notes it is not in the catalog", async () => {
+   await show();
+   await focus();
+diff --git a/frontend/src/components/ModelPicker.tsx b/frontend/src/components/ModelPicker.tsx
+index 7df7300..ce05c0b 100644
+--- a/frontend/src/components/ModelPicker.tsx
++++ b/frontend/src/components/ModelPicker.tsx
+@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
+ import { useId, useMemo, useState } from "react";
+ import { Api } from "../api/client";
+ import type { CatalogModel } from "../api/types";
+-import { filterModels, formatContext, formatCost, groupModels, withSuggested, type ModelSort } from "../lib/modelCatalog";
++import { filterConfiguredProviders, filterModels, formatContext, formatCost, groupModels, withSuggested, type ModelSort } from "../lib/modelCatalog";
+ import { Badge, Input, Spinner } from "./ui";
+ 
+ export interface ModelPickerProps {
+@@ -34,6 +34,7 @@ const Chip = ({ on, name, onToggle, children }: { on: boolean; name: string; onT
+  *  whether or not the catalog knows it. Rows are grouped by family; typing filters on id, name and family. */
+ export function ModelPicker({ provider, value, onChange, suggested = [], suggestedLabel = "Suggested", id, required, className = "" }: ModelPickerProps) {
+   const models = useQuery({ queryKey: ["models", provider], queryFn: () => Api.getModels(provider), staleTime: 5 * 60_000 });
++  const providers = useQuery({ queryKey: ["providers"], queryFn: Api.getProviders, staleTime: 5 * 60_000, enabled: provider === "openrouter" });
+   const unconfigured = models.data !== undefined && !models.data.configured;
+   const [open, setOpen] = useState(false);
+   const [query, setQuery] = useState("");
+@@ -41,10 +42,13 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
+   const [reasoning, setReasoning] = useState(false);
+   const [vision, setVision] = useState(false);
+   const [sort, setSort] = useState<ModelSort>("newest");
++  const [taskMode, setTaskMode] = useState(provider === "openrouter");
++  const [taskProvider, setTaskProvider] = useState(provider);
++  if (provider !== taskProvider) { setTaskProvider(provider); setTaskMode(provider === "openrouter"); }
+   const listId = useId();
+-  const all = useMemo(() => withSuggested(models.data?.models ?? [], suggested), [models.data, suggested]);
+-  const groups = useMemo(() => groupModels(filterModels(all, { text: query, reasoning, vision }), suggested, suggestedLabel, sort),
+-    [all, query, reasoning, vision, sort, suggested, suggestedLabel]);
++  const all = useMemo(() => withSuggested(filterConfiguredProviders(models.data?.models ?? [], providers.data?.providers), suggested), [models.data, providers.data, suggested]);
++  const groups = useMemo(() => groupModels(filterModels(all, { text: query, reasoning, vision }), suggested, suggestedLabel, sort, taskMode),
++    [all, query, reasoning, vision, sort, suggested, suggestedLabel, taskMode]);
+   const flat = useMemo(() => groups.flatMap((g) => g.models), [groups]);
+   // The highlight defaults to the row whose id exactly matches the field's value (or none), and is put
+   // back there whenever the filtered list changes underneath it (typing, a chip, sort, or reopening).
+@@ -80,13 +84,14 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
+         }} />
+       {!known && !models.isLoading && !unconfigured && <div className="mt-1 font-sans text-[11px] text-faint">Not in the catalog; sent to the provider as typed.</div>}
+       {open && (
+-        <div id={listId} role="listbox" aria-label="Models" onMouseDown={(e) => e.preventDefault()}
++        <div role="dialog" aria-label="Model picker" onMouseDown={(e) => e.preventDefault()}
+           className="absolute left-0 right-0 top-full z-10 mt-1 max-h-80 overflow-y-auto rounded-ui border border-line bg-surface py-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.45)]">
+           {unconfigured ? (
+             <div className="px-3 py-2 font-sans text-[13px] text-muted">{notConfiguredText(provider)}</div>
+           ) : (
+             <>
+               <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 pb-1.5 pt-1 font-sans text-[11px] text-faint">
++                {provider === "openrouter" && <button type="button" aria-pressed={taskMode} onMouseDown={(e) => e.preventDefault()} onClick={() => setTaskMode((v) => !v)} className="rounded-ui border border-line px-1.5 py-0.5 hover:text-fg">{taskMode ? "By task" : "By family"}</button>}
+                 <Chip on={reasoning} name="reasoning" onToggle={() => setReasoning((v) => !v)}>Reasoning</Chip>
+                 <Chip on={vision} name="vision" onToggle={() => setVision((v) => !v)}>Vision</Chip>
+                 <button type="button" data-sort={sort} onMouseDown={(e) => e.preventDefault()} onClick={() => setSort((s) => (s === "newest" ? "cheapest" : "newest"))}
+@@ -97,6 +102,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
+               </div>
+               {models.isLoading && <div className="px-3 py-2"><Spinner /></div>}
+               {!models.isLoading && flat.length === 0 && <div className="px-3 py-2 font-sans text-[13px] text-muted">No matching models.</div>}
++              <div id={listId} role="listbox" aria-label="Models">
+               {groups.map((g) => (
+                 <div key={g.label} data-group={g.label}>
+                   <div className="px-3 pb-0.5 pt-2 font-sans text-[11px] font-medium uppercase tracking-wide text-faint">{g.label}</div>
+@@ -127,6 +133,7 @@ export function ModelPicker({ provider, value, onChange, suggested = [], suggest
+                   })}
+                 </div>
+               ))}
++              </div>
+             </>
+           )}
+         </div>
+diff --git a/frontend/src/lib/modelCatalog.test.ts b/frontend/src/lib/modelCatalog.test.ts
+index 3de355b..62e5441 100644
+--- a/frontend/src/lib/modelCatalog.test.ts
++++ b/frontend/src/lib/modelCatalog.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, expect, it } from "vitest";
+ import type { CatalogModel } from "../api/types";
+-import { effortLevelsFor, filterModels, formatContext, formatCost, groupModels, hasCatalog, reconcileEffort, sortModels, splitAutoDefault, withSuggested } from "./modelCatalog";
++import { effortLevelsFor, filterModels, filterConfiguredProviders, formatContext, formatCost, groupModels, hasCatalog, reconcileEffort, sortModels, splitAutoDefault, taskRank, withSuggested } from "./modelCatalog";
+ 
+ const model = (id: string, extra: Partial<CatalogModel> = {}): CatalogModel => ({
+   id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: 200000, output: null,
+@@ -49,6 +49,22 @@ describe("sortModels and groupModels", () => {
+     expect(groups[0].models.map((m) => [m.id, m.name, m.context])).toEqual([["qwen3:8b", "qwen3:8b", null], ["claude-opus-5-5", "Claude Opus 5.5", 200000]]);
+     expect(groups).toHaveLength(1);
+   });
++  it("ranks task groups by the task leaderboard, then uses the selected sort as a fallback", () => {
++    const ranked = model("deepseek/deepseek-v4.1-flash", { description: "coding", release_date: "2025-01-01", task_ranks: { Code: 1 } });
++    const second = model("z-ai/glm-5.3-flash", { description: "coding", release_date: "2026-01-01", task_ranks: { Code: 2 } });
++    const fallback = model("unknown/coder", { description: "coding", release_date: "2026-02-01" });
++    const arbitrary = model("new/provider-model", { name: "Provider Model", description: "general purpose", task_ranks: { Code: 3 } });
++    expect(taskRank("Code", ranked)).toBeLessThan(taskRank("Code", second));
++    expect(groupModels([fallback, second, ranked, arbitrary], [], "Suggested", "newest", true)[0].models.map((m) => m.id)).toEqual([ranked.id, second.id, arbitrary.id, fallback.id]);
++  });
++});
++
++describe("OpenRouter provider filtering", () => {
++  it("keeps only models from configured upstreams and unqualified models", () => {
++    const models = [model("anthropic/claude"), model("openai/gpt"), model("custom/model"), model("bare")];
++    const providers = [{ id: "anthropic", configured: true }, { id: "openai", configured: false }] as never;
++    expect(filterConfiguredProviders(models, providers).map((m) => m.id)).toEqual(["anthropic/claude", "bare"]);
++  });
+ });
+ 
+ describe("formatting", () => {
+diff --git a/frontend/src/lib/modelCatalog.ts b/frontend/src/lib/modelCatalog.ts
+index 599c74f..1bcabee 100644
+--- a/frontend/src/lib/modelCatalog.ts
++++ b/frontend/src/lib/modelCatalog.ts
+@@ -1,98 +1,76 @@
+-import type { CatalogModel } from "../api/types";
++import type { CatalogModel, ProviderInfo } from "../api/types";
+ 
+-/** Providers the backend serves a models.dev catalog for (GET /models). xAI keeps its builtin list. */
+ export const CATALOG_PROVIDERS = new Set(["openai", "anthropic", "openrouter", "ollama"]);
+ export const hasCatalog = (provider: string): boolean => CATALOG_PROVIDERS.has(provider);
+-
+ export interface ModelFilters { text: string; reasoning: boolean; vision: boolean }
+ export type ModelSort = "newest" | "cheapest";
+ export interface ModelGroup { label: string; models: CatalogModel[] }
+ 
+-/** A bare row for an id the catalog does not know: an installed Ollama tag, or the configured default. */
+ export function placeholderModel(id: string): CatalogModel {
+   return { id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: null, output: null, cost_input: null, cost_output: null, cost_cache_read: null, cost_cache_write: null, cost_tiers: [], release_date: "", status: null };
+ }
+-
+-/** The catalog plus a placeholder for every suggested id it does not know, so those still list and pin. */
+ export function withSuggested(models: CatalogModel[], suggested: string[]): CatalogModel[] {
+   const known = new Set(models.map((m) => m.id));
+   return [...models, ...suggested.filter((id) => !known.has(id)).map(placeholderModel)];
+ }
+-
+-/** Case-insensitive substring match on id, name and family; the chips narrow further. */
+ export function filterModels(models: CatalogModel[], f: ModelFilters): CatalogModel[] {
+   const q = f.text.trim().toLowerCase();
+-  return models.filter((m) =>
+-    (!q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || m.family.toLowerCase().includes(q))
+-    && (!f.reasoning || m.reasoning) && (!f.vision || m.image_input));
++  return models.filter((m) => (!q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || m.family.toLowerCase().includes(q)) && (!f.reasoning || m.reasoning) && (!f.vision || m.image_input));
+ }
+-
+ const byNewest = (a: CatalogModel, b: CatalogModel) => b.release_date.localeCompare(a.release_date) || a.id.localeCompare(b.id);
+ const byCheapest = (a: CatalogModel, b: CatalogModel) => {
+   const ca = a.cost_output ?? Number.POSITIVE_INFINITY, cb = b.cost_output ?? Number.POSITIVE_INFINITY;
+-  if (ca === cb) return byNewest(a, b);
+-  return ca - cb;
++  return ca === cb ? byNewest(a, b) : ca - cb;
+ };
+-export function sortModels(models: CatalogModel[], sort: ModelSort): CatalogModel[] {
+-  return [...models].sort(sort === "cheapest" ? byCheapest : byNewest);
+-}
++export function sortModels(models: CatalogModel[], sort: ModelSort): CatalogModel[] { return [...models].sort(sort === "cheapest" ? byCheapest : byNewest); }
+ 
+-/** Pinned group first (suggested ids in their given order, only those present in `models`), then one
+- *  group per family, families in the order their best-ranked model appears under `sort`. */
+-export function groupModels(models: CatalogModel[], suggested: string[], suggestedLabel: string, sort: ModelSort): ModelGroup[] {
+-  const sorted = sortModels(models, sort);
+-  const byId = new Map(sorted.map((m) => [m.id, m]));
+-  const pinned = suggested.flatMap((id) => { const m = byId.get(id); return m ? [m] : []; });
+-  const pinnedIds = new Set(pinned.map((m) => m.id));
+-  const groups: ModelGroup[] = pinned.length ? [{ label: suggestedLabel, models: pinned }] : [];
+-  const families = new Map<string, CatalogModel[]>();
+-  for (const m of sorted) {
+-    if (pinnedIds.has(m.id)) continue;
+-    const label = m.family || "Other";
+-    const g = families.get(label);
+-    if (g) g.push(m); else families.set(label, [m]);
+-  }
+-  for (const [label, ms] of families) groups.push({ label, models: ms });
+-  return groups;
+-}
+-
+-/** Up to two decimals, trailing zeros dropped; sub-cent prices keep one significant digit ($0.003). */
+-const money = (n: number): string => (n > 0 && n < 0.01 ? Number(n.toPrecision(1)).toString() : Number(n.toFixed(2)).toString());
++const TASK_PATTERNS: Array<[string, RegExp]> = [
++  ["Reasoning", /reason|think|o[13](?:[-.]|$)|r1|deepseek-r1/],
++  ["Vision", /vision|vl|visual|gemini|qwen-vl/],
++  ["Code", /code|coder|coding|devstral|starcoder/],
++  ["Embeddings", /embed/],
++];
+ 
+-/** "$1.25 / $10 per M tokens" (input / output); "free" when both are zero; "" when both are unknown. */
+-export function formatCost(m: Pick<CatalogModel, "cost_input" | "cost_output">): string {
+-  if (m.cost_input == null && m.cost_output == null) return "";
+-  if (m.cost_input === 0 && m.cost_output === 0) return "free";
+-  const part = (v: number | null) => (v == null ? "$?" : `$${money(v)}`);
+-  return `${part(m.cost_input)} / ${part(m.cost_output)} per M tokens`;
++export function modelTasks(m: CatalogModel): string[] {
++  const text = `${m.id} ${m.name} ${m.description} ${m.family}`.toLowerCase();
++  const tasks = TASK_PATTERNS.flatMap(([task, pattern]) => (m.task_ranks?.[task] != null) || (m.reasoning && task === "Reasoning") || (m.image_input && task === "Vision") || pattern.test(text) ? [task] : []);
++  return tasks.length ? tasks : ["General"];
+ }
+ 
+-/** 200000 -> "200k", 1048576 -> "1M". */
+-export function formatContext(n: number | null): string {
+-  if (n == null) return "";
+-  if (n >= 1_000_000) return `${Number((n / 1_000_000).toPrecision(2))}M`;
+-  return `${Math.round(n / 1000)}k`;
++export function taskRank(task: string, m: CatalogModel): number {
++  return m.task_ranks?.[task] ?? Number.POSITIVE_INFINITY;
+ }
+ 
+-/** Effort levels the catalog declares for `modelId`; [] when unknown or not effort-capable. */
+-export function effortLevelsFor(models: CatalogModel[] | undefined, modelId: string): string[] {
+-  return models?.find((m) => m.id === modelId)?.effort_levels ?? [];
++function sortForTask(models: CatalogModel[], task: string, sort: ModelSort): CatalogModel[] {
++  return [...models].sort((a, b) => taskRank(task, a) - taskRank(task, b) || (sort === "cheapest" ? byCheapest(a, b) : byNewest(a, b)));
+ }
+ 
+-/** model_settings without a reasoning_effort the catalog says this model does not accept. A model the
+- *  catalog does not know (typed by hand, or a catalog that has not loaded) keeps whatever is set: the
+- *  provider is the authority there. */
+-export function reconcileEffort(settings: Record<string, unknown>, models: CatalogModel[] | undefined, modelId: string): Record<string, unknown> {
+-  const effort = settings.reasoning_effort;
+-  const m = models?.find((x) => x.id === modelId);
+-  if (typeof effort !== "string" || !m || m.effort_levels.includes(effort)) return settings;
+-  const { reasoning_effort: _, ...rest } = settings;
+-  return rest;
++/** Filter OpenRouter's catalog to upstreams enabled in this installation. */
++export function filterConfiguredProviders(models: CatalogModel[], providers: ProviderInfo[] | undefined): CatalogModel[] {
++  if (!providers?.length) return models;
++  const configured = new Set(providers.filter((p) => p.configured).map((p) => p.id));
++  return models.filter((m) => { const slash = m.id.indexOf("/"); return slash < 0 || configured.has(m.id.slice(0, slash)); });
+ }
+ 
+-/** The provider and model an "auto" bot resolves to, from /providers' `default_model` ("<provider>/<model>"). */
+-export function splitAutoDefault(autoDefaultModel: string | undefined): { provider: string; model: string } | null {
+-  if (!autoDefaultModel) return null;
+-  const i = autoDefaultModel.indexOf("/");
+-  return i < 0 ? null : { provider: autoDefaultModel.slice(0, i), model: autoDefaultModel.slice(i + 1) };
++export function groupModels(models: CatalogModel[], suggested: string[], suggestedLabel: string, sort: ModelSort, taskMode = false): ModelGroup[] {
++  if (taskMode) {
++    const groups = new Map<string, CatalogModel[]>();
++    for (const m of models) for (const task of modelTasks(m)) groups.set(task, [...(groups.get(task) ?? []), m]);
++    return [...groups].map(([label, ms]) => ({ label, models: sortForTask(ms, label, sort) }));
++  }
++  const sorted = sortModels(models, sort);
++  const byId = new Map(sorted.map((m) => [m.id, m]));
++  const pinned = suggested.flatMap((id) => { const m = byId.get(id); return m ? [m] : []; });
++  const pinnedIds = new Set(pinned.map((m) => m.id));
++  const groups: ModelGroup[] = pinned.length ? [{ label: suggestedLabel, models: pinned }] : [];
++  const families = new Map<string, CatalogModel[]>();
++  for (const m of sorted) if (!pinnedIds.has(m.id)) { const label = m.family || "Other"; families.set(label, [...(families.get(label) ?? []), m]); }
++  for (const [label, ms] of families) groups.push({ label, models: ms });
++  return groups;
+ }
++const money = (n: number): string => n > 0 && n < 0.01 ? Number(n.toPrecision(1)).toString() : Number(n.toFixed(2)).toString();
++export function formatCost(m: Pick<CatalogModel, "cost_input" | "cost_output">): string { if (m.cost_input == null && m.cost_output == null) return ""; if (m.cost_input === 0 && m.cost_output === 0) return "free"; const part = (v: number | null) => v == null ? "$?" : `$${money(v)}`; return `${part(m.cost_input)} / ${part(m.cost_output)} per M tokens`; }
++export function formatContext(n: number | null): string { if (n == null) return ""; if (n >= 1_000_000) return `${Number((n / 1_000_000).toPrecision(2))}M`; return `${Math.round(n / 1000)}k`; }
++export function effortLevelsFor(models: CatalogModel[] | undefined, modelId: string): string[] { return models?.find((m) => m.id === modelId)?.effort_levels ?? []; }
++export function reconcileEffort(settings: Record<string, unknown>, models: CatalogModel[] | undefined, modelId: string): Record<string, unknown> { const effort = settings.reasoning_effort; const m = models?.find((x) => x.id === modelId); if (typeof effort !== "string" || !m || m.effort_levels.includes(effort)) return settings; const { reasoning_effort: _, ...rest } = settings; return rest; }
++export function splitAutoDefault(autoDefaultModel: string | undefined): { provider: string; model: string } | null { if (!autoDefaultModel) return null; const i = autoDefaultModel.indexOf("/"); return i < 0 ? null : { provider: autoDefaultModel.slice(0, i), model: autoDefaultModel.slice(i + 1) }; }

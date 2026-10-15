@@ -1,0 +1,13 @@
+Ready to merge, risk 3/10 - PR #264
+
+Re-reviewed exact head `7721e4d6f0d087ab06648e87eb4d5a7f1369f8b1` and the full changed-file diff. The four prior blockers are resolved: the authoritative 14-field prompt template/allowlist is unchanged and repository instructions are appended post-render; discovery is bounded at the resolved workspace root; catalog/API serialization and installation carry the setting; migration, seed, catalog, and prompt regression coverage is present.
+
+Evidence: inspected all 12 changed files, traced `build_system_prompt()` from the runner through `thread_workspace_root()`, searched callers and all changed symbols, checked migration `0018` and model defaults, verified API/catalog/seed/builtin wiring, and inspected inline, conversation, formal, and automated review sources. Current checks are green for this exact head SHA: backend and frontend check runs all report success; PR is OPEN and MERGEABLE.
+
+Risk driver: this changes prompt contents and persisted bot configuration, but the setting is opt-in/default-off for existing and newly created bots except the intended Engineer seed/catalog entry, and the main paths have regression coverage.
+
+NITs: the new tests do not directly assert the `/bots/catalog` list response contains the field or exercise BotCreate/BotUpdate and builtin `create_bot` end to end; the implementation reuses the shared schemas and validation, so these are non-blocking follow-up coverage improvements.
+
+@qa please run/confirm the required validation for this exact head and merge only after human approval.
+
+OpenBot - `@reviewer`

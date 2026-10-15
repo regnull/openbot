@@ -1,0 +1,122 @@
+diff --git a/backend/openbot/runtime/model_catalog.py b/backend/openbot/runtime/model_catalog.py
+index 9d7e99b..9d737a9 100644
+--- a/backend/openbot/runtime/model_catalog.py
++++ b/backend/openbot/runtime/model_catalog.py
+@@ -123,6 +123,14 @@ def __init__(self, session_factory: async_sessionmaker, http_client: httpx.Async
+         self._task: asyncio.Task | None = None
+         self._prices: dict[tuple[str, str], dict[str, float | None]] = {}
+ 
++    @staticmethod
++    def _prices_for(provider: str, models: list[dict]) -> dict[tuple[str, str], dict[str, float | None]]:
++        return {(provider, model["id"]): {"input": model.get("cost_input"), "output": model.get("cost_output"),
++                                         "cache_read": model.get("cost_cache_read"),
++                                         "cache_write": model.get("cost_cache_write"),
++                                         "tiers": model.get("cost_tiers", [])}
++                for model in models}
++
+     def price_for(self, provider: str, model_id: str) -> dict[str, float | None] | None:
+         """Return cached per-token prices without doing I/O; None means unknown/stale cache."""
+         row = getattr(self, "_prices", {}).get((provider, model_id))
+@@ -137,6 +145,7 @@ async def get(self, provider: str) -> CatalogResult | None:
+             self.schedule_refresh()
+             return None
+         stale = utcnow() - row.fetched_at > self._ttl
++        self._prices.update(self._prices_for(provider, row.models))
+         if stale:
+             self.schedule_refresh()
+         return CatalogResult(provider, list(row.models), row.fetched_at, stale)
+@@ -162,9 +171,8 @@ async def refresh(self) -> bool:
+             log.warning("model catalog refresh from %s failed: %s", self._url, e)
+             return False
+         now = utcnow()
+-        self._prices = {(provider, model["id"]): {"input": model.get("cost_input"), "output": model.get("cost_output"),
+-                                                 "cache_read": model.get("cost_cache_read"), "cache_write": model.get("cost_cache_write"), "tiers": model.get("cost_tiers", [])}
+-                        for provider, models in catalog.items() for model in models}
++        self._prices = {key: value for provider, models in catalog.items()
++                        for key, value in self._prices_for(provider, models).items()}
+         try:
+             async with self._sessions() as session:
+                 for provider, models in catalog.items():
+diff --git a/backend/openbot/runtime/runner.py b/backend/openbot/runtime/runner.py
+index fcc9aba..ca4fd4c 100644
+--- a/backend/openbot/runtime/runner.py
++++ b/backend/openbot/runtime/runner.py
+@@ -422,6 +422,9 @@ async def _stream(self, agent, inputs, config, ctx: RunContext, run: Run, seq: i
+                         if inc is not None:
+                             log.info("run %s model call %d: prompt=%d (cache_read=%d) completion=%d", run.id, usage["model_calls"],
+                                      inc["prompt_tokens"], inc["cache_read_tokens"], inc["completion_tokens"])
++                            # Persist each provider-reported turn before processing its tools. This keeps
++                            # live run/thread/bot totals current and makes a tool round visible immediately.
++                            await self._set_status(run.id, "running", usage=inc)
+                         await activity.record(self.s, "run.model_call", level="debug", thread_id=run.thread_id, actor_id=run.actor_id,
+                                               run_id=run.id,
+                                               summary=f"model replied: {len(m.tool_calls)} tool call(s), {len(_text(m))} chars of text",
+@@ -492,7 +495,7 @@ async def execute(self, run_id: str, resume: Command | None = None) -> None:
+                           f"cache_read_tokens={usage['cache_read_tokens']} completion_tokens={usage['completion_tokens']}")
+             if interrupt is not None:
+                 log.info("run %s waiting_human after %.1fs (%s): %s", run.id, time.monotonic() - started, usage_line, _preview(interrupt))
+-                run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id, usage=usage)
++                run = await self._set_status(run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id)
+                 delivered = await deliver_question(self.s, run, interrupt)
+                 if not delivered:
+                     # deliver_question only addresses human/external participants. A thread with none
+@@ -509,7 +512,7 @@ async def execute(self, run_id: str, resume: Command | None = None) -> None:
+                 async with self.s.session_factory() as session:
+                     res = await post_message(self.s, session, thread_id=thread.id, sender=bot, content=final_text, hop=hop, run_id=run.id)
+                 seq = await self._record(run, seq, "message", {"message_id": res.message.id})
+-            await self._set_status(run.id, "completed", langsmith_run_id=ls_id, usage=usage)
++            await self._set_status(run.id, "completed", langsmith_run_id=ls_id)
+             log.info("run %s completed in %.1fs: reply=%d chars %s langsmith_run_id=%s", run.id, time.monotonic() - started,
+                      len(final_text), usage_line, ls_id)
+             if bot.bot.memory_enabled and self.s.reflector is not None:
+diff --git a/backend/tests/test_model_catalog.py b/backend/tests/test_model_catalog.py
+index cf2bdb5..3c39a6a 100644
+--- a/backend/tests/test_model_catalog.py
++++ b/backend/tests/test_model_catalog.py
+@@ -186,3 +186,16 @@ async def test_unknown_provider_and_no_http_client(services):
+     assert await cat.get("openai") is None          # no client: nothing to schedule, no error
+     assert cat.schedule_refresh() is None
+     await cat.close()                               # nothing running: a no-op
++
++
++async def test_get_rehydrates_prices_from_persisted_catalog(services):
++    models = [{"id": "gpt-5.5", "cost_input": 1.0, "cost_output": 2.0,
++               "cost_cache_read": 0.1, "cost_cache_write": 0.2,
++               "cost_tiers": [{"tier": {"size": 1000}, "input": 3.0}]}]
++    await _seed(services, "openai", models, timedelta(hours=1))
++    cat, client = _catalog(services, _ok)
++    async with client:
++        assert await cat.get("openai") is not None
++    assert cat.price_for("openai", "gpt-5.5") == {"input": 1.0, "output": 2.0,
++                                                        "cache_read": 0.1, "cache_write": 0.2,
++                                                        "tiers": [{"tier": {"size": 1000}, "input": 3.0}]}
+diff --git a/backend/tests/test_token_efficiency.py b/backend/tests/test_token_efficiency.py
+index 6f34a18..e168caf 100644
+--- a/backend/tests/test_token_efficiency.py
++++ b/backend/tests/test_token_efficiency.py
+@@ -135,6 +135,25 @@ async def test_usage_is_summed_logged_and_stored(settings, caplog):
+                for l in lines)
+ 
+ 
++async def test_usage_is_persisted_after_each_model_return(settings):
++    usage1 = {"input_tokens": 1000, "output_tokens": 50, "total_tokens": 1050}
++    usage2 = {"input_tokens": 1200, "output_tokens": 30, "total_tokens": 1230}
++    services, _eng, _t, run = await make(settings, {"eng": [ai(tool_calls=[call("run_shell", command="echo hi")], usage=usage1),
++                                                            ai("done", usage=usage2)]}, tool_names=["run_shell"])
++    original = services.runner._set_status
++    snapshots = []
++
++    async def capture(run_id, status, **kwargs):
++        result = await original(run_id, status, **kwargs)
++        if kwargs.get("usage"):
++            snapshots.append((result.model_calls, result.prompt_tokens, result.cost_usd))
++        return result
++
++    services.runner._set_status = capture
++    await services.runner.execute(run.id)
++    assert [(calls, prompt) for calls, prompt, _cost in snapshots] == [(1, 1000), (2, 2200)]
++
++
+ async def test_usage_stays_null_when_the_model_reports_none(settings):
+     services, _eng, _t, run = await make(settings, {"eng": [ai("done")]})
+     await services.runner.execute(run.id)

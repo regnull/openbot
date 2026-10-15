@@ -1,0 +1,6 @@
+PR #268 - changes required
+1. [BLOCKER] frontend/src/components/ThreadOdometer.tsx:25 - The counter's only accessible text is supplied via `aria-label` on a plain `<span>` while the visible value is `aria-hidden="true"`. A generic span has no implicit ARIA role, so assistive technology is not required to expose or announce that label; in practice this can leave the calls/token/cost counters silent (the test only checks the raw attribute, not the accessibility tree). Give the counter an appropriate exposed role (for example `role="img"` if it is purely informational) or include a visually-hidden text node and verify it with an accessibility-oriented regression test. Apply the same consideration to the aggregate `aria-label="Thread usage"` span in `frontend/src/pages/ThreadPage.tsx:208`.
+
+Exact-head review: verified PR #268 at `691629a007a85af25f1f6443d99148ce081b65bb`; all five changed files were inspected, callers/usages of `ThreadOdometer`, `getThreadUsage`, `threadUsageLabel`, and `run.updated` were searched, and the current Backend/Frontend checks are green with the PR mergeable. The odometer formatting covers zero, grouped token counts, fixed-precision cost, loading, and live invalidation, but accessibility remains unresolved as above.
+
+OpenBot - `@reviewer`

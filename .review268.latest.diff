@@ -1,0 +1,221 @@
+diff --git a/frontend/src/components/ThreadOdometer.test.tsx b/frontend/src/components/ThreadOdometer.test.tsx
+new file mode 100644
+index 0000000..32703fe
+--- /dev/null
++++ b/frontend/src/components/ThreadOdometer.test.tsx
+@@ -0,0 +1,38 @@
++// @vitest-environment jsdom
++(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
++import { act } from "react";
++import { createRoot } from "react-dom/client";
++import { describe, expect, it } from "vitest";
++import ThreadOdometer from "./ThreadOdometer";
++
++describe("ThreadOdometer", () => {
++  it("renders segmented digits with an accessible label", () => {
++    const container = document.createElement("div");
++    const root = createRoot(container);
++    act(() => { root.render(<ThreadOdometer label="in" value={12345} suffix=" tok" />); });
++
++    expect(container.textContent).toContain("in12,345 tok");
++    expect(container.querySelectorAll(".thread-odometer-digit")).toHaveLength(5);
++    expect(container.firstElementChild?.getAttribute("aria-label")).toBe("in: 12,345 tok");
++    expect(container.firstElementChild?.getAttribute("role")).toBe("img");
++
++    act(() => root.unmount());
++  });
++
++  it("keeps zero values visible and represents loading accessibly", () => {
++    const container = document.createElement("div");
++    const root = createRoot(container);
++    act(() => { root.render(<ThreadOdometer label="calls" value={0} />); });
++    expect(container.textContent).toContain("calls0");
++    expect(container.firstElementChild?.getAttribute("aria-label")).toBe("calls: 0");
++
++    act(() => { root.render(<ThreadOdometer label="calls" value={42} />); });
++    expect(container.firstElementChild?.getAttribute("aria-label")).toBe("calls: 42");
++
++    act(() => { root.render(<ThreadOdometer label="calls" value={42} loading />); });
++    expect(container.textContent).toContain("calls—");
++    expect(container.firstElementChild?.getAttribute("aria-label")).toBe("calls: loading");
++
++    act(() => root.unmount());
++  });
++});
+diff --git a/frontend/src/components/ThreadOdometer.tsx b/frontend/src/components/ThreadOdometer.tsx
+new file mode 100644
+index 0000000..713647d
+--- /dev/null
++++ b/frontend/src/components/ThreadOdometer.tsx
+@@ -0,0 +1,36 @@
++import { useMemo } from "react";
++
++type ThreadOdometerProps = {
++  label: string;
++  value: number | null | undefined;
++  prefix?: string;
++  suffix?: string;
++  loading?: boolean;
++  format?: (value: number) => string;
++};
++
++const numberFormatter = new Intl.NumberFormat("en-US");
++
++function formatValue(value: number, prefix: string, suffix: string, format?: (value: number) => string): string {
++  const formatted = Number.isFinite(value) ? (format?.(value) ?? numberFormatter.format(value)) : "0";
++  return `${prefix}${formatted}${suffix}`;
++}
++
++export default function ThreadOdometer({ label, value, prefix = "", suffix = "", loading = false, format }: ThreadOdometerProps) {
++  const displayValue = loading ? "—" : formatValue(value ?? 0, prefix, suffix, format);
++  const digits = useMemo(() => [...displayValue], [displayValue]);
++  const accessibleValue = loading ? "loading" : displayValue;
++
++  return (
++    <span className="thread-odometer" role="img" aria-label={`${label}: ${accessibleValue}`}>
++      <span className="thread-odometer-label">{label}</span>
++      <span className={`thread-odometer-value${loading ? " thread-odometer-loading" : ""}`} aria-hidden="true">
++        {digits.map((character, index) => (
++          <span className={/[0-9]/.test(character) ? "thread-odometer-digit" : "thread-odometer-separator"} key={`${index}-${character}`}>
++            {character}
++          </span>
++        ))}
++      </span>
++    </span>
++  );
++}
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index 25ecfc5..e842d91 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -182,6 +182,23 @@
+ .message-system .markdown-content { font-family: var(--font-mono); font-size: 12.5px; }
+ .message-meta { margin-bottom: 4px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; font-family: var(--font-mono); font-size: 12px; line-height: 1.3; color: var(--muted); }
+ 
++/* ── Thread header ──────────────────────────────────────────────────────────── */
++.thread-header { padding-top: 0.35rem; }
++.thread-header-counters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.35rem; }
++.thread-odometer { display: inline-flex; align-items: baseline; gap: 0.35rem; min-height: 1.65rem; padding: 0.2rem 0.4rem 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: var(--radius-ui); background: color-mix(in srgb, var(--surface) 88%, var(--sunken)); white-space: nowrap; }
++.thread-odometer-label { color: var(--faint); font-family: var(--font-sans); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; line-height: 1; text-transform: uppercase; }
++.thread-odometer-value { display: inline-flex; align-items: center; color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1; }
++.thread-odometer-digit { min-width: 0.72em; padding: 0.12rem 0.08rem; border-left: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent); background: color-mix(in srgb, var(--sunken) 72%, transparent); text-align: center; transition: background-color 180ms ease, color 180ms ease; }
++.thread-odometer-digit:first-child { border-left: 0; border-radius: 2px 0 0 2px; }
++.thread-odometer-digit:last-child { border-radius: 0 2px 2px 0; }
++.thread-odometer-separator { color: var(--muted); }
++.thread-odometer-loading { color: var(--faint); }
++@media (max-width: 640px) {
++  .thread-header-counters { gap: 0.25rem; }
++  .thread-odometer { padding-inline: 0.3rem; }
++  .thread-odometer-label { font-size: 8px; }
++}
++
+ /* ── Live indicators ───────────────────────────────────────────────────────── */
+ @keyframes thinking-pulse {
+   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+diff --git a/frontend/src/pages/ThreadPage.test.tsx b/frontend/src/pages/ThreadPage.test.tsx
+index b83dfef..762e990 100644
+--- a/frontend/src/pages/ThreadPage.test.tsx
++++ b/frontend/src/pages/ThreadPage.test.tsx
+@@ -55,6 +55,7 @@ describe("ThreadPage window re-entry", () => {
+   // bus published is persisted first (see delivery), so once it is emitted it stays in every
+   // later response — the fake must behave the same way or it manufactures bugs.
+   let server: Record<string, Message[]>;
++  let usageTotals: { model_calls: number; prompt_tokens: number; completion_tokens: number; cache_read_tokens: number; cost_usd: number };
+   const navRef: { current: null | ((to: string) => void) } = { current: null };
+ 
+   const text = (): string => el.textContent ?? "";
+@@ -105,12 +106,13 @@ describe("ThreadPage window re-entry", () => {
+     Element.prototype.scrollTo = () => {};
+     getThreadCalls = [];
+     server = { t1: [m1], t2: [] };
++    usageTotals = { model_calls: 0, prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0, cost_usd: 0 };
+     runStatus.r1 = "running";
+     fake.api.getThread = (id: string) => {
+       getThreadCalls.push(id);
+       return Promise.resolve(detail(id, [...(server[id] ?? [])])) as never;
+     };
+-    fake.api.getThreadUsage = () => Promise.resolve({ model_calls: 0, prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0 }) as never;
++    fake.api.getThreadUsage = () => Promise.resolve(usageTotals) as never;
+     fake.api.listBots = () => Promise.resolve([{ id: "b1", name: "Bot", handle: "bot", enabled: true, icon: null } as unknown as Bot]) as never;
+     fake.api.ackThread = () => Promise.resolve({ acked: 0 }) as never;
+     fake.api.getRun = (id: string) => Promise.resolve({ ...run(id, runStatus[id] ?? "running"), events: [] }) as never;
+@@ -122,6 +124,27 @@ describe("ThreadPage window re-entry", () => {
+   // A page left mounted keeps its window Esc listener, which would cancel runs in later tests.
+   afterEach(() => { act(() => root.unmount()); el.remove(); });
+ 
++  it("renders and refreshes live usage counters", async () => {
++    await mount("/threads/t1");
++    await until(() => text().includes("first reply"), "initial history");
++    expect(el.querySelector('[aria-label="Thread usage"]')?.getAttribute("role")).toBe("group");
++    expect(el.querySelector('[aria-label="calls: 0"]')?.getAttribute("role")).toBe("img");
++    expect(el.querySelector('[aria-label="calls: 0"]')).toBeTruthy();
++    expect(el.querySelector('[aria-label="in: 0 tok"]')).toBeTruthy();
++    expect(el.querySelector('[aria-label="out: 0 tok"]')).toBeTruthy();
++    expect(el.querySelector('[aria-label="cost: $0.0000"]')).toBeTruthy();
++
++    usageTotals = { model_calls: 2, prompt_tokens: 12345, completion_tokens: 678, cache_read_tokens: 0, cost_usd: 0.0123 };
++    await act(async () => {
++      sse.onEvent?.({ event: "run.updated", thread_id: "t1", data: { ...run("r1", "running"), status: "running" } });
++      await new Promise((resolve) => setTimeout(resolve, 0));
++    });
++    await until(() => !!el.querySelector('[aria-label="calls: 2"]'), "updated usage counters");
++    expect(el.querySelector('[aria-label="in: 12,345 tok"]')).toBeTruthy();
++    expect(el.querySelector('[aria-label="out: 678 tok"]')).toBeTruthy();
++    expect(el.querySelector('[aria-label="cost: $0.0123"]')).toBeTruthy();
++  });
++
+   it("restores each thread's draft after switching away and back", async () => {
+     await mount("/threads/t1");
+     await until(() => text().includes("first reply"), "initial history");
+diff --git a/frontend/src/pages/ThreadPage.tsx b/frontend/src/pages/ThreadPage.tsx
+index a3c8814..722de9c 100644
+--- a/frontend/src/pages/ThreadPage.tsx
++++ b/frontend/src/pages/ThreadPage.tsx
+@@ -8,11 +8,11 @@ import { isBackendUnavailable } from "../api/errors";
+ import { useBusEvents } from "../api/sse";
+ import Composer from "../components/Composer";
+ import MessageList from "../components/MessageList";
++import ThreadOdometer from "../components/ThreadOdometer";
+ import { Button, ErrorText, IconButton, OfflineNotice, Spinner } from "../components/ui";
+ import { ChevronLeftIcon, MoreIcon } from "../components/icons";
+ import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
+ import { emptyThreadState, hydrate, mergeRun, missedRunEnds, openRunIds, reduceThreadEvent, type ThreadState } from "../lib/threadState";
+-import { threadUsageLabel } from "../lib/threadUsage";
+ import { setOpenBotTitle } from "../lib/documentTitle";
+ 
+ export default function ThreadPage() {
+@@ -104,8 +104,8 @@ export default function ThreadPage() {
+   // locally-reduced thread state behind. Refetch the thread instead of trusting it.
+   useBusEvents(id, (e) => {
+     setState((s) => reduceThreadEvent(s, e));
+-    // Usage is written when a run leaves `running`, so that is when the header totals move.
+-    if (e.event === "run.updated" && e.data.status !== "running") qc.invalidateQueries({ queryKey: ["thread-usage", id] });
++    // Usage is persisted incrementally, including while a run remains running.
++    if (e.event === "run.updated") qc.invalidateQueries({ queryKey: ["thread-usage", id] });
+   }, () => {
+     qc.invalidateQueries({ queryKey: ["thread", id] });
+     qc.invalidateQueries({ queryKey: ["thread-usage", id] });
+@@ -182,7 +182,8 @@ export default function ThreadPage() {
+   }
+   const t = detail.data;
+   const displayedTitle = state.title ?? t.title;
+-  const usageLine = usage.data ? threadUsageLabel(usage.data) : null;
++  const usageData = usage.data;
++  const costFormatter = (value: number) => value.toFixed(4);
+   const handles = [...new Set([
+     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
+     ...(bots.data ?? []).filter((b) => b.enabled).map((b) => b.handle),
+@@ -204,7 +205,12 @@ export default function ThreadPage() {
+           <p className="flex flex-wrap items-baseline gap-x-3 text-[11px] leading-4 text-muted">
+             <span className="truncate">{t.participants.map((p) => `@${p.handle}`).join(" ")}</span>
+             <span className="truncate"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
+-            {usageLine && <span className="truncate" title="Tokens across every run in this thread">{usageLine}</span>}
++            <span className="thread-header-counters" role="group" aria-label="Thread usage">
++              <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
++              <ThreadOdometer label="in" value={usageData?.prompt_tokens} suffix=" tok" loading={usage.isLoading} />
++              <ThreadOdometer label="out" value={usageData?.completion_tokens} suffix=" tok" loading={usage.isLoading} />
++              <ThreadOdometer label="cost" value={usageData?.cost_usd} prefix="$" format={costFormatter} loading={usage.isLoading} />
++            </span>
+           </p>
+         </div>
+         <label className="hidden shrink-0 items-center gap-1.5 text-[11px] text-muted sm:flex">default

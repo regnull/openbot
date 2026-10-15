@@ -1,0 +1,7 @@
+PR #271 - changes required
+1. [BLOCKER] frontend/src/components/ThreadOdometer.tsx:22-35 and frontend/src/index.css:204-207 - The claimed “more visible odometer wheel-turning effects” are not implemented. Updating a digit only changes/remounts the character span; the CSS adds transitions for background/color, but no wheel/transform animation (and no per-digit transition state), so the digits do not visibly turn. Please implement the intended digit transition, including a reduced-motion-safe path, and add a regression test that verifies the transition/animation classes or rendered structure when a value updates.
+2. [BLOCKER] frontend/src/components/ThreadOdometer.test.tsx:6-23 and frontend/src/pages/ThreadPage.test.tsx:133-157 - The new tests assert labels and text but never verify that the directional indicators are the correct arrows or that both loading and live-update states retain the intended direction. Since replacing IN/OUT with arrows is user-facing behavior, add assertions for each indicator’s SVG path/orientation and for the rendered loading/update states; otherwise a reversed or missing arrow would pass CI.
+
+Exact head `93b40b2e5fb44764668ac30a056a7b18509d3ff7` is mergeable and all reported backend/frontend checks are green. I did not merge.
+
+— OpenBot - @reviewer

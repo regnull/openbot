@@ -1,0 +1,188 @@
+import pytest
+import pytest_asyncio
+from sqlalchemy import select
+
+from openbot.db.models import InboxItem, Message, Thread, ThreadParticipant
+from openbot.runtime.delivery import create_thread, human_actor, post_message
+from tests.factories import bot_actor, external_actor
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _no_actor_runs(services):
+    """Delivery bookkeeping is asserted on its own: keep the actor system from picking the items up."""
+    await services.actors.stop()
+
+
+async def seed(services, *actors):
+    async with services.session_factory() as s:
+        s.add_all(actors)
+        await s.commit()
+        return actors
+
+
+async def items(services, actor_id=None):
+    async with services.session_factory() as s:
+        q = select(InboxItem).order_by(InboxItem.created_at)
+        if actor_id:
+            q = q.where(InboxItem.actor_id == actor_id)
+        return (await s.execute(q)).scalars().all()
+
+
+async def test_post_creates_items_for_bots_and_notifies_humans(services):
+    eng, rev, ci = await seed(services, bot_actor("eng"), bot_actor("rev"), external_actor("ci"))
+    async with services.bus.subscribe(None) as q:
+        async with services.session_factory() as s:
+            you = await human_actor(s)
+            t = await create_thread(services, s, title="t", handles=["eng", "ci"], created_by=you)
+            res = await post_message(services, s, thread_id=t.id, sender=you, content="@rev hi")
+        assert [a.handle for a in res.addressed] == ["rev"] and res.unaddressed is False
+        assert res.message.hop == 0 and res.message.mentions == [rev.id] and res.message.sender_kind == "human"
+        events = [q.get_nowait()["event"] for _ in range(q.qsize())]
+        assert events.count("message.created") == 1 and events.count("inbox.updated") == 2
+    async with services.session_factory() as s:
+        parts = {p.actor_id for p in (await s.execute(select(ThreadParticipant).where(ThreadParticipant.thread_id == t.id))).scalars()}
+    assert parts == {you.id, eng.id, ci.id, rev.id}
+    its = await items(services)
+    assert {(i.actor_id, i.kind, i.status) for i in its} == {(rev.id, "message", "queued"), (ci.id, "message", "queued")}
+    assert (await services.store.asearch(("threads", t.id, "messages"), query="hi"))[0].key == res.message.id
+
+
+async def test_create_thread_persists_working_directory(services):
+    _eng = (await seed(services, bot_actor("eng")))[0]
+    services.settings.workspace_root.mkdir(parents=True)
+    (services.settings.workspace_root / "project").mkdir()
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        defaulted = await create_thread(services, s, title="root", handles=["eng"], created_by=you)
+        custom = await create_thread(services, s, title="project", handles=["eng"], created_by=you,
+                                     working_directory="./project")
+        assert defaulted.working_directory is None
+        assert custom.working_directory == "project"
+
+    async with services.session_factory() as s:
+        reread = await s.get(Thread, custom.id)
+        assert reread.working_directory == "project"
+
+
+async def test_default_bot_routes_unmentioned_human_messages(services):
+    chief, _eng, _rev = await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"), bot_actor("rev"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng", "rev"], created_by=you)
+        assert t.default_bot_actor_id == chief.id
+        res = await post_message(services, s, thread_id=t.id, sender=you, content="hello")
+        assert [a.id for a in res.addressed] == [chief.id]
+        assert res.unaddressed is False
+
+
+async def test_default_bot_routes_message_with_unresolvable_looking_mention(services):
+    """A message written as instructions for the bot ("thread lead is @bot") happens to contain text
+    that parses as a mention of a nonexistent handle. It must still reach the default bot instead of
+    silently reaching nobody (see router.resolve_targets)."""
+    chief, _eng = await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you)
+        res = await post_message(services, s, thread_id=t.id, sender=you,
+                                 content='thread lead for this thread is @bot. Do the thing.')
+        assert [a.id for a in res.addressed] == [chief.id]
+        assert res.unaddressed is False
+
+
+async def test_changed_default_and_explicit_mention_precedence(services):
+    chief, eng, rev = await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"), bot_actor("rev"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng", "rev"], created_by=you, default_bot_handle="rev")
+        assert t.default_bot_actor_id == rev.id
+        defaulted = await post_message(services, s, thread_id=t.id, sender=you, content="hello")
+        assert [a.id for a in defaulted.addressed] == [rev.id]
+        explicit = await post_message(services, s, thread_id=t.id, sender=you, content="@eng please handle")
+        assert [a.id for a in explicit.addressed] == [eng.id]
+        assert chief.id not in [a.id for a in explicit.addressed]
+
+
+async def test_single_bot_legacy_default_and_unaddressed_without_default(services):
+    eng, _rev = await seed(services, bot_actor("eng"), bot_actor("rev"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you)
+        res = await post_message(services, s, thread_id=t.id, sender=you, content="hello")
+        assert [a.id for a in res.addressed] == [eng.id]
+        t2 = await create_thread(services, s, title="t", handles=["eng", "rev"], created_by=you)
+        res = await post_message(services, s, thread_id=t2.id, sender=you, content="hello")
+        assert res.addressed == [] and res.unaddressed is True
+
+
+async def settle(s, actor_id):
+    """What a run does to its triggers before the bot replies: a bot replying with mail still `queued`
+    in the thread has its hand-off held (see test_handoff_hold.py), which is not what this test is about."""
+    for it in (await s.execute(select(InboxItem).where(InboxItem.actor_id == actor_id, InboxItem.status == "queued"))).scalars():
+        it.status = "done"
+    await s.commit()
+
+
+async def test_bot_reply_hops_and_limit(services):
+    services.settings.max_bot_hops = 2
+    eng, rev = await seed(services, bot_actor("eng"), bot_actor("rev"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng", "rev"], created_by=you)
+        await post_message(services, s, thread_id=t.id, sender=you, content="@eng go")
+        await settle(s, eng.id)
+        r2 = await post_message(services, s, thread_id=t.id, sender=eng, content="@rev review", hop=1)
+        assert r2.message.hop == 1 and [a.id for a in r2.addressed] == [rev.id]
+        await settle(s, rev.id)
+        r3 = await post_message(services, s, thread_id=t.id, sender=rev, content="@eng fix", hop=2)
+        assert r3.addressed == []
+        msgs = (await s.execute(select(Message).where(Message.thread_id == t.id).order_by(Message.created_at))).scalars().all()
+        assert msgs[-1].sender_kind == "system" and "hop limit" in msgs[-1].content
+        await post_message(services, s, thread_id=t.id, sender=rev, content="@eng again", hop=2)
+        n_sys = sum(1 for m in (await s.execute(select(Message).where(Message.thread_id == t.id))).scalars() if m.sender_kind == "system")
+        assert n_sys == 1
+        r5 = await post_message(services, s, thread_id=t.id, sender=you, content="@eng human here")
+        assert [a.id for a in r5.addressed] == [eng.id]
+    eng_items = await items(services, eng.id)
+    assert [i.kind for i in eng_items] == ["message", "message"]  # "go" (settled) and "human here"; the hop-limited ones were dropped
+    you_items = await items(services, you.id)
+    assert len(you_items) == 4  # two bot messages, one notice... and the second "again" bot message
+
+
+async def test_unknown_handles(services):
+    await seed(services, bot_actor("eng"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        with pytest.raises(ValueError):
+            await create_thread(services, s, title="t", handles=["ghost"], created_by=you)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you)
+        with pytest.raises(ValueError):
+            await post_message(services, s, thread_id=t.id, sender=you, content="x", to_handles=["ghost"])
+        with pytest.raises(LookupError):
+            await post_message(services, s, thread_id="nope", sender=you, content="x")
+
+
+async def test_create_thread_logs_resolved_working_directory(services, caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="openbot")
+    (services.settings.workspace_root / "proj").mkdir(parents=True)
+    await seed(services, bot_actor("eng"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng"], created_by=you, working_directory="proj")
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith(f"thread {t.id} created"))
+    assert "working_directory=proj" in line
+    assert f"tool_root={(services.settings.workspace_root / 'proj').resolve()}" in line
+
+
+async def test_bot_handoff_wakes_only_the_first_mentioned_bot(services):
+    eng, rev, qa = await seed(services, bot_actor("eng"), bot_actor("rev"), bot_actor("qa"))
+    async with services.session_factory() as s:
+        you = await human_actor(s)
+        t = await create_thread(services, s, title="t", handles=["eng", "rev", "qa"], created_by=you)
+        await post_message(services, s, thread_id=t.id, sender=you, content="@eng build it")
+        res = await post_message(services, s, thread_id=t.id, sender=rev, content="@eng fix the lint. @qa retest after the fixes.", hop=2)
+        assert [a.id for a in res.addressed] == [eng.id]
+        # The message still records both mentions, so QA's scoped view includes it once QA is woken later.
+        assert set(res.message.mentions) == {eng.id, qa.id}
+    assert len(await items(services, eng.id)) == 2
+    assert await items(services, qa.id) == []

@@ -1,0 +1,8 @@
+LGTM, risk 3/10 - PR #277
+Approval was unavailable because the shared GitHub account is the PR author; this comment preserves the verdict.
+Evidence: reviewed all four changed files at exact head `37be0256acb43476e97185e103f3a1eba305e92a`; traced `CustomCaret` from `App.tsx` and its delegated focus/rAF loop, including modal and viewport suppression; traced `filterConfiguredProviders` into `ModelPicker` and verified the OpenRouter-only provider path; searched callers of both changed symbols; checked the diff against `origin/main` (mergeable, no merge-tree conflict); confirmed the reported backend/frontend CI checks are green for this head and the focused regressions cover both new paths.
+Risk driver: changes are isolated to a global visual overlay loop and client-side catalog filtering; the existing full-suite launcher failures are unrelated per the validation report.
+NITs: none
+@qa please test and merge.
+
+OpenBot - `@reviewer`

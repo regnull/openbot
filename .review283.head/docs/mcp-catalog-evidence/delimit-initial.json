@@ -1,0 +1,139 @@
+{
+  "normalization": "local path roots only",
+  "original_log_sha256": "ff8b9a6e5ed9627aa21ecef77cced43a1dc01b1083597bd1277b017a4aefda4d",
+  "receipt": {
+    "id": "delimit",
+    "package": "delimit-cli",
+    "version": "4.21.0",
+    "metadata_source": "https://registry.npmjs.org/delimit-cli/latest",
+    "catalog_argv": [
+      "npx",
+      "-y",
+      "delimit-cli",
+      "mcp"
+    ],
+    "launch_argv": [
+      "/usr/bin/node",
+      "$SANDBOX/npm/delimit/node_modules/delimit-cli/bin/delimit-cli.js",
+      "mcp"
+    ],
+    "sandbox_launcher": [
+      "$CODEX_HOME/bin/codex",
+      "sandbox",
+      "-c",
+      "default_permissions=\"sandbox\"",
+      "-c",
+      "permissions.sandbox.extends=\":workspace\"",
+      "-c",
+      "permissions.sandbox.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"={\".\"=\"write\"},\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\",\"$CODEX_HOME\"=\"read\"}",
+      "-c",
+      "permissions.sandbox.network.enabled=false",
+      "-P",
+      "sandbox",
+      "-C",
+      "$SANDBOX",
+      "--",
+      "/usr/bin/env",
+      "-i",
+      "HOME=$SANDBOX/home",
+      "PATH=$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR=$SANDBOX/tmp",
+      "XDG_CACHE_HOME=$SANDBOX/cache",
+      "LANG=C.UTF-8",
+      "PYTHONNOUSERSITE=1",
+      "UV_OFFLINE=true",
+      "PIP_NO_INDEX=1",
+      "PIP_FIND_LINKS=$SANDBOX/wheels",
+      "npm_config_offline=true",
+      "npm_config_ignore_scripts=true",
+      "MEMORY_FILE_PATH=$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM=1",
+      "/bin/sh",
+      "-c",
+      "cd \"$1\" && shift && exec \"$@\"",
+      "sandbox-cwd",
+      "$SANDBOX/fixtures",
+      "/usr/bin/node",
+      "$SANDBOX/npm/delimit/node_modules/delimit-cli/bin/delimit-cli.js",
+      "mcp"
+    ],
+    "environment": {
+      "HOME": "$SANDBOX/home",
+      "PATH": "$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR": "$SANDBOX/tmp",
+      "XDG_CACHE_HOME": "$SANDBOX/cache",
+      "LANG": "C.UTF-8",
+      "PYTHONNOUSERSITE": "1",
+      "UV_OFFLINE": "true",
+      "PIP_NO_INDEX": "1",
+      "PIP_FIND_LINKS": "$SANDBOX/wheels",
+      "npm_config_offline": "true",
+      "npm_config_ignore_scripts": "true",
+      "MEMORY_FILE_PATH": "$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM": "1"
+    },
+    "cwd": "$SANDBOX/fixtures",
+    "sandbox_probe": {
+      "$PRIVATE_HOME/.ssh": "FileNotFoundError",
+      "$PRIVATE_HOME/.hermes": "FileNotFoundError",
+      "$AUDIT/openbot": "FileNotFoundError",
+      "/run/user/1000": "FileNotFoundError",
+      "/var/run/docker.sock": "FileNotFoundError",
+      "outbound": "PermissionError",
+      "workspace": true,
+      "env_keys": [
+        "GIT_CONFIG_NOSYSTEM",
+        "HOME",
+        "LANG",
+        "MEMORY_FILE_PATH",
+        "PATH",
+        "PIP_FIND_LINKS",
+        "PIP_NO_INDEX",
+        "PYTHONNOUSERSITE",
+        "TMPDIR",
+        "UV_OFFLINE",
+        "XDG_CACHE_HOME",
+        "npm_config_ignore_scripts",
+        "npm_config_offline"
+      ]
+    },
+    "checked_at": "2026-09-28T18:27:56.318350+00:00",
+    "status": "blocked",
+    "initialize": {
+      "ok": false
+    },
+    "tools_list": {
+      "ok": false,
+      "names": []
+    },
+    "tool_calls": "not-run",
+    "blocker": "RuntimeError: server streams closed; exit 1",
+    "cleanup": {
+      "method": "stdin closed; process exited",
+      "exit_code": 1,
+      "process_group_gone": true
+    }
+  },
+  "events": [
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-11-25",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "openbot-catalog-audit",
+            "version": "1.0"
+          }
+        }
+      }
+    },
+    {
+      "direction": "stderr",
+      "text": "delimit mcp: Could not install Delimit Python requirements in the venv. Check network access and Python pip.\n"
+    }
+  ]
+}

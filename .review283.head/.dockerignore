@@ -1,0 +1,18 @@
+# Keep secrets and local state out of the build context.
+.env
+.env.*
+secret.key
+mcp_token.key
+mcp.json
+workspace/
+logs/
+.openbot/
+**/*.db
+**/*.db-*
+.git/
+docs/
+**/.venv/
+**/__pycache__/
+**/node_modules/
+frontend/
+backend/tests/

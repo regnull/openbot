@@ -1,0 +1,199 @@
+diff --git a/backend/openbot/config.py b/backend/openbot/config.py
+index 99a64b8..3525a71 100644
+--- a/backend/openbot/config.py
++++ b/backend/openbot/config.py
+@@ -30,6 +30,7 @@ class Settings(BaseSettings):
+ 
+     bot_model: str | None = None
+     openrouter_model: str | None = None
++    small_model: str | None = None
+     # Prefer these OpenRouter upstreams (CSV, e.g. `z-ai,fireworks`), falling back to others only when they cannot
+     # serve a request. Each upstream has its own prompt cache; staying on one keeps it warm.
+     openrouter_provider_order: Annotated[list[str], NoDecode] = []
+diff --git a/backend/openbot/main.py b/backend/openbot/main.py
+index 48d3d13..578eaea 100644
+--- a/backend/openbot/main.py
++++ b/backend/openbot/main.py
+@@ -52,7 +52,7 @@
+ from openbot.runtime.memory import MemoryReflector
+ from openbot.runtime.model_catalog import ModelCatalog
+ from openbot.runtime.persistence import open_langgraph_backends
+-from openbot.runtime.providers import chat_model, embeddings
++from openbot.runtime.providers import chat_model, embeddings, small_chat_model
+ from openbot.runtime.renaming import finish_renames
+ from openbot.runtime.runner import Runner
+ from openbot.runtime.scheduler import Scheduler, recover_processing
+@@ -86,6 +86,7 @@ async def build_services(settings: Settings) -> Services:
+     services.checkpointer, services.store = await stack.enter_async_context(open_langgraph_backends(settings, emb))
+     services.langgraph_stack = stack
+     services.model_factory = lambda actor: chat_model(actor.bot, settings)
++    services.small_model_factory = lambda actor: small_chat_model(actor.bot, settings)
+     services.reflector = MemoryReflector(services, settings.memory_reflection_delay)
+     services.runner = Runner(services)
+     services.http_client = httpx.AsyncClient(timeout=15)
+diff --git a/backend/openbot/runtime/app_settings.py b/backend/openbot/runtime/app_settings.py
+index 186e90f..162cd06 100644
+--- a/backend/openbot/runtime/app_settings.py
++++ b/backend/openbot/runtime/app_settings.py
+@@ -94,6 +94,8 @@ class Tunable:
+     "prompt_caching": Tunable("Model routing", "Prompt caching", "Add cache breakpoints to every Anthropic model call."),
+     "direct_anthropic": Tunable("Model routing", "Direct Anthropic routing",
+         "Send OpenRouter anthropic/... models straight to Anthropic when a key is configured, so caching covers tool results too."),
++    "small_model": Tunable("Model routing", "Small model",
++        "Model used for thread titles and memory reflection. Leave empty to choose a cheap model for each bot's provider."),
+     # --- Telegram --------------------------------------------------------------------------------------------
+     "telegram_bot_token": Tunable("Telegram", "Bot token",
+         "Telegram Bot API token (format: 123456:ABC-DEF…). Overrides the TELEGRAM_BOT_TOKEN env var.", secret=True),
+diff --git a/backend/openbot/runtime/memory.py b/backend/openbot/runtime/memory.py
+index 11a2f02..7f6fed8 100644
+--- a/backend/openbot/runtime/memory.py
++++ b/backend/openbot/runtime/memory.py
+@@ -163,7 +163,8 @@ def __init__(self, services, delay: float) -> None:
+         self._timers: dict[tuple[str, str], asyncio.Task] = {}
+ 
+     def make_manager(self, bot: Actor):
+-        model = self.services.model_factory(bot)
++        factory = getattr(self.services, "small_model_factory", None) or self.services.model_factory
++        model = factory(bot)
+         return create_memory_store_manager(model, namespace=bot_namespace(bot.id),
+                                            store=ReflectionMemoryStore(self.services.store),
+                                            instructions=REFLECTION_INSTRUCTIONS,
+diff --git a/backend/openbot/runtime/providers.py b/backend/openbot/runtime/providers.py
+index ea05bc8..6c18453 100644
+--- a/backend/openbot/runtime/providers.py
++++ b/backend/openbot/runtime/providers.py
+@@ -180,6 +180,33 @@ def chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
+     return provider_chat_model(provider, model, settings, bot.model_settings)
+ 
+ 
++def small_model_name(settings: Settings, provider: str, main_model: str) -> str:
++    # Adapted from OpenCode's getSmallModel (MIT-licensed): choose a provider-local cheap model,
++    # while preserving an explicit setting and the bot's model as the final fallback.
++    if settings.small_model:
++        return settings.small_model
++    if provider == "openai":
++        return "gpt-5-mini"
++    if provider == "anthropic":
++        return "claude-haiku-4-5-20251001"
++    if provider == "openrouter":
++        return "openai/gpt-4o-mini"
++    if provider == OLLAMA:
++        return settings.ollama_model
++    if provider == "xai":
++        return "grok-4.5"
++    return main_model
++
++
++def small_chat_model(bot: BotProfile, settings: Settings) -> BaseChatModel:
++    provider, main_model = effective_bot_profile(bot, settings)
++    model = small_model_name(settings, provider, main_model)
++    try:
++        return provider_chat_model(provider, model, settings)
++    except (ValueError, RuntimeError):
++        return provider_chat_model(provider, main_model, settings, bot.model_settings)
++
++
+ _WEB_SEARCH_TOOL = {
+     "openai": {"type": "web_search_preview"},
+     "anthropic": {"type": "web_search_20250305", "name": "web_search"},
+diff --git a/backend/openbot/runtime/renaming.py b/backend/openbot/runtime/renaming.py
+index c559576..e7ac856 100644
+--- a/backend/openbot/runtime/renaming.py
++++ b/backend/openbot/runtime/renaming.py
+@@ -49,7 +49,7 @@ async def _rename(services, thread_id: str, actor: Actor, transcript: str) -> No
+         "markdown, or explanation. Use at most 80 characters.\n\n" + transcript
+     ))
+     try:
+-        response = await services.model_factory(actor).ainvoke([prompt])
++        response = await (services.small_model_factory or services.model_factory)(actor).ainvoke([prompt])
+         title = getattr(response, "content", "")
+         if isinstance(title, list):
+             title = "".join(str(x.get("text", "")) if isinstance(x, dict) else str(x) for x in title)
+diff --git a/backend/openbot/services.py b/backend/openbot/services.py
+index 70e1358..9657f0d 100644
+--- a/backend/openbot/services.py
++++ b/backend/openbot/services.py
+@@ -22,6 +22,7 @@ class Services:
+     runner: Any = None         # Runner
+     reflector: Any = None      # MemoryReflector
+     model_factory: Callable[[Any], Any] | None = None  # (Actor) -> BaseChatModel
++    small_model_factory: Callable[[Any], Any] | None = None  # (Actor) -> BaseChatModel
+     http_client: Any = None    # httpx.AsyncClient for webhook delivery
+     model_catalog: Any = None  # runtime.model_catalog.ModelCatalog (models.dev cache)
+     mcp: Any = None            # McpManager
+diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
+index 9a60337..952f296 100644
+--- a/backend/tests/conftest.py
++++ b/backend/tests/conftest.py
+@@ -125,6 +125,7 @@ def factory(actor):
+         return ScriptedChatModel(messages=iters[actor.handle])
+ 
+     services.model_factory = factory
++    services.small_model_factory = factory
+     try:
+         from openbot.runtime.memory import MemoryReflector
+         services.reflector = MemoryReflector(services, settings.memory_reflection_delay)
+diff --git a/backend/tests/test_providers.py b/backend/tests/test_providers.py
+index 3b7ecd2..fc53b58 100644
+--- a/backend/tests/test_providers.py
++++ b/backend/tests/test_providers.py
+@@ -14,6 +14,8 @@
+     embeddings,
+     provider_chat_model,
+     provider_status,
++    small_chat_model,
++    small_model_name,
+ )
+ 
+ 
+@@ -113,6 +115,30 @@ def test_configured_cloud_provider_keeps_the_bots_model_alongside_openrouter():
+     assert not m.openai_api_base
+ 
+ 
++def test_small_model_defaults_by_provider_and_honors_override():
++    assert small_model_name(s(), "openai", "gpt-5.5") == "gpt-5-mini"
++    assert small_model_name(s(), "anthropic", "claude-sonnet-5") == "claude-haiku-4-5-20251001"
++    assert small_model_name(s(small_model="custom/model"), "openai", "gpt-5.5") == "custom/model"
++
++
++def test_small_chat_model_uses_small_model_and_falls_back_to_main(monkeypatch):
++    bot = BotProfile(provider="openai", model="gpt-5.5", model_settings={})
++    settings = s(openai_api_key="k", small_model="gpt-5-mini")
++    model = small_chat_model(bot, settings)
++    assert model.model_name == "gpt-5-mini"
++
++    calls = []
++    def build(provider, model, settings, model_settings=None):
++        calls.append(model)
++        if model == "unavailable":
++            raise RuntimeError("unavailable")
++        return model
++    monkeypatch.setattr("openbot.runtime.providers.provider_chat_model", build)
++    assert small_chat_model(BotProfile(provider="openai", model="main", model_settings={}),
++                            s(openai_api_key="k", small_model="unavailable")) == "main"
++    assert calls == ["unavailable", "main"]
++
++
+ def test_cloud_bot_without_its_providers_key_falls_back_to_openrouter():
+     st = s(openrouter_api_key="k", bot_model="google/gemini-2.0-flash-001")
+     m = chat_model(BotProfile(provider="openai", model="gpt-4.1-mini", model_settings={}), st)
+diff --git a/backend/tests/test_renaming.py b/backend/tests/test_renaming.py
+index 2bdcabe..6c21b5f 100644
+--- a/backend/tests/test_renaming.py
++++ b/backend/tests/test_renaming.py
+@@ -42,6 +42,7 @@ async def gated_thread(services, posts):
+     await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
+     gate, calls = asyncio.Event(), []
+     services.model_factory = lambda actor: GatedModel(messages=iter(()), gate=gate, calls=calls)
++    services.small_model_factory = services.model_factory
+     async with services.session_factory() as session:
+         you = await human_actor(session)
+         thread = await create_thread(services, session, title="Initial", handles=["eng"], created_by=you)
+@@ -58,6 +59,7 @@ async def stored(services, thread):
+ async def test_auto_rename_after_third_message_and_only_once(services, scripts):
+     await seed(services, bot_actor("chief_of_staff"), bot_actor("eng"))
+     scripts["chief_of_staff"] = [ai('  "Purposeful title"  ')]
++    services.small_model_factory = lambda actor: ScriptedChatModel(messages=iter(scripts[actor.handle]))
+     async with services.bus.subscribe(None) as queue:
+         async with services.session_factory() as session:
+             you = await human_actor(session)

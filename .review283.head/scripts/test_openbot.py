@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPT = Path(__file__).parents[1] / "openbot"
+
+
+class OpenBotLauncherTests(unittest.TestCase):
+    def run_launcher(self, *args, cwd=None, home=None, repository=None, log_file=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_make = Path(tmp) / "make"
+            fake_make.write_text(
+                "#!/bin/sh\n"
+                "printf 'cwd=%s\\n' \"$PWD\"\n"
+                "printf 'workspace=%s\\n' \"$WORKSPACE_ROOT\"\n"
+                "printf 'database=%s\\n' \"$DATABASE_URL\"\n"
+                "printf 'details=%s\\n' \"$OPENBOT_INCLUDE_LLM_CALL_DETAILS\"\n"
+                "printf 'log=%s\\n' \"$LOG_FILE\"\n"
+                "printf 'args='; printf '%s|' \"$@\"; printf '\\n'\n"
+            )
+            fake_make.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{tmp}{os.pathsep}{env['PATH']}"
+            env.pop("LOG_FILE", None)
+            if log_file is not None:
+                env["LOG_FILE"] = log_file
+            if home is not None:
+                env["HOME"] = str(home)
+            if repository is not None:
+                env["OPENBOT_REPOSITORY"] = str(repository)
+            return subprocess.run(
+                [str(SCRIPT), *args], cwd=cwd, env=env, text=True, capture_output=True, check=False
+            )
+
+    def test_defaults_use_current_directory_and_home_database(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            result = self.run_launcher(cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"workspace={Path(tmp).resolve()}", result.stdout)
+            self.assertIn(f"database=sqlite+aiosqlite:///{Path(home).resolve() / '.openbot' / 'openbot.db'}", result.stdout)
+            self.assertIn("details=false\n", result.stdout)
+            self.assertIn("args=-C|", result.stdout)
+            self.assertIn("|app|ROOT_DIRECTORY=", result.stdout)
+
+    def test_log_file_lives_beside_the_database(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as db:
+            result = self.run_launcher("--db-root", db, cwd=tmp)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"log={Path(db).resolve() / 'logs' / 'openbot.log'}\n", result.stdout)
+
+    def test_log_file_from_the_environment_wins(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as db:
+            result = self.run_launcher("--db-root", db, cwd=tmp, log_file="/tmp/mine.log")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("log=/tmp/mine.log\n", result.stdout)
+
+    def test_existing_local_database_directory_wins(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            local_db = Path(tmp) / ".openbot"
+            local_db.mkdir()
+            result = self.run_launcher(cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"database=sqlite+aiosqlite:///{local_db.resolve() / 'openbot.db'}", result.stdout)
+            self.assertFalse((Path(home) / ".openbot").exists())
+
+    def test_missing_local_database_directory_falls_back_and_creates_home(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            result = self.run_launcher(cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            home_db = Path(home) / ".openbot"
+            self.assertIn(f"database=sqlite+aiosqlite:///{home_db.resolve() / 'openbot.db'}", result.stdout)
+            self.assertTrue(home_db.is_dir())
+
+    def test_explicit_database_override_wins_over_local_directory(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            (Path(tmp) / ".openbot").mkdir()
+            override = Path(tmp) / "database with spaces"
+            result = self.run_launcher("--db-root", str(override), cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"database=sqlite+aiosqlite:///{override.resolve() / 'openbot.db'}", result.stdout)
+            self.assertNotIn(str(Path(tmp) / ".openbot"), result.stdout)
+
+    def test_root_override_selects_local_database_relative_to_overridden_root(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            root = Path(tmp) / "workspace with spaces"
+            local_db = root / ".openbot"
+            local_db.mkdir(parents=True)
+            result = self.run_launcher("--root", str(root), cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"database=sqlite+aiosqlite:///{local_db.resolve() / 'openbot.db'}", result.stdout)
+
+    def test_root_override_preserves_spaces(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            root = Path(tmp) / "workspace with spaces"
+            root.mkdir()
+            result = self.run_launcher("--root", str(root), cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"workspace={root.resolve()}", result.stdout)
+
+    def test_db_root_override_expands_tilde(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            result = self.run_launcher("--db-root", "~/data with spaces", cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            expected = Path(os.path.realpath(home)) / "data with spaces" / "openbot.db"
+            self.assertIn(f"database=sqlite+aiosqlite:///{expected}", result.stdout)
+
+    def test_both_overrides_are_forwarded(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            root = Path(tmp) / "root"
+            db = Path(tmp) / "db root"
+            root.mkdir()
+            result = self.run_launcher("--root", str(root), "--db-root", str(db), cwd=tmp, home=home)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"workspace={root.resolve()}", result.stdout)
+            self.assertIn(f"database=sqlite+aiosqlite:///{db.resolve() / 'openbot.db'}", result.stdout)
+
+    def test_include_llm_call_details_is_forwarded_only_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            default_result = self.run_launcher(cwd=tmp, home=home)
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            self.assertIn("details=false\n", default_result.stdout)
+
+            opt_in_result = self.run_launcher("--include-llm-call-details", cwd=tmp, home=home)
+            self.assertEqual(opt_in_result.returncode, 0, opt_in_result.stderr)
+            self.assertIn("details=true\n", opt_in_result.stdout)
+
+    def test_repository_location_is_used_from_another_working_directory(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as home:
+            caller = Path(tmp) / "caller"
+            repository = Path(tmp) / "repository with spaces"
+            caller.mkdir()
+            repository.mkdir()
+            result = self.run_launcher(cwd=caller, home=home, repository=repository)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"args=-C|{repository.resolve()}|app|", result.stdout)
+            self.assertIn(f"ROOT_DIRECTORY={caller.resolve()}", result.stdout)
+            self.assertIn(f"workspace={caller.resolve()}", result.stdout)
+
+    def test_repository_location_must_be_a_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repository = Path(tmp) / "missing-repository"
+            result = self.run_launcher(cwd=tmp, repository=repository)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("does not exist", result.stderr)
+
+    def test_invalid_usage_is_clear(self):
+        result = self.run_launcher("--root")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--root requires a directory", result.stderr)
+
+    def test_missing_directory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self.run_launcher("--root", str(Path(tmp) / "missing"), cwd=tmp)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("does not exist", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

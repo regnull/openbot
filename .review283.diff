@@ -1,0 +1,320 @@
+diff --git a/backend/openbot/mcp/manager.py b/backend/openbot/mcp/manager.py
+index 4e542bb..5f17c40 100644
+--- a/backend/openbot/mcp/manager.py
++++ b/backend/openbot/mcp/manager.py
+@@ -84,7 +84,7 @@ def _drop_unset(args: dict[str, Any], required: set[str]) -> dict[str, Any]:
+     return {k: v for k, v in args.items() if k in required or (v is not None and v != "")}
+ 
+ 
+-def _wrap(tool: BaseTool, name: str, cap_chars: int) -> BaseTool:
++def _wrap(tool: BaseTool, name: str, cap_chars: int, workspace_root=None) -> BaseTool:
+     """The registered face of an MCP tool: same schema, capped text output, and every failure (the
+     server's isError, a dead transport, a lapsed authorization) returned as an "error: ..." result
+     the model can react to, instead of an exception that fails the whole run. Optional arguments left
+@@ -102,11 +102,11 @@ async def run(**kwargs: Any) -> str:
+             # the adapter surfaces the server's isError status.
+             msg = await tool.ainvoke({"name": tool.name, "args": kwargs, "id": "mcp", "type": "tool_call"})
+         except Exception as e:  # noqa: BLE001 - see docstring
+-            return cap(f"error: {type(e).__name__}: {e}", cap_chars)
++            return cap(f"error: {type(e).__name__}: {e}", cap_chars, workspace_root=workspace_root)
+         text = _flatten(msg.content if isinstance(msg, ToolMessage) else msg)
+         if isinstance(msg, ToolMessage) and msg.status == "error":
+             text = f"error: {text}"
+-        return cap(text, cap_chars, hint="ask the tool for less, or page through results")
++        return cap(text, cap_chars, hint="ask the tool for less, or page through results", workspace_root=workspace_root)
+ 
+     return StructuredTool.from_function(coroutine=run, name=name, description=description,
+                                         args_schema=tool.args_schema)
+@@ -313,7 +313,7 @@ async def _start_session(self, name: str, client, tools: list[BaseTool] | None)
+         names = []
+         for t in raw_tools:
+             full = tool_name(name, t.name)
+-            self._registry.register(_wrap(t, full, int(self._settings.tool_output_cap)), source=source)
++            self._registry.register(_wrap(t, full, int(self._settings.tool_output_cap), getattr(self._settings, "workspace_root", None)), source=source)
+             names.append(full)
+         st = self._status[name]
+         st.tools, st.status, st.error = sorted(names), "connected", None
+diff --git a/backend/openbot/tools/builtin/shell.py b/backend/openbot/tools/builtin/shell.py
+index 2d2148d..3e11bc7 100644
+--- a/backend/openbot/tools/builtin/shell.py
++++ b/backend/openbot/tools/builtin/shell.py
+@@ -117,4 +117,5 @@ async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | N
+     if err:
+         parts.append("stderr:\n" + err.decode(errors="replace"))
+     return cap("\n".join(parts), runtime.context.shell_output_cap,
+-               hint="pipe through head/tail/grep or use --name-only style flags to get less output; to read code use read_file with a line range")
++               hint="pipe through head/tail/grep or use --name-only style flags to get less output; to read code use read_file with a line range",
++               workspace_root=runtime.context.workspace_root)
+diff --git a/backend/openbot/tools/builtin/workspace.py b/backend/openbot/tools/builtin/workspace.py
+index 71f438d..5d200df 100644
+--- a/backend/openbot/tools/builtin/workspace.py
++++ b/backend/openbot/tools/builtin/workspace.py
+@@ -1,8 +1,12 @@
+ import os
++import time
++import uuid
+ from pathlib import Path
+ 
+ OUTPUT_CAP = 8000
+ HEAD_SHARE = 0.7
++TOOL_OUTPUT_DIR = ".openbot/tool-output"
++TOOL_OUTPUT_RETENTION_SECONDS = 3 * 24 * 60 * 60
+ # Where OpenBot keeps its own state under a root directory (see config.py): the live SQLite files.
+ # No in-process tool may open anything in it. Opening the WAL index (openbot.db-shm) from the backend
+ # process, even read-only, drops the process's POSIX locks on it; the next `sqlite3` a bot runs then
+@@ -11,6 +15,33 @@
+ STATE_DIR = ".openbot"
+ 
+ 
++def _tool_output_path(root: Path) -> Path:
++    return root / TOOL_OUTPUT_DIR
++
++
++def _cleanup_tool_outputs(directory: Path, now: float) -> None:
++    try:
++        for path in directory.iterdir():
++            if path.is_file() and now - path.stat().st_mtime > TOOL_OUTPUT_RETENTION_SECONDS:
++                path.unlink()
++    except OSError:
++        return
++
++
++def _save_tool_output(text: str, root: Path) -> str | None:
++    directory = _tool_output_path(root)
++    now = time.time()
++    try:
++        directory.mkdir(parents=True, exist_ok=True)
++        _cleanup_tool_outputs(directory, now)
++        filename = f"output-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(now))}-{uuid.uuid4().hex}.txt"
++        path = directory / filename
++        path.write_text(text, encoding="utf-8")
++        return f"{TOOL_OUTPUT_DIR}/{filename}"
++    except OSError:
++        return None
++
++
+ def expand_path(path: str | None) -> str | None:
+     return os.path.expanduser(path) if path is not None else None
+ 
+@@ -25,18 +56,32 @@ def resolve_in_workspace(root: Path, path: str | None) -> Path:
+     target = Path(expanded).resolve() if expanded and Path(expanded).is_absolute() else (root / expanded).resolve() if expanded else root
+     if target != root and root not in target.parents:
+         raise ValueError(f"path escapes workspace root: {path}")
+-    if STATE_DIR in target.relative_to(root).parts:
++    relative = target.relative_to(root)
++    if STATE_DIR in relative.parts and not (relative.parts[:2] == tuple(TOOL_OUTPUT_DIR.split("/"))):
+         raise ValueError(f"path is inside the OpenBot state directory ({STATE_DIR}), which tools must not touch: {path}")
+     return target
+ 
+ 
+-def cap(text: str, limit: int = OUTPUT_CAP, hint: str = "narrow the command or read a smaller range") -> str:
++def cap(text: str, limit: int = OUTPUT_CAP, hint: str = "narrow the command or read a smaller range",
++        workspace_root: Path | None = None) -> str:
+     if len(text) <= limit:
+         return text
+-    head = int(limit * HEAD_SHARE)
+-    tail = limit - head
+-    dropped = len(text) - head - tail
+-    return text[:head] + f"\n... [truncated {dropped} chars of {len(text)}; {hint}] ...\n" + text[-tail:]
++    full_output = _save_tool_output(text, workspace_root) if workspace_root is not None else None
++    file_hint = f"; full output in {full_output}" if full_output else ""
++    available = max(0, limit)
++    while True:
++        head = int(available * HEAD_SHARE)
++        tail = available - head
++        dropped = len(text) - available
++        # Adapted from OpenCode's MIT-licensed tool/truncate.ts.
++        marker = f"\n... [truncated {dropped} chars of {len(text)}{file_hint}; {hint}] ...\n"
++        next_available = limit - len(marker)
++        if next_available >= available or next_available <= 0:
++            if next_available <= 0:
++                return marker[:limit]
++            break
++        available = next_available
++    return text[:head] + marker + text[-tail:]
+ 
+ 
+ def validate_workspace_directory(root: Path, directory: str | None) -> str | None:
+diff --git a/backend/tests/mcp_stub_server.py b/backend/tests/mcp_stub_server.py
+index dbd1de0..24a76b0 100644
+--- a/backend/tests/mcp_stub_server.py
++++ b/backend/tests/mcp_stub_server.py
+@@ -16,5 +16,11 @@ def echo(text: str) -> str:
+     return f"echo: {text}"
+ 
+ 
++@mcp.tool()
++def fail(text: str) -> str:
++    """Raise an error for wrapper failure tests."""
++    raise RuntimeError(text)
++
++
+ if __name__ == "__main__":
+     mcp.run(transport="stdio")
+diff --git a/backend/tests/test_mcp_api.py b/backend/tests/test_mcp_api.py
+index 1d2dec0..6765dbe 100644
+--- a/backend/tests/test_mcp_api.py
++++ b/backend/tests/test_mcp_api.py
+@@ -35,7 +35,7 @@ async def test_servers_are_listed_with_status_and_tools_and_show_up_in_the_tool_
+     })
+     async with LifespanManager(app), AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+         rows = {r["name"]: r for r in (await c.get("/api/v1/mcp/servers")).json()}
+-        assert rows["stub"]["status"] == "connected" and rows["stub"]["tools"] == ["stub__add", "stub__echo"] and rows["stub"]["oauth"] is False
++        assert rows["stub"]["status"] == "connected" and rows["stub"]["tools"] == ["stub__add", "stub__echo", "stub__fail"] and rows["stub"]["oauth"] is False
+         assert rows["remote"]["status"] == "needs_auth" and rows["remote"]["oauth"] is True and rows["remote"]["tools"] == []
+         assert rows["off"]["status"] == "disabled"
+         tools = {t["name"]: t for t in (await c.get("/api/v1/tools")).json()["tools"]}
+diff --git a/backend/tests/test_mcp_db_config.py b/backend/tests/test_mcp_db_config.py
+index 9201248..9a0528c 100644
+--- a/backend/tests/test_mcp_db_config.py
++++ b/backend/tests/test_mcp_db_config.py
+@@ -76,7 +76,7 @@ async def test_api_manages_stdio_and_http_servers_with_masked_secrets(settings,
+             if row["status"] == "connected":
+                 break
+             await asyncio.sleep(0.05)
+-        assert row["status"] == "connected" and row["transport"] == "stdio" and row["tools"] == ["stub__add", "stub__echo"]
++        assert row["status"] == "connected" and row["transport"] == "stdio" and row["tools"] == ["stub__add", "stub__echo", "stub__fail"]
+         assert row["command"] == sys.executable and row["args"] == [STUB] and row["env"] == {"GREETING": "••••••••"}
+         r = await c.post("/api/v1/mcp/servers", json={"name": "linear", "url": "https://mcp.example.invalid/mcp", "headers": {"Authorization": "Bearer k"}})
+         assert r.status_code == 201 and r.json()["headers"] == {"Authorization": "••••••••"} and r.json()["oauth"] is False
+diff --git a/backend/tests/test_mcp_manager.py b/backend/tests/test_mcp_manager.py
+index 46bca7c..c612e21 100644
+--- a/backend/tests/test_mcp_manager.py
++++ b/backend/tests/test_mcp_manager.py
+@@ -18,13 +18,18 @@ class _Settings:
+     public_url = "http://127.0.0.1:8000"
+ 
+ 
++class _LegacySettings:
++    tool_output_cap = 60
++    public_url = "http://127.0.0.1:8000"
++
++
+ async def test_connects_registers_prefixed_tools_and_calls_them():
+     reg = ToolRegistry()
+     mgr = McpManager(servers=[_stub()], registry=reg, settings=_Settings(), storage=None)
+     await mgr.start()
+     try:
+         st = mgr.status("stub")
+-        assert st.status == "connected" and sorted(st.tools) == ["stub__add", "stub__echo"] and st.error is None
++        assert st.status == "connected" and sorted(st.tools) == ["stub__add", "stub__echo", "stub__fail"] and st.error is None
+         assert reg.has("stub__add") and reg.specs()[0].source == "mcp:stub"
+         out = await reg.get("stub__add").ainvoke({"a": 2, "b": 3})
+         assert "5" in str(out)
+@@ -44,6 +49,50 @@ async def test_results_are_capped_like_builtin_tools():
+         await mgr.stop()
+ 
+ 
++async def test_mcp_success_persists_full_output_and_returns_relative_hint(tmp_path):
++    settings = _Settings()
++    settings.tool_output_cap = 300
++    settings.workspace_root = tmp_path
++    reg = ToolRegistry()
++    mgr = McpManager(servers=[_stub()], registry=reg, settings=settings, storage=None)
++    await mgr.start()
++    try:
++        out = await reg.get("stub__echo").ainvoke({"text": "y" * 500})
++        saved = list((tmp_path / ".openbot" / "tool-output").glob("output-*.txt"))
++        assert len(saved) == 1
++        assert saved[0].read_text() == "echo: " + "y" * 500
++        assert f"full output in .openbot/tool-output/{saved[0].name}" in str(out)
++    finally:
++        await mgr.stop()
++
++
++async def test_mcp_error_persists_full_output_and_legacy_settings_still_work(tmp_path):
++    settings = _Settings()
++    settings.tool_output_cap = 300
++    settings.workspace_root = tmp_path
++    reg = ToolRegistry()
++    mgr = McpManager(servers=[_stub()], registry=reg, settings=settings, storage=None)
++    await mgr.start()
++    try:
++        out = await reg.get("stub__fail").ainvoke({"text": "z" * 500})
++        saved = list((tmp_path / ".openbot" / "tool-output").glob("output-*.txt"))
++        assert len(saved) == 1
++        assert saved[0].read_text().startswith("error:")
++        assert "z" * 500 in saved[0].read_text()
++        assert f"full output in .openbot/tool-output/{saved[0].name}" in str(out)
++    finally:
++        await mgr.stop()
++
++    legacy_reg = ToolRegistry()
++    legacy_mgr = McpManager(servers=[_stub("legacy")], registry=legacy_reg, settings=_LegacySettings(), storage=None)
++    await legacy_mgr.start()
++    try:
++        out = await legacy_reg.get("legacy__echo").ainvoke({"text": "y" * 500})
++        assert "[truncated" in str(out)
++    finally:
++        await legacy_mgr.stop()
++
++
+ async def test_a_broken_server_is_reported_without_stopping_the_others():
+     reg = ToolRegistry()
+     bad = McpServerConfig(name="bad", transport="stdio", command="/nonexistent/binary", args=[])
+diff --git a/backend/tests/test_mcp_review2.py b/backend/tests/test_mcp_review2.py
+index f134861..1d20c0a 100644
+--- a/backend/tests/test_mcp_review2.py
++++ b/backend/tests/test_mcp_review2.py
+@@ -118,7 +118,7 @@ async def test_patch_returns_promptly_and_connects_in_the_background(settings, t
+             if (await c.get("/api/v1/mcp/servers")).json()[0]["status"] == "connected":
+                 break
+             await asyncio.sleep(0.05)
+-        assert (await c.get("/api/v1/mcp/servers")).json()[0]["tools"] == ["stub__add", "stub__echo"]
++        assert (await c.get("/api/v1/mcp/servers")).json()[0]["tools"] == ["stub__add", "stub__echo", "stub__fail"]
+ 
+ 
+ async def test_downgrade_survives_stdio_rows(tmp_path):
+diff --git a/backend/tests/test_token_efficiency.py b/backend/tests/test_token_efficiency.py
+index 590d84a..71f9463 100644
+--- a/backend/tests/test_token_efficiency.py
++++ b/backend/tests/test_token_efficiency.py
+@@ -15,7 +15,7 @@
+ from openbot.seed import DEMO_BOTS, seed_demo_bots
+ from openbot.tools.builtin.files import read_file
+ from openbot.tools.builtin.shell import run_shell
+-from openbot.tools.builtin.workspace import cap
++from openbot.tools.builtin.workspace import TOOL_OUTPUT_DIR, TOOL_OUTPUT_RETENTION_SECONDS, cap
+ from openbot.tools.context import RunContext
+ from tests.fakes import ScriptedChatModel, ai, call
+ from tests.test_runner import events, get, make, messages
+@@ -61,6 +61,23 @@ def test_cap_keeps_head_and_tail_and_says_how_much_was_dropped():
+     assert cap("short", 800) == "short"
+ 
+ 
++def test_cap_saves_full_output_and_cleans_old_files(tmp_path):
++    output_dir = tmp_path / TOOL_OUTPUT_DIR
++    output_dir.mkdir(parents=True)
++    old = output_dir / "old.txt"
++    old.write_text("old")
++    old_time = old.stat().st_mtime - TOOL_OUTPUT_RETENTION_SECONDS - 1
++    import os
++    os.utime(old, (old_time, old_time))
++
++    text = "head\n" + "middle\n" * 1000 + "tail\n"
++    out = cap(text, 500, workspace_root=tmp_path)
++    saved = list(output_dir.glob("output-*.txt"))
++    assert len(saved) == 1 and saved[0].read_text() == text
++    assert not old.exists()
++    assert f"full output in {TOOL_OUTPUT_DIR}/{saved[0].name}" in out
++
++
+ async def test_read_file_returns_empty_for_empty_files(tmp_path):
+     (tmp_path / "empty.txt").write_text("")
+     r = rt(tmp_path)
+@@ -442,6 +459,15 @@ async def test_run_shell_uses_its_own_cap(tmp_path):
+     assert len(out) < 1200 and "[truncated" in out
+ 
+ 
++async def test_run_shell_persists_full_output_and_returns_relative_hint(tmp_path):
++    r = rt(tmp_path, cap_chars=8000, shell_cap_chars=1000)
++    out = await run_shell.ainvoke({"command": "printf '%5000s' | tr ' ' y", "runtime": r})
++    saved = list((tmp_path / TOOL_OUTPUT_DIR).glob("output-*.txt"))
++    assert len(saved) == 1
++    assert saved[0].read_text() == "exit code: 0\nstdout:\n" + "y" * 5000
++    assert f"full output in {TOOL_OUTPUT_DIR}/{saved[0].name}" in out
++
++
+ def test_engineer_reviewer_and_qa_are_told_not_to_dump_files_through_the_shell():
+     bots = {b["handle"]: b for b in DEMO_BOTS}
+     for h in ("engineer", "reviewer"):

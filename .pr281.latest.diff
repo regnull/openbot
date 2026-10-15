@@ -1,0 +1,561 @@
+diff --git a/backend/openbot/tools/builtin/files.py b/backend/openbot/tools/builtin/files.py
+index f24b3b7..6e4243f 100644
+--- a/backend/openbot/tools/builtin/files.py
++++ b/backend/openbot/tools/builtin/files.py
+@@ -1,6 +1,8 @@
+ import asyncio
++import difflib
+ import os
+ import sys
++from pathlib import Path
+ 
+ from langchain.tools import ToolRuntime, tool
+ 
+@@ -24,13 +26,19 @@ def _outline(path: str, lines: list[str], size: int, limit: int) -> str:
+         shown.append(line)
+         used += len(line) + 1
+     head = "\n".join(shown)
+-    return (f"{path}: {len(lines)} lines, {size} chars; too large to show whole (cap {limit} chars). "
+-            f"Read it in parts with start_line/end_line, or grep for what you need. Lines 1-{len(shown)}:\n{head}")
++    return (
++        f"{path}: {len(lines)} lines, {size} chars; too large to show whole (cap {limit} chars). "
++        f"Read it in parts with start_line/end_line, or grep for what you need. Lines 1-{len(shown)}:\n{head}"
++    )
+ 
+ 
+ @tool
+-async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int | None = None,
+-                    end_line: int | None = None) -> str:
++async def read_file(
++    path: str,
++    runtime: ToolRuntime[RunContext],
++    start_line: int | None = None,
++    end_line: int | None = None,
++) -> str:
+     """Read a UTF-8 text file at a path relative to the workspace root.
+ 
+     Pass `start_line` and/or `end_line` (1-based, inclusive) to read only part of a large file; the
+@@ -53,7 +61,9 @@ async def read_file(path: str, runtime: ToolRuntime[RunContext], start_line: int
+     if start > end:
+         return f"error: no lines in range {start}-{end} (file has {total} lines)"
+     body = "\n".join(lines[start - 1:end])
+-    return cap(f"lines {start}-{end} of {total}:\n{body}", limit, hint="ask for a narrower line range")
++    return cap(
++        f"lines {start}-{end} of {total}:\n{body}", limit, hint="ask for a narrower line range"
++    )
+ 
+ 
+ @tool
+@@ -68,6 +78,200 @@ async def write_file(path: str, content: str, runtime: ToolRuntime[RunContext])
+         return f"error: {e}"
+ 
+ 
++_EDIT_LOCKS: dict[Path, asyncio.Lock] = {}
++
++
++def _edit_lock(path: Path) -> asyncio.Lock:
++    return _EDIT_LOCKS.setdefault(path, asyncio.Lock())
++
++
++def _decode_escapes(text: str) -> str:
++    return bytes(text, "utf-8").decode("unicode_escape")
++
++
++def _normalize_whitespace(text: str) -> str:
++    return " ".join(text.split())
++
++
++def _remove_common_indent(text: str) -> str:
++    lines = text.split("\n")
++    indents = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
++    indent = min(indents, default=0)
++    return "\n".join(line[indent:] if line.strip() else line for line in lines)
++
++
++def _candidate_ranges(content: str, old: str) -> list[tuple[int, int, str]]:
++    """Return (start, end, strategy) candidates, ordered from strict to fuzzy.
++
++    The matcher ladder is adapted from OpenCode's MIT-licensed edit tool.
++    """
++    if not old:
++        return []
++    exact = []
++    start = 0
++    while True:
++        index = content.find(old, start)
++        if index < 0:
++            break
++        exact.append((index, index + len(old), "exact"))
++        start = index + 1
++    if exact:
++        return exact
++
++    content_lines = content.split("\n")
++    old_lines = old.split("\n")
++    if not old_lines:
++        return []
++    decoded_old = _decode_escapes(old)
++    if decoded_old != old:
++        decoded_matches = _candidate_ranges(content, decoded_old)
++        if decoded_matches:
++            return [(start, end, "escape-normalized") for start, end, _ in decoded_matches]
++    if len(old_lines) == 1:
++        normalized_old = _normalize_whitespace(old)
++        found: list[tuple[int, int, str]] = []
++        for line_number in range(len(content_lines)):
++            for end_line in range(line_number, len(content_lines)):
++                if end_line > line_number and not content_lines[end_line]:
++                    continue
++                block = "\n".join(content_lines[line_number : end_line + 1])
++                if _normalize_whitespace(block) == normalized_old:
++                    start = sum(len(item) + 1 for item in content_lines[:line_number])
++                    found.append((start, start + len(block), "whitespace-normalized"))
++        if found:
++            return found
++    strategies = (
++        (
++            "trimmed lines",
++            lambda block: (
++                [line.strip() for line in block.split("\n")] == [line.strip() for line in old_lines]
++            ),
++        ),
++        (
++            "whitespace-normalized",
++            lambda block: _normalize_whitespace(block) == _normalize_whitespace(old),
++        ),
++        (
++            "indentation-flexible",
++            lambda block: _remove_common_indent(block) == _remove_common_indent(old),
++        ),
++        ("escape-normalized", lambda block: block == _decode_escapes(old)),
++    )
++    for strategy, matches in strategies:
++        found: list[tuple[int, int, str]] = []
++        for line_number in range(len(content_lines) - len(old_lines) + 1):
++            block = "\n".join(content_lines[line_number : line_number + len(old_lines)])
++            if matches(block):
++                start = sum(len(line) + 1 for line in content_lines[:line_number])
++                found.append((start, start + len(block), strategy))
++        if found:
++            return found
++
++    if len(old_lines) >= 3:
++        first, last = old_lines[0].strip(), old_lines[-1].strip()
++        found: list[tuple[int, int, str]] = []
++        for line_number in range(len(content_lines)):
++            if content_lines[line_number].strip() != first:
++                continue
++            for end_line in range(line_number + 2, len(content_lines)):
++                if content_lines[end_line].strip() != last:
++                    continue
++                block_lines = content_lines[line_number : end_line + 1]
++                if len(block_lines) != len(old_lines):
++                    continue
++                middle = sum(
++                    a.strip() == b.strip()
++                    for a, b in zip(block_lines[1:-1], old_lines[1:-1], strict=True)
++                )
++                total = sum(
++                    bool(a.strip() or b.strip())
++                    for a, b in zip(block_lines[1:-1], old_lines[1:-1], strict=True)
++                )
++                if not total or middle / total >= 0.5:
++                    start = sum(len(line) + 1 for line in content_lines[:line_number])
++                    block = "\n".join(block_lines)
++                    found.append((start, start + len(block), "first/last-line anchors"))
++        if found:
++            return found
++    return []
++
++
++def _is_disproportionate(candidate: str, old: str) -> bool:
++    return len(candidate) > max(len(old) * 3, len(old) + 200)
++
++
++def _render_edit_diff(path: str, before: str, after: str, limit: int = 4000) -> str:
++    diff = "".join(
++        difflib.unified_diff(
++            before.splitlines(keepends=True),
++            after.splitlines(keepends=True),
++            fromfile=path,
++            tofile=path,
++        )
++    )
++    return diff[:limit] + ("\n... diff truncated" if len(diff) > limit else "")
++
++
++@tool
++async def edit_file(
++    path: str,
++    old_string: str,
++    new_string: str,
++    runtime: ToolRuntime[RunContext],
++    replace_all: bool = False,
++) -> str:
++    """Replace text in a UTF-8 workspace file using a safe fuzzy matcher ladder."""
++    try:
++        p = resolve_in_workspace(runtime.context.workspace_root, path)
++    except ValueError as e:
++        return f"error: {e}"
++    if not old_string:
++        return "error: 'old_string' must be non-empty"
++
++    async with _edit_lock(p):
++        try:
++            raw = p.read_bytes()
++            bom = raw.startswith(b"\xef\xbb\xbf")
++            content = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
++        except (OSError, UnicodeDecodeError) as e:
++            return f"error: {e}"
++
++        newline = "\r\n" if "\r\n" in content else "\n"
++        normalized = content.replace("\r\n", "\n").replace("\r", "\n")
++        old = old_string.replace("\r\n", "\n").replace("\r", "\n")
++        new = new_string.replace("\r\n", "\n").replace("\r", "\n")
++        matches = _candidate_ranges(normalized, old)
++        if not matches:
++            return "error: old_string was not found; re-read the file and provide the intended text"
++        disproportionate = [
++            match for match in matches if _is_disproportionate(normalized[match[0] : match[1]], old)
++        ]
++        if disproportionate:
++            return "error: matched text is much larger than old_string; provide a more specific old_string"
++        if len(matches) > 1 and not replace_all:
++            return f"error: old_string matched {len(matches)} locations; pass replace_all=true or provide more context"
++
++        selected = matches if replace_all else matches[:1]
++        result = normalized
++        for start, end, _ in reversed(selected):
++            result = result[:start] + new + result[end:]
++        output = result.replace("\n", newline)
++        encoded = output.encode("utf-8")
++        if bom:
++            encoded = b"\xef\xbb\xbf" + encoded
++        try:
++            p.write_bytes(encoded)
++        except OSError as e:
++            return f"error: {e}"
++        strategy = matches[0][2]
++        diff = _render_edit_diff(path, normalized, result)
++        return (
++            f"edited {path} ({strategy}, {len(selected)} replacement{'s' if len(selected) != 1 else ''})\n{diff}"
++            if diff
++            else f"edited {path} ({strategy})"
++        )
++
++
+ async def _apply_patch_command(
+     patch_content: str,
+     path: str | None,
+@@ -197,4 +401,8 @@ async def list_files(runtime: ToolRuntime[RunContext], path: str = ".", depth: i
+         rel = os.path.relpath(dirpath, root)
+         for f in sorted(filenames):
+             lines.append(f if rel == "." else f"{rel}/{f}")
+-    return cap("\n".join(lines) or "(empty)", runtime.context.tool_output_cap, hint="list a subdirectory or a smaller depth")
++    return cap(
++        "\n".join(lines) or "(empty)",
++        runtime.context.tool_output_cap,
++        hint="list a subdirectory or a smaller depth",
++    )
+diff --git a/backend/tests/test_builtin_tools.py b/backend/tests/test_builtin_tools.py
+index d640bf8..833e0b5 100644
+--- a/backend/tests/test_builtin_tools.py
++++ b/backend/tests/test_builtin_tools.py
+@@ -7,7 +7,7 @@ import pytest
+ from langchain.tools import ToolRuntime
+ 
+ from openbot.tools.builtin import SELECTABLE_TOOLS
+-from openbot.tools.builtin.files import list_files, read_file, write_file
++from openbot.tools.builtin.files import edit_file, list_files, read_file, write_file
+ from openbot.tools.builtin.shell import run_shell
+ from openbot.tools.builtin.workspace import (
+     browse_workspace_directory,
+@@ -24,7 +24,14 @@ def ctx(root: Path) -> RunContext:
+ 
+ 
+ def rt(root: Path) -> ToolRuntime:
+-    return ToolRuntime(context=ctx(root), store=None, state={}, tool_call_id="c", config={}, stream_writer=lambda *_: None)
++    return ToolRuntime(
++        context=ctx(root),
++        store=None,
++        state={},
++        tool_call_id="c",
++        config={},
++        stream_writer=lambda *_: None,
++    )
+ 
+ 
+ # The pid of the last background job. Under Git Bash on Windows $! is an MSYS pid, not a Windows one.
+@@ -35,6 +42,7 @@ def alive(pid: int) -> bool:
+     if sys.platform == "win32":
+         # os.kill(pid, 0) would terminate the process on Windows instead of probing it.
+         import ctypes
++
+         kernel32 = ctypes.windll.kernel32
+         handle = kernel32.OpenProcess(0x1000, False, pid)            # PROCESS_QUERY_LIMITED_INFORMATION
+         if not handle:
+@@ -69,7 +77,10 @@ def test_validate_workspace_directory(tmp_path):
+     assert validate_workspace_directory(root, "repo/../repo/src") == "repo/src"
+     home = Path.home() / "work" / "core-web"
+     if home.is_dir():
+-        assert validate_workspace_directory(Path.home() / "work", "~/work/core-web") == "~/work/core-web"
++        assert (
++            validate_workspace_directory(Path.home() / "work", "~/work/core-web")
++            == "~/work/core-web"
++        )
+ 
+     outside = tmp_path / "outside"
+     outside.mkdir()
+@@ -113,7 +124,9 @@ def test_browse_workspace_directory(tmp_path):
+ 
+ async def test_files_roundtrip(tmp_path):
+     r = rt(tmp_path)
+-    assert "wrote" in await write_file.ainvoke({"path": "a/hello.txt", "content": "hi", "runtime": r})
++    assert "wrote" in await write_file.ainvoke(
++        {"path": "a/hello.txt", "content": "hi", "runtime": r}
++    )
+     assert await read_file.ainvoke({"path": "a/hello.txt", "runtime": r}) == "hi"
+     out = await list_files.ainvoke({"path": ".", "depth": 2, "runtime": r})
+     assert "a/hello.txt" in out
+@@ -121,6 +134,97 @@ async def test_files_roundtrip(tmp_path):
+     assert out.startswith("error:")
+ 
+ 
++@pytest.mark.parametrize(
++    ("old", "expected"),
++    [
++        ("alpha\nbeta", "ALPHA\nBETA"),
++        (" alpha\n beta", "ALPHA\nBETA"),
++        ("alpha  beta", "ALPHA\nBETA"),
++        ("    alpha\n    beta", "ALPHA\nBETA"),
++        (r"alpha\nbeta", "ALPHA\nBETA"),
++    ],
++)
++async def test_edit_file_matchers(tmp_path, old, expected):
++    r = rt(tmp_path)
++    (tmp_path / "notes.txt").write_text("alpha\nbeta\n")
++    out = await edit_file.ainvoke(
++        {"path": "notes.txt", "old_string": old, "new_string": expected, "runtime": r}
++    )
++    assert out.startswith("edited notes.txt")
++    assert (tmp_path / "notes.txt").read_text() == expected + "\n"
++
++
++async def test_edit_file_rejects_ambiguous_anchor_matches(tmp_path):
++    r = rt(tmp_path)
++    original = "START\nKEEP\nA\nEND\nSTART\nKEEP\nB\nEND\n"
++    (tmp_path / "notes.txt").write_text(original)
++    out = await edit_file.ainvoke(
++        {
++            "path": "notes.txt",
++            "old_string": "START\nKEEP\nOLD\nEND",
++            "new_string": "START\nKEEP\nNEW\nEND",
++            "runtime": r,
++        }
++    )
++    assert "matched 2 locations" in out
++    assert (tmp_path / "notes.txt").read_text() == original
++
++
++async def test_edit_file_rejects_ambiguous_and_oversized_matches(tmp_path):
++    r = rt(tmp_path)
++    (tmp_path / "notes.txt").write_text("same\\nsame\\n")
++    out = await edit_file.ainvoke(
++        {"path": "notes.txt", "old_string": "same", "new_string": "new", "runtime": r}
++    )
++    assert "matched 2 locations" in out
++    out = await edit_file.ainvoke(
++        {
++            "path": "notes.txt",
++            "old_string": "same",
++            "new_string": "new",
++            "replace_all": True,
++            "runtime": r,
++        }
++    )
++    assert "2 replacements" in out
++    (tmp_path / "large.txt").write_text("x" * 1000)
++    out = await edit_file.ainvoke(
++        {"path": "large.txt", "old_string": "x", "new_string": "y", "runtime": r}
++    )
++    assert "matched 1000 locations" in out
++
++
++@pytest.mark.parametrize(
++    ("content", "old"),
++    [("aaa", "aa"), ("alpha  beta\nalpha   beta", "alpha beta")],
++)
++async def test_edit_file_rejects_overlapping_or_normalized_ambiguous_matches(
++    tmp_path, content, old
++):
++    r = rt(tmp_path)
++    (tmp_path / "notes.txt").write_text(content)
++    out = await edit_file.ainvoke(
++        {"path": "notes.txt", "old_string": old, "new_string": "changed", "runtime": r}
++    )
++    assert "matched 2 locations" in out
++    assert (tmp_path / "notes.txt").read_text() == content
++
++
++async def test_edit_file_preserves_crlf_and_bom(tmp_path):
++    r = rt(tmp_path)
++    (tmp_path / "windows.txt").write_bytes(b"\xef\xbb\xbffirst\r\nsecond\r\n")
++    out = await edit_file.ainvoke(
++        {
++            "path": "windows.txt",
++            "old_string": "first\nsecond",
++            "new_string": "changed",
++            "runtime": r,
++        }
++    )
++    assert out.startswith("edited windows.txt")
++    assert (tmp_path / "windows.txt").read_bytes() == b"\xef\xbb\xbfchanged\r\n"
++
++
+ async def test_run_shell(tmp_path):
+     r = rt(tmp_path)
+     out = await run_shell.ainvoke({"command": "echo hello; echo err 1>&2; exit 3", "runtime": r})
+@@ -134,11 +238,13 @@ async def test_run_shell(tmp_path):
+ async def test_run_shell_kills_process_group_on_timeout(tmp_path):
+     r = rt(tmp_path)
+     start = asyncio.get_event_loop().time()
+-    out = await run_shell.ainvoke({
++    out = await run_shell.ainvoke(
++        {
+         "command": f"sleep 5 & echo {LAST_PID} > child.pid; wait",
+         "timeout": 1,
+         "runtime": r,
+-    })
++        }
++    )
+     elapsed = asyncio.get_event_loop().time() - start
+     assert "timed out" in out
+     # If only the top-level bash pid were killed, the backgrounded `sleep 5` would
+@@ -153,7 +259,9 @@ async def test_run_shell_kills_process_group_on_timeout(tmp_path):
+ 
+ 
+ @pytest.mark.skipif(sys.platform == "win32", reason="SHELL_USER is POSIX only")
+-async def test_run_shell_as_shell_user_runs_through_setpriv_with_a_minimal_env(tmp_path, monkeypatch):
++async def test_run_shell_as_shell_user_runs_through_setpriv_with_a_minimal_env(
++    tmp_path, monkeypatch
++):
+     # Switching users needs root and Linux's setpriv, so record what run_shell asks for and run the
+     # command itself without the prefix. The real switch is covered by test_docker_live.py.
+     import getpass
+@@ -179,8 +287,14 @@ async def test_run_shell_as_shell_user_runs_through_setpriv_with_a_minimal_env(t
+ 
+     entry = pwd.getpwnam(name)
+     assert "ok" in out
+-    assert seen["argv"][:6] == ["setpriv", f"--reuid={entry.pw_uid}", f"--regid={entry.pw_gid}", "--init-groups",
+-                                "--no-new-privs", "--"]
++    assert seen["argv"][:6] == [
++        "setpriv",
++        f"--reuid={entry.pw_uid}",
++        f"--regid={entry.pw_gid}",
++        "--init-groups",
++        "--no-new-privs",
++        "--",
++    ]
+     assert seen["argv"][6:8] == ["bash", "-lc"]
+     assert set(seen["env"]) == {"PATH", "HOME", "USER", "LOGNAME", "LANG"}
+     assert "OPENAI_API_KEY" not in seen["env"]
+@@ -231,11 +345,15 @@ async def test_run_shell_kills_process_group_on_cancellation(tmp_path):
+     # everything it spawned keep running after the run is gone -- an orphaned build or `sleep` that
+     # nothing will ever reap.
+     r = rt(tmp_path)
+-    task = asyncio.create_task(run_shell.ainvoke({
++    task = asyncio.create_task(
++        run_shell.ainvoke(
++            {
+         "command": f"sleep 5 & echo {LAST_PID} > child.pid; wait",
+         "timeout": 30,
+         "runtime": r,
+-    }))
++            }
++        )
++    )
+     pid_file = tmp_path / "child.pid"
+     for _ in range(100):                      # wait for bash to actually spawn the child
+         await asyncio.sleep(0.01)
+@@ -255,15 +373,32 @@ async def test_run_shell_kills_process_group_on_cancellation(tmp_path):
+ 
+ def test_selectable_names():
+     assert [t.name for t in SELECTABLE_TOOLS] == [
+-        "run_shell", "read_file", "write_file", "patch_file", "list_files", "search_code", "http_request", "fetch_url", "create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
++        "run_shell",
++        "read_file",
++        "write_file",
++        "edit_file",
++        "patch_file",
++        "list_files",
++        "search_code",
++        "http_request",
++        "fetch_url",
++        "create_bot",
++        "read_bot_description",
++        "read_bot_instructions",
++        "update_bot_description",
++        "update_bot_instructions",
++    ]
+ 
+ 
+ async def test_search_code_returns_matching_lines_with_paths_and_skips_junk_dirs(tmp_path):
+     """Exploration used to be `cat` after `cat`: ten model calls of whole-file dumps before the first
+     edit. A search that returns only matching lines, with their location, replaces most of them."""
+     from openbot.tools.builtin.search import search_code
++
+     (tmp_path / "src").mkdir()
+-    (tmp_path / "src" / "a.py").write_text("import os\n\ndef alpha():\n    return os.getcwd()\n\nclass Beta:\n    pass\n")
++    (tmp_path / "src" / "a.py").write_text(
++        "import os\n\ndef alpha():\n    return os.getcwd()\n\nclass Beta:\n    pass\n"
++    )
+     (tmp_path / "src" / "b.ts").write_text("export function alpha() {}\nconst beta = 1;\n")
+     (tmp_path / "node_modules").mkdir()
+     (tmp_path / "node_modules" / "x.js").write_text("alpha alpha alpha\n")
+@@ -287,8 +422,11 @@ async def test_search_code_returns_matching_lines_with_paths_and_skips_junk_dirs
+ 
+ async def test_search_code_caps_the_number_of_matches(tmp_path):
+     from openbot.tools.builtin.search import search_code
++
+     (tmp_path / "many.txt").write_text("\n".join(f"needle {i}" for i in range(500)))
+-    out = await search_code.ainvoke({"pattern": "needle", "max_results": 20, "runtime": rt(tmp_path)})
++    out = await search_code.ainvoke(
++        {"pattern": "needle", "max_results": 20, "runtime": rt(tmp_path)}
++    )
+     assert out.count("many.txt:") == 20 and "more matches" in out
+ 
+ 
+@@ -302,7 +440,9 @@ def test_home_relative_core_web_and_rejects_traversal(tmp_path, monkeypatch):
+     target.mkdir(parents=True)
+     monkeypatch.setenv("HOME", str(home))
+     monkeypatch.setenv("USERPROFILE", str(home))                     # what expanduser reads on Windows
+-    assert validate_workspace_directory(tmp_path / "workspace", "~/work/core-web") == "~/work/core-web"
++    assert (
++        validate_workspace_directory(tmp_path / "workspace", "~/work/core-web") == "~/work/core-web"
++    )
+     with pytest.raises(ValueError, match="cannot contain"):
+         validate_workspace_directory(tmp_path / "workspace", "~/../outside")
+     assert thread_workspace_root(tmp_path / "workspace", "~/work/core-web") == target
+@@ -314,6 +454,7 @@ async def test_workspace_tools_keep_out_of_the_openbot_state_dir(tmp_path):
+     index, after which a `sqlite3` CLI the bot runs sees itself as the only connection, checkpoints
+     under the backend and every open connection reports "database disk image is malformed"."""
+     from openbot.tools.builtin.search import search_code
++
+     state = tmp_path / ".openbot"
+     state.mkdir()
+     (state / "openbot.db-shm").write_text("needle in the wal index\n")
+@@ -322,8 +463,12 @@ async def test_workspace_tools_keep_out_of_the_openbot_state_dir(tmp_path):
+     r = rt(tmp_path)
+     out = await search_code.ainvoke({"pattern": "needle", "runtime": r})
+     assert "src/a.py:1: needle = 1" in out and ".openbot" not in out
+-    assert (await read_file.ainvoke({"path": ".openbot/openbot.db-shm", "runtime": r})).startswith("error:")
+-    assert (await write_file.ainvoke({"path": ".openbot/x", "content": "y", "runtime": r})).startswith("error:")
++    assert (await read_file.ainvoke({"path": ".openbot/openbot.db-shm", "runtime": r})).startswith(
++        "error:"
++    )
++    assert (
++        await write_file.ainvoke({"path": ".openbot/x", "content": "y", "runtime": r})
++    ).startswith("error:")
+     assert ".openbot" not in await list_files.ainvoke({"runtime": r, "depth": 2})
+     assert "openbot.db-shm" not in await list_files.ainvoke({"runtime": r, "path": ".openbot"})
+     with pytest.raises(ValueError, match="OpenBot state directory"):

@@ -1,0 +1,392 @@
+diff --git a/backend/openbot/runtime/caching.py b/backend/openbot/runtime/caching.py
+index 51dd9bf..a585beb 100644
+--- a/backend/openbot/runtime/caching.py
++++ b/backend/openbot/runtime/caching.py
+@@ -19,6 +19,7 @@
+ from typing import Any
+ 
+ from langchain.agents.middleware import AgentMiddleware, ModelRequest
++from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+ from langchain_core.language_models import BaseChatModel
+ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+ 
+@@ -41,6 +42,18 @@ def _tag_blocks(content: str | list) -> list | None:
+     return None
+ 
+ 
++def _tag_system_blocks(content: str | list, cache_control: dict[str, str]) -> list | None:
++    if isinstance(content, str):
++        return _tag_blocks(content)
++    blocks = [dict(b) if isinstance(b, dict) else {"type": "text", "text": str(b)} for b in content]
++    text_blocks = [b for b in blocks if b.get("type") == "text" and str(b.get("text", "")).strip()]
++    if not text_blocks:
++        return None
++    for block in text_blocks[:2]:
++        block["cache_control"] = cache_control
++    return blocks
++
++
+ def _tagged(message: BaseMessage) -> BaseMessage | None:
+     blocks = _tag_blocks(message.content)
+     if blocks is None:
+@@ -48,6 +61,19 @@ def _tagged(message: BaseMessage) -> BaseMessage | None:
+     return message.model_copy(update={"content": blocks})
+ 
+ 
++class AnthropicPromptCacheMiddleware(AnthropicPromptCachingMiddleware):
++    """Cache both stable and dynamic system-prompt blocks for direct Anthropic calls."""
++
++    def _apply_caching(self, request: ModelRequest) -> ModelRequest:
++        request = super()._apply_caching(request)
++        message = request.system_message
++        if not isinstance(message, SystemMessage) or not isinstance(message.content, list):
++            return request
++        blocks = _tag_system_blocks(message.content, self._cache_control)
++        return request.override(system_message=message.model_copy(update={"content": blocks})) if blocks else request
++
++
++# Adapted from OpenCode's MIT-licensed prompt-cache breakpoint strategy.
+ class OpenRouterPromptCacheMiddleware(AgentMiddleware):
+     """Add Anthropic cache breakpoints to requests sent through an OpenAI-compatible endpoint.
+ 
+@@ -57,9 +83,9 @@ class OpenRouterPromptCacheMiddleware(AgentMiddleware):
+     def _apply(self, request: ModelRequest) -> ModelRequest:
+         overrides: dict[str, Any] = {}
+         if isinstance(request.system_message, SystemMessage):
+-            tagged = _tagged(request.system_message)
+-            if tagged is not None:
+-                overrides["system_message"] = tagged
++            blocks = _tag_system_blocks(request.system_message.content, CACHE_CONTROL)
++            if blocks is not None:
++                overrides["system_message"] = request.system_message.model_copy(update={"content": blocks})
+         messages = list(request.messages)
+         for i in range(len(messages) - 1, -1, -1):
+             m = messages[i]
+@@ -85,12 +111,10 @@ def caching_middleware(model: BaseChatModel, settings) -> list[AgentMiddleware]:
+         return []
+     try:
+         from langchain_anthropic import ChatAnthropic
+-        from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+     except ImportError:  # pragma: no cover - langchain-anthropic is a hard dependency
+         ChatAnthropic = None  # type: ignore[assignment]
+-        AnthropicPromptCachingMiddleware = None  # type: ignore[assignment]
+     if ChatAnthropic is not None and isinstance(model, ChatAnthropic):
+-        return [AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore")]
++        return [AnthropicPromptCacheMiddleware(unsupported_model_behavior="ignore")]
+     base_url = str(getattr(model, "openai_api_base", None) or "")
+     model_name = str(getattr(model, "model_name", "") or "")
+     if OPENROUTER_HOST in base_url and model_name.startswith("anthropic/"):
+diff --git a/backend/openbot/runtime/dynamic_system_prompt.md b/backend/openbot/runtime/dynamic_system_prompt.md
+new file mode 100644
+index 0000000..b22c936
+--- /dev/null
++++ b/backend/openbot/runtime/dynamic_system_prompt.md
+@@ -0,0 +1,19 @@
++${lead_context}
++${default_note}
++
++- You are in a shared thread with: ${participants}. Messages from others appear as "[name]: text". Messages marked "[name] (new): text" are the ones that woke you for this run; answer those. A message marked "(new, arrived before your last reply; it may already be handled)" was queued while you were working on your previous reply. Before using any tool, compare it with your last reply; if that reply already covers it, answer with one short sentence saying so and stop; do not redo or re-verify the work. The human operator is @you.
++- End every reply with a handoff to whoever should act next. If you are ever unsure who should act next, hand off to the thread lead${lead_note} instead of guessing.
++${lead_instructions}
++- If newer messages for you arrived while you were working, a reply that mentions another bot does not wake it: the platform posts a notice, and delivers those messages to you next. Handle them first (later messages take priority over earlier ones). You do not need to remember to re-mention the held bot: the platform delivers your original request to it automatically, using exactly what you wrote, as soon as you have nothing else queued here -- whether or not your later reply mentions it again. So if a later message turns out to already be covered by what you already said, just say so in one short sentence and stop; you do not have to re-open the hand-off yourself, and if you do have something new to add, mentioning the bot again simply replaces the automatic delivery with your fresher message.
++- Use schedule_message to have a message sent to yourself or another bot after a delay. The thread is considered active for as long as it has a message scheduled.
++- Delegation happens here, in this thread; use read_history or recall_messages if the message that woke you does not contain everything you need.
++- ${older}
++- The current directory/root for shell and file tools in this thread is ${workspace_root}. Paths are relative to it.
++- Tools available to you: ${tool_names}.
++
++# Other bots you can mention
++${roster}
++
++# Your memories
++${mem}
++- Never hand off to yourself. If the thread lead is done or needs the human, reply to the human without a bot mention.
+diff --git a/backend/openbot/runtime/prompt.py b/backend/openbot/runtime/prompt.py
+index 93d7117..b644ab4 100644
+--- a/backend/openbot/runtime/prompt.py
++++ b/backend/openbot/runtime/prompt.py
+@@ -8,6 +8,8 @@
+ from openbot.db.models import Actor, Message
+ 
+ SYSTEM_PROMPT_FILE = Path(__file__).with_name("system_prompt.md")
++STABLE_SYSTEM_PROMPT_FILE = Path(__file__).with_name("stable_system_prompt.md")
++DYNAMIC_SYSTEM_PROMPT_FILE = Path(__file__).with_name("dynamic_system_prompt.md")
+ REPOSITORY_INSTRUCTIONS_CAP = 32_000
+ _SYSTEM_PROMPT_FIELDS = frozenset({
+     "bot_name", "bot_handle", "bot_description", "bot_instructions", "lead_context", "participants",
+@@ -68,6 +70,8 @@ def load_repository_instructions(workspace_root: str, *, enabled: bool, start_di
+ # source in the workspace; re-reading the file per run let a half-applied edit (a new placeholder the
+ # running code doesn't fill) fail every run until restart.
+ _SYSTEM_PROMPT_TEMPLATE = Template(_load_system_prompt_template())
++_STABLE_SYSTEM_PROMPT_TEMPLATE = Template(STABLE_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8"))
++_DYNAMIC_SYSTEM_PROMPT_TEMPLATE = Template(DYNAMIC_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8"))
+ 
+ 
+ def build_history(messages: list[Message], actor_id: str, *, token_budget: int, max_messages: int,
+@@ -114,39 +118,35 @@ def build_history(messages: list[Message], actor_id: str, *, token_budget: int,
+ def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list[str], memories: list[str],
+                         workspace_root: str, older_count: int, tool_names: list[str],
+                         default_bot_handle: str | None = None, scoped: bool = False) -> str:
+-    """`scoped` is the view a delegate gets: only the messages addressed to it and its own replies, with
+-    `older_count` other messages hidden. The default bot (or the only bot in a thread) sees the whole
+-    thread, and `older_count` is then what fell outside the history budget."""
+-    roster = "\n".join(f"- @{b.handle} ({b.name}): {b.description or 'no description'}"
+-                       for b in all_bots
+-                       if b.kind == "bot" and b.enabled is not False and b.id != bot.id) or "- (no other bots)"
++    stable, dynamic = build_system_prompt_parts(bot=bot, all_bots=all_bots, participants=participants,
++                                                memories=memories, workspace_root=workspace_root,
++                                                older_count=older_count, tool_names=tool_names,
++                                                default_bot_handle=default_bot_handle, scoped=scoped)
++    return stable + dynamic
++
++
++def build_system_prompt_parts(*, bot: Actor, all_bots: list[Actor], participants: list[str], memories: list[str],
++                              workspace_root: str, older_count: int, tool_names: list[str],
++                              default_bot_handle: str | None = None, scoped: bool = False) -> tuple[str, str]:
++    roster = "\n".join(f"- @{b.handle} ({b.name}): {b.description or 'no description'}" for b in all_bots if b.kind == "bot" and b.enabled is not False and b.id != bot.id) or "- (no other bots)"
+     mem = "\n".join(f"- {m}" for m in memories) or "- (none yet)"
+     if scoped:
+-        older = (f"You see only the messages addressed to you (@{bot.handle}) and your own earlier replies in this thread; "
+-                 f"{older_count} other messages exist but are not shown. The message that woke you should contain everything "
+-                 f"you need. If it does not, use read_history (chronological, by message id) or recall_messages (semantic "
+-                 f"search) to fetch the rest before asking a human.")
++        older = f"You see only the messages addressed to you (@{bot.handle}) and your own earlier replies in this thread; {older_count} other messages exist but are not shown. The message that woke you should contain everything you need. If it does not, use read_history (chronological, by message id) or recall_messages (semantic search) to fetch the rest before asking a human."
+     else:
+-        older = (f"This thread has {older_count} older messages not shown. Use recall_messages (semantic search) or "
+-                 f"read_history (chronological paging) to fetch them.") if older_count else "The full thread history is shown."
+-    default_note = (f" The default bot for this thread is @{default_bot_handle}; if the human sends a message without mentioning a bot, that bot is woken."
+-                    if default_bot_handle else "")
++        older = f"This thread has {older_count} older messages not shown. Use recall_messages (semantic search) or read_history (chronological paging) to fetch them." if older_count else "The full thread history is shown."
++    default_note = (f" The default bot for this thread is @{default_bot_handle}; if the human sends a message without mentioning a bot, that bot is woken." if default_bot_handle else "")
+     lead_note = f" (@{default_bot_handle})" if default_bot_handle else ""
+-    lead_context = (f"- thread lead for this thread is @{default_bot_handle}. If you are not sure about the handoff, do a handoff to the thread lead.\n"
+-                    if default_bot_handle else "")
+-    lead_instructions = ("- you are the lead for this thread. When human talks to you, follow this process: 1. Understand the request. If it's a simple question, answer it. 2. If it's a task request, plan the task execution. 3. Your plan must include which bots will be called, and in which order. 4. Call the next bot with comprehensive instructions. 5. When a bot does a handoff to you, understand where you are in task execution, and either handoff to the next bot, or reply to human. 6. When the task is complete, reply to human.\n"
+-                         if default_bot_handle and bot.handle == default_bot_handle else "")
+-    rendered = _SYSTEM_PROMPT_TEMPLATE.substitute(
+-        bot_name=bot.name, bot_handle=bot.handle, bot_description=bot.description,
+-        bot_instructions=bot.bot.instructions, lead_context=lead_context,
+-        participants=', '.join(participants) or 'nobody else', default_note=default_note,
+-        lead_note=lead_note, lead_instructions=lead_instructions, older=older,
+-        workspace_root=workspace_root, tool_names=', '.join(tool_names) or 'none besides the built-ins',
+-        roster=roster, mem=mem,
+-    )
+-    repository_instructions = load_repository_instructions(
+-        workspace_root, enabled=bot.bot.load_repository_instructions, start_directory=workspace_root
+-    )
++    lead_context = f"- thread lead for this thread is @{default_bot_handle}. If you are not sure about the handoff, do a handoff to the thread lead.\n" if default_bot_handle else ""
++    lead_instructions = ("- you are the lead for this thread. When human talks to you, follow this process: 1. Understand the request. If it's a simple question, answer it. 2. If it's a task request, plan the task execution. 3. Your plan must include which bots will be called, and in which order. 4. Call the next bot with comprehensive instructions. 5. When a bot does a handoff to you, understand where you are in task execution, and either handoff to the next bot, or reply to human. 6. When the task is complete, reply to human.\n" if default_bot_handle and bot.handle == default_bot_handle else "")
++    values = {
++        "bot_name": bot.name, "bot_handle": bot.handle, "bot_description": bot.description, "bot_instructions": bot.bot.instructions,
++        "lead_context": lead_context, "participants": ', '.join(participants) or 'nobody else', "default_note": default_note,
++        "lead_note": lead_note, "lead_instructions": lead_instructions, "older": older, "workspace_root": workspace_root,
++        "tool_names": ', '.join(tool_names) or 'none besides the built-ins', "roster": roster, "mem": mem,
++    }
++    stable = _STABLE_SYSTEM_PROMPT_TEMPLATE.substitute(**values)
++    dynamic = _DYNAMIC_SYSTEM_PROMPT_TEMPLATE.substitute(**values)
++    repository_instructions = load_repository_instructions(workspace_root, enabled=bot.bot.load_repository_instructions, start_directory=workspace_root)
+     if repository_instructions:
+-        rendered += f"\n\n# Repository instructions\n{repository_instructions}"
+-    return rendered
++        dynamic += f"\n\n# Repository instructions\n{repository_instructions}"
++    return stable, dynamic
+diff --git a/backend/openbot/runtime/runner.py b/backend/openbot/runtime/runner.py
+index ca4fd4c..ce131a3 100644
+--- a/backend/openbot/runtime/runner.py
++++ b/backend/openbot/runtime/runner.py
+@@ -16,7 +16,7 @@
+     ModelCallLimitMiddleware,
+     SummarizationMiddleware,
+ )
+-from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
++from langchain_core.messages import AIMessage, AIMessageChunk, SystemMessage, ToolMessage
+ from langchain_core.tracers.context import collect_runs
+ from langgraph.types import Command
+ from sqlalchemy import func, select
+@@ -35,7 +35,7 @@
+ from openbot.runtime import activity, memory
+ from openbot.runtime.caching import caching_middleware
+ from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
+-from openbot.runtime.prompt import build_history, build_system_prompt
++from openbot.runtime.prompt import build_history, build_system_prompt_parts
+ from openbot.runtime.providers import builtin_tools, effective_bot_profile
+ from openbot.runtime.retry import ModelRetryMiddleware
+ from openbot.runtime.tool_failures import ToolFailureMiddleware
+@@ -302,12 +302,13 @@ async def _prepare(self, bot: Actor, thread: Thread, run: Run) -> tuple[str, dic
+         query = "\n".join(m.content for m in triggers)
+         memories = await memory.relevant_memories(self.s.store, bot.id, query) if self.s.store is not None else []
+         workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
+-        prompt = build_system_prompt(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
++        stable_prompt, dynamic_prompt = build_system_prompt_parts(bot=bot, all_bots=list(all_actors), participants=participants, memories=memories,
+                                      workspace_root=str(workspace_root), older_count=older,
+                                      # Only tools that will actually be bound: an MCP server that is down
+                                      # must not be advertised, or the model calls a tool it does not have.
+                                      tool_names=[n for n in bot.bot.tool_names if self.s.registry.has(n)],
+                                      default_bot_handle=default_bot_handle, scoped=scoped)
++        prompt = SystemMessage(content=[{"type": "text", "text": stable_prompt}, {"type": "text", "text": dynamic_prompt}])
+         hop = max([m.hop for m in triggers], default=0) + 1
+         return prompt, {"messages": history}, hop
+ 
+diff --git a/backend/openbot/runtime/stable_system_prompt.md b/backend/openbot/runtime/stable_system_prompt.md
+new file mode 100644
+index 0000000..391747c
+--- /dev/null
++++ b/backend/openbot/runtime/stable_system_prompt.md
+@@ -0,0 +1,12 @@
++You are ${bot_name} (@${bot_handle}), a persistent AI bot on the OpenBot platform.
++${bot_description}
++
++# Your instructions
++${bot_instructions}
++
++# How this platform works
++- Your reply is posted to the thread as a message from you. To hand work to another bot or ask it something, mention it with @handle in your reply. Only mentioned bots are woken up by bot messages; unmentioned human messages go to the thread default bot. Never mention yourself. Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @. Hand off to one bot at a time: only the first @handle in your reply wakes a bot, so name the bot that must act now.
++- Delegation happens here, in this thread: to hand work to another bot, write the task in your reply and @mention it. There is no way to start a separate thread; everything stays in this one conversation. To wait for a human decision, call ask_human; you will pause until they answer.
++- Use schedule_message to have a message sent to yourself or another bot in this thread after a delay. The thread is considered active for as long as you have a message scheduled against it.
++- Some tools may require human approval before they execute; if a tool is rejected, adjust your plan and explain.
++- When adding a note, comment, or edit on a third-party system, sign it as "[OpenBot](https://github.com/regnull/openbot) - `@${bot_handle}`" (backticks included) -- wrapping the handle like that keeps it from tagging an unrelated user of the same name on that system. If the system does not support Markdown, sign it as "OpenBot - `@${bot_handle}`".
+diff --git a/backend/tests/test_caching.py b/backend/tests/test_caching.py
+index 99cc59b..fda0019 100644
+--- a/backend/tests/test_caching.py
++++ b/backend/tests/test_caching.py
+@@ -2,7 +2,6 @@
+ direct-Anthropic routing that makes full caching possible for OpenRouter `anthropic/...` models."""
+ from langchain.agents.middleware import ModelRequest
+ from langchain_anthropic import ChatAnthropic
+-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+ from langchain_openai import ChatOpenAI
+ 
+@@ -10,6 +9,7 @@
+ from openbot.db.models import BotProfile
+ from openbot.runtime.caching import (
+     CACHE_CONTROL,
++    AnthropicPromptCacheMiddleware,
+     OpenRouterPromptCacheMiddleware,
+     caching_middleware,
+ )
+@@ -36,13 +36,23 @@ def request(messages, system="You are a bot."):
+ 
+ def test_middleware_selection_by_provider():
+     st = s()
+-    assert isinstance(caching_middleware(ChatAnthropic(model="claude-sonnet-5", api_key="k"), st)[0], AnthropicPromptCachingMiddleware)
++    assert isinstance(caching_middleware(ChatAnthropic(model="claude-sonnet-5", api_key="k"), st)[0], AnthropicPromptCacheMiddleware)
+     assert isinstance(caching_middleware(openrouter(), st)[0], OpenRouterPromptCacheMiddleware)
+     assert caching_middleware(openrouter("openai/gpt-5.5"), st) == []          # OpenAI caches automatically
+     assert caching_middleware(ChatOpenAI(model="gpt-5.5", api_key="k"), st) == []
+     assert caching_middleware(ChatAnthropic(model="claude-sonnet-5", api_key="k"), s(prompt_caching=False)) == []
+ 
+ 
++def test_openrouter_middleware_tags_both_system_blocks_and_latest_human_message():
++    msgs = [HumanMessage(content="[You]: please build it")]
++    req = request(msgs, system=[{"type": "text", "text": "stable"}, {"type": "text", "text": "dynamic"}])
++    out = OpenRouterPromptCacheMiddleware()._apply(req)
++    assert out.system_message.content == [
++        {"type": "text", "text": "stable", "cache_control": CACHE_CONTROL},
++        {"type": "text", "text": "dynamic", "cache_control": CACHE_CONTROL},
++    ]
++
++
+ def test_openrouter_middleware_tags_system_and_latest_human_message():
+     msgs = [HumanMessage(content="[You]: please build it"),
+             AIMessage(content="", tool_calls=[{"name": "list_files", "args": {}, "id": "c1", "type": "tool_call"}]),
+diff --git a/backend/tests/test_prompt.py b/backend/tests/test_prompt.py
+index 4abbb4a..b07af9d 100644
+--- a/backend/tests/test_prompt.py
++++ b/backend/tests/test_prompt.py
+@@ -4,7 +4,7 @@
+ from langchain_core.messages import AIMessage, HumanMessage
+ 
+ from openbot.db.models import Message
+-from openbot.runtime.prompt import build_history, build_system_prompt
++from openbot.runtime.prompt import build_history, build_system_prompt, build_system_prompt_parts
+ from tests.factories import bot_actor
+ 
+ T0 = datetime(2026, 1, 1, tzinfo=UTC)
+@@ -69,7 +69,10 @@ def test_system_prompt_template_uses_only_the_supported_placeholders():
+     from openbot.runtime import prompt as prompt_module
+ 
+     actual = frozenset(Template(prompt_module.SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
++    stable = frozenset(Template(prompt_module.STABLE_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
++    dynamic = frozenset(Template(prompt_module.DYNAMIC_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")).get_identifiers())
+     assert actual == prompt_module._SYSTEM_PROMPT_FIELDS
++    assert stable | dynamic == prompt_module._SYSTEM_PROMPT_FIELDS
+     assert "repository_instructions" not in actual
+ 
+ 
+@@ -247,3 +250,15 @@ def test_repository_instructions_are_rendered_through_validated_template(tmp_pat
+ 
+     assert "# Repository instructions\nUse the repository rules." in prompt
+     assert "${repository_instructions}" not in prompt
++
++
++def test_system_prompt_parts_keep_stable_prefix_separate():
++    bot = bot_actor("eng", name="Engineer", description="Builds", instructions="Be terse.")
++    bot.id = "e"
++    stable, dynamic = build_system_prompt_parts(bot=bot, all_bots=[bot], participants=["You"], memories=["prefers_dynamic_memory"],
++                                                workspace_root="/w", older_count=2, tool_names=["run_shell"])
++    assert "Engineer" in stable and "Be terse." in stable
++    assert "prefers_dynamic_memory" not in stable and "older messages" not in stable
++    assert "m" in dynamic and "older messages" in dynamic
++    assert build_system_prompt(bot=bot, all_bots=[bot], participants=["You"], memories=["prefers_dynamic_memory"],
++                               workspace_root="/w", older_count=2, tool_names=["run_shell"]) == stable + dynamic
+diff --git a/backend/tests/test_runner.py b/backend/tests/test_runner.py
+index dcd201a..061bf3b 100644
+--- a/backend/tests/test_runner.py
++++ b/backend/tests/test_runner.py
+@@ -66,7 +66,7 @@ async def test_simple_reply_and_handoff(settings):
+         rev_items = (await s.execute(select(InboxItem).where(InboxItem.message_id == msgs[-1].id, InboxItem.kind == "message"))).scalars().all()
+     assert {i.actor_id for i in rev_items} >= {msgs[-1].mentions[0]}
+     sent = ScriptedChatModel.seen[0]
+-    assert sent[0].type == "system" and "@rev" in sent[0].content and "[You] (new): please build it" in sent[-1].content
++    assert sent[0].type == "system" and "@rev" in str(sent[0].content) and "[You] (new): please build it" in sent[-1].content
+     assert [e.type for e in await events(services, run.id)] == ["text", "message"]
+ 
+ 
+@@ -80,7 +80,7 @@ async def test_runner_uses_thread_working_directory_for_tools(settings):
+                                          working_directory="project", tool_names=["run_shell"])
+     await services.runner.execute(run.id)
+ 
+-    assert str(settings.workspace_root / "project") in ScriptedChatModel.seen[0][0].content
++    assert str(settings.workspace_root / "project") in str(ScriptedChatModel.seen[0][0].content)
+     assert any(e.type == "tool_result" and shown in e.payload["content"]
+                for e in await events(services, run.id))
+ 
+diff --git a/backend/tests/test_scoped_context.py b/backend/tests/test_scoped_context.py
+index e0b0c15..cba20a7 100644
+--- a/backend/tests/test_scoped_context.py
++++ b/backend/tests/test_scoped_context.py
+@@ -16,7 +16,7 @@
+ 
+ def _calls_for(handle: str) -> list[list]:
+     """Model calls made by the bot with this handle, oldest first."""
+-    return [call for call in ScriptedChatModel.seen if call and call[0].type == "system" and f"(@{handle})" in call[0].content]
++    return [call for call in ScriptedChatModel.seen if call and call[0].type == "system" and f"(@{handle})" in str(call[0].content)]
+ 
+ 
+ def _texts(call) -> str:
+@@ -56,13 +56,13 @@ async def test_default_bot_sees_everything_and_delegates_see_only_their_slice(se
+     assert "fix the lint error" in second and "Opened PR 31" in second and "implement the widget" in second
+     assert "please build me a widget" not in second
+     assert "(new): @eng PR 31" in second                      # the trigger is still marked
+-    sys_prompt = eng_calls[1][0].content
++    sys_prompt = str(eng_calls[1][0].content)
+     assert "only the messages addressed to you" in sys_prompt and "read_history" in sys_prompt and "recall_messages" in sys_prompt
+     assert "other messages exist" in sys_prompt and "The full thread history is shown" not in sys_prompt
+ 
+     chief_calls = _calls_for("chief_of_staff")
+     assert chief_calls and "please build me a widget" in _texts(chief_calls[0])
+-    assert "The full thread history is shown" in chief_calls[0][0].content
++    assert "The full thread history is shown" in str(chief_calls[0][0].content)
+ 
+ 
+ async def test_the_only_bot_in_a_thread_gets_the_full_history(settings):
+@@ -80,7 +80,7 @@ async def test_the_only_bot_in_a_thread_gets_the_full_history(settings):
+     await services.actors.wait_idle()
+     await services.actors.stop()
+     calls = _calls_for("eng")
+-    assert len(calls) == 2 and "squash merges" in _texts(calls[1]) and "The full thread history is shown" in calls[1][0].content
++    assert len(calls) == 2 and "squash merges" in _texts(calls[1]) and "The full thread history is shown" in str(calls[1][0].content)
+ 
+ 
+ def test_seeded_instructions_explain_the_scoped_view():

@@ -397,6 +397,7 @@ def test_selectable_names():
         "patch_file",
         "list_files",
         "search_code",
+        "find_files",
         "http_request",
         "fetch_url",
         "create_bot",
@@ -493,3 +494,137 @@ async def test_workspace_tools_keep_out_of_the_openbot_state_dir(tmp_path):
         resolve_in_workspace(tmp_path.resolve(), ".openbot/openbot.db")
     with pytest.raises(ValueError, match="OpenBot state directory"):
         resolve_in_workspace(tmp_path.resolve(), str(state / "openbot.db"))
+
+
+async def test_find_files_matching_by_glob(tmp_path):
+    """find_files returns files matching a glob, sorted by mtime newest-first."""
+    from openbot.tools.builtin.search import find_files
+
+    (tmp_path / "src").mkdir()
+    a = tmp_path / "src" / "a.py"
+    a.write_text("line1\nline2\n")
+    b = tmp_path / "src" / "b.ts"
+    b.write_text("hello\n")
+    c = tmp_path / "src" / "c.py"
+    c.write_text("x" * 100 + "\n")
+
+    r = rt(tmp_path)
+
+    # All .py files
+    out = await find_files.ainvoke({"glob_pattern": "*.py", "runtime": r, "path": "src"})
+    assert "a.py:" in out and "c.py:" in out
+    assert "b.ts" not in out
+
+    # No matches
+    out = await find_files.ainvoke({"glob_pattern": "*.rust", "runtime": r})
+    assert out == "(no matches)"
+
+
+async def test_find_files_sorted_by_mtime_newest_first(tmp_path):
+    """Results are sorted by modification time, newest first."""
+    from openbot.tools.builtin.search import find_files
+
+    old = tmp_path / "old.txt"
+    old.write_text("old\n")
+    await asyncio.sleep(0.05)  # ensure distinct mtime
+
+    new = tmp_path / "new.txt"
+    new.write_text("new\n")
+
+    r = rt(tmp_path)
+    out = await find_files.ainvoke({"glob_pattern": "*.txt", "runtime": r})
+    lines = out.strip().splitlines()
+    assert len(lines) == 2
+    # Newest first
+    assert "new.txt" in lines[0]
+
+
+async def test_find_files_skips_junk_dirs(tmp_path):
+    """Binary files and files in junk directories are skipped."""
+    from openbot.tools.builtin.search import find_files
+
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "node_modules" / "lib.js").write_text("code\n")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "HEAD").write_text("ref\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "work.py").write_text("real code\n")
+    (tmp_path / "binary.bin").write_bytes(b"\x00\x01\x02")
+
+    r = rt(tmp_path)
+    out = await find_files.ainvoke({"glob_pattern": "*", "runtime": r})
+    assert "src/work.py" in out
+    assert "node_modules" not in out
+    assert ".git" not in out
+    assert "binary.bin" not in out
+
+
+async def test_find_files_caps_at_100_results(tmp_path):
+    """At most 100 files are returned."""
+    from openbot.tools.builtin.search import find_files
+
+    for i in range(150):
+        (tmp_path / f"f{i:04d}.txt").write_text(f"content {i}\n")
+
+    r = rt(tmp_path)
+    out = await find_files.ainvoke({"glob_pattern": "*.txt", "runtime": r})
+    lines = out.strip().splitlines()
+    assert len(lines) == 100
+
+
+def test_find_files_is_selectable():
+    assert "find_files" in [t.name for t in SELECTABLE_TOOLS]
+
+
+async def test_search_code_uses_rg_when_available(tmp_path, monkeypatch):
+    """When shutil.which('rg') finds rg, _search_code_rg is called."""
+    from openbot.tools.builtin.search import search_code
+
+    # Create a file the rg mock will "search"
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("needle = 1\n")
+
+    calls: list[list[str]] = []
+
+    def fake_rg(*cmd_parts: str) -> str:
+        calls.append(list(cmd_parts))
+        # Simulate rg --json output
+        return (
+            '{"type":"begin","data":{"path":{"text":"src/a.py"}}}\n'
+            '{"type":"match","data":{"path":{"text":"src/a.py"},"lines":{"text":"needle = 1\\n"},"line_number":1}}\n'
+            '{"type":"end","data":{"path":{"text":"src/a.py"}}}\n'
+            '{"type":"summary","data":{"stats":{"elapsed":{"secs":0,"nanos":0},"searches_with_match":1}}}\n'
+        )
+
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/rg")
+    # Replace subprocess.run with a fake that returns our canned output
+    import subprocess
+
+    def fake_run(cmd, **kwargs):
+        # Return canned rg output
+        class FakeResult:
+            returncode = 0
+            stdout = fake_rg(*cmd)
+            stderr = ""
+        return FakeResult()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    r = rt(tmp_path)
+    out = await search_code.ainvoke({"pattern": "needle", "runtime": r})
+    assert "src/a.py:1: needle = 1" in out
+
+
+async def test_find_files_handles_root_level_skip_dir_names(tmp_path):
+    """A file named .git is fine; only directories named .git are skipped."""
+    from openbot.tools.builtin.search import find_files
+
+    (tmp_path / ".git").write_text("not really a dir\n")          # file, not dir
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "work.py").write_text("real code\n")
+
+    r = rt(tmp_path)
+    out = await find_files.ainvoke({"glob_pattern": "*", "runtime": r})
+    assert "src/work.py" in out
+    # The file named ".git" should appear because it's a file, not a directory
+    assert ".git" in out

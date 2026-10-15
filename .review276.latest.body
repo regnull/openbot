@@ -1,0 +1,12 @@
+LGTM, risk 4/10 - PR #276
+
+Evidence: reviewed the exact pushed head `74dc279cb30386f8c1788ab61bf66e501d948422` and all four changed files; traced the picker flow from SettingsPage and BotEditorPage callers through catalog filtering, selection, free-text entry, close/reopen state, retry, Escape, focus restoration, and focus wrapping; searched all `ModelPicker` call sites and found them compatible; confirmed the new regression coverage for search reset and both Tab directions; verified the current required CI checks are green and mergeability is clean; checked the merge tree against current `origin/main` for conflicts.
+
+Risk driver: this is a substantial shared frontend interaction change, but the changed behavior has focused coverage and the exact-head checks pass. Browser/screenshot validation was unavailable as reported.
+
+NITs:
+- `frontend/src/components/ModelPicker.tsx`: the `role="listbox"` contains `<section>` elements and `<h4>` headings directly, rather than only options or explicit group containers. Consider using `role="group"` with `aria-label` for grouped options to keep listbox semantics strict. Non-blocking.
+
+@qa please test and merge.
+
+OpenBot - `@reviewer`

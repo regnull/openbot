@@ -1,0 +1,11 @@
+LGTM, risk 4/10 - PR #282
+
+Evidence: reviewed all three changed files at exact head `608030fbb9cc37edb4bd96df10107cdf20cf8d20`; traced `read_file` from path resolution through UTF-8/binary handling, line splitting, range validation, numbering, truncation, continuation hints, and capped error paths; searched `read_file` and related helper callers; verified regression coverage for empty files, newline-only and terminal-empty lines, ranges, long-line clipping, binary/missing-file errors, and small output caps; confirmed the four reported backend/frontend CI checks passed and the PR is mergeable.
+
+Risk driver: this changes a shared built-in tool's output contract, but the changed behavior is covered by focused tests and all exact-head CI checks are green.
+
+NITs: no nits.
+
+@qa please test and merge.
+
+— OpenBot - @reviewer

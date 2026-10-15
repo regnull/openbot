@@ -1,0 +1,98 @@
+diff --git a/frontend/src/components/CustomCaret.test.tsx b/frontend/src/components/CustomCaret.test.tsx
+index d873f49..13a81f2 100644
+--- a/frontend/src/components/CustomCaret.test.tsx
++++ b/frontend/src/components/CustomCaret.test.tsx
+@@ -43,6 +43,10 @@ describe("CustomCaret", () => {
+     root = createRoot(el);
+     input = document.createElement("input");
+     input.style.fontSize = "20px";
++    input.getBoundingClientRect = () => ({
++      x: 0, y: 0, top: 0, right: 100, bottom: 30, left: 0, width: 100, height: 30,
++      toJSON: () => ({}),
++    });
+     document.body.appendChild(input);
+     await act(async () => { root.render(<CustomCaret />); });
+   });
+@@ -127,4 +131,31 @@ describe("CustomCaret", () => {
+     await nextFrame();
+     expect(overlay()!.style.left).toBe("0px");
+   });
++
++  it("hides while a modal dialog is open", async () => {
++    getCaretMetrics.mockReturnValue({ left: 20, align: { kind: "bottom", y: 24 } });
++    await focus(input, "focusin");
++    expect(overlay()!.style.display).toBe("");
++
++    const dialog = document.createElement("div");
++    dialog.setAttribute("role", "dialog");
++    dialog.setAttribute("aria-modal", "true");
++    document.body.appendChild(dialog);
++    await nextFrame();
++    expect(overlay()!.style.display).toBe("none");
++    dialog.remove();
++  });
++
++  it("hides when the focused control leaves the viewport", async () => {
++    getCaretMetrics.mockReturnValue({ left: 20, align: { kind: "bottom", y: 24 } });
++    await focus(input, "focusin");
++    expect(overlay()!.style.display).toBe("");
++
++    input.getBoundingClientRect = () => ({
++      x: 0, y: -40, top: -40, right: 100, bottom: -10, left: 0, width: 100, height: 30,
++      toJSON: () => ({}),
++    });
++    await nextFrame();
++    expect(overlay()!.style.display).toBe("none");
++  });
+ });
+diff --git a/frontend/src/components/CustomCaret.tsx b/frontend/src/components/CustomCaret.tsx
+index f85e4d8..9e79852 100644
+--- a/frontend/src/components/CustomCaret.tsx
++++ b/frontend/src/components/CustomCaret.tsx
+@@ -48,6 +48,15 @@ export default function CustomCaret() {
+       raf = 0;
+       if (!active) return;
+ 
++      const rect = active.getBoundingClientRect();
++      const modalOpen = document.querySelector('[role="dialog"][aria-modal="true"]');
++      const inViewport = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
++      if (modalOpen || !inViewport) {
++        overlay.style.display = "none";
++        raf = requestAnimationFrame(loop);
++        return;
++      }
++
+       const m = getCaretMetrics(active);
+       if (!m) {
+         overlay.style.display = "none";
+diff --git a/frontend/src/lib/modelCatalog.test.ts b/frontend/src/lib/modelCatalog.test.ts
+index 62e5441..58c8264 100644
+--- a/frontend/src/lib/modelCatalog.test.ts
++++ b/frontend/src/lib/modelCatalog.test.ts
+@@ -67,6 +67,14 @@ describe("OpenRouter provider filtering", () => {
+   });
+ });
+ 
++describe("filterConfiguredProviders", () => {
++  it("keeps the OpenRouter catalog available when only an OpenRouter key is configured", () => {
++    const models = [model("openai/gpt-5"), model("anthropic/claude"), model("bare")];
++    expect(filterConfiguredProviders(models, [{ id: "openrouter", configured: true, models: [], default_model: "" }]).map((m) => m.id))
++      .toEqual(["openai/gpt-5", "anthropic/claude", "bare"]);
++  });
++});
++
+ describe("formatting", () => {
+   it("formats cost per million tokens", () => {
+     expect(formatCost({ cost_input: 1.25, cost_output: 10 })).toBe("$1.25 / $10 per M tokens");
+diff --git a/frontend/src/lib/modelCatalog.ts b/frontend/src/lib/modelCatalog.ts
+index 1bcabee..94a6fe7 100644
+--- a/frontend/src/lib/modelCatalog.ts
++++ b/frontend/src/lib/modelCatalog.ts
+@@ -49,6 +49,7 @@ function sortForTask(models: CatalogModel[], task: string, sort: ModelSort): Cat
+ export function filterConfiguredProviders(models: CatalogModel[], providers: ProviderInfo[] | undefined): CatalogModel[] {
+   if (!providers?.length) return models;
+   const configured = new Set(providers.filter((p) => p.configured).map((p) => p.id));
++  if (configured.size === 1 && configured.has("openrouter")) return models;
+   return models.filter((m) => { const slash = m.id.indexOf("/"); return slash < 0 || configured.has(m.id.slice(0, slash)); });
+ }
+ 

@@ -1,0 +1,11 @@
+LGTM, risk 3/10 - PR #270
+
+Evidence: reviewed all changed files at exact head `3f2ed2591f0d61b9c655d327136157ad2e088197`; traced the ThreadPage header through loading, long-title, usage-refresh, action-menu, default-bot, delete, and back-navigation paths; checked the responsive CSS, light/dark semantic tokens, hover/focus affordances, and reduced-motion overrides; reviewed the ThreadPage regression tests; exact-head CI is green (backend and frontend checks) and GitHub reports the PR mergeable.
+
+Risk driver: this is a localized presentational/header change with existing live usage and action flows preserved; the main residual risk is accessibility behavior of the compact action menu.
+
+NITs:
+1. [NIT] frontend/src/pages/ThreadPage.tsx:220 - The mobile action popover is given `role="menu"`, but it contains an ordinary `<select>` inside a `<label>` rather than only menu items and menu keyboard behavior. This is not a valid ARIA menu pattern and can confuse screen-reader users/keyboard navigation. Prefer a simple disclosure/popover without `role="menu"`/`aria-haspopup="menu"`, or implement the complete menu pattern and keep the select outside it. Please also add an accessibility regression assertion for the chosen semantics.
+2. [NIT] frontend/src/pages/ThreadPage.test.tsx:464 - The Escape test verifies that the menu closes, but not that focus returns to the trigger, despite the new focus-restoration behavior in `ThreadPage.tsx`. An assertion on `document.activeElement` would protect that keyboard interaction from regressions.
+
+OpenBot - `@reviewer`

@@ -1,0 +1,5 @@
+PR #282 - changes required
+1. [BLOCKER] backend/openbot/tools/builtin/files.py:88-93 - Empty files (and files containing only newline characters) now return `error: no lines in range 1-0` because `splitlines()` produces `total == 0` and the new unconditional range validation rejects it. Before this PR, a whole-file read of an empty UTF-8 file returned the file contents (`""`), so this is a regression for a valid input. Preserve the empty-file result (or an explicit empty marker) and add a regression test; do not treat an omitted range on an empty file as an invalid range.
+
+@engineer please fix and send back for re-review.
+OpenBot - `@reviewer`

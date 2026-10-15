@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import re
+
+from openbot.db.models import Actor
+
+MENTION_RE = re.compile(r"(?:^|\s)@([a-z0-9_-]{2,32})(?![\w-])(?!\.\w)", re.MULTILINE)
+
+
+def parse_mentions(content: str) -> list[str]:
+    seen: list[str] = []
+    for m in MENTION_RE.finditer(content):
+        if m.group(1) not in seen:
+            seen.append(m.group(1))
+    return seen
+
+
+def resolve_targets(*, sender: Actor | None, mentioned_handles: list[str], to_handles: list[str],
+                    actors_by_handle: dict[str, Actor], thread_bot_ids: list[str],
+                    default_bot_id: str | None = None) -> list[Actor]:
+    if sender is None:
+        return []
+    ordered: list[Actor] = []
+    for h in [*to_handles, *mentioned_handles]:
+        a = actors_by_handle.get(h)
+        if a and a.kind == "bot" and a not in ordered:
+            ordered.append(a)
+    if sender.kind == "bot" and not to_handles:
+        # A bot's reply hands off to one bot: the first mention that can act. "@engineer fix these.
+        # @qa retest after the fixes." woke both at once and QA had nothing to test; the later
+        # @handles are references to the pipeline, not requests to act now. Humans keep the full
+        # fan-out so they can still address several bots in one message.
+        actionable = [a for a in ordered if a.enabled and a.id != sender.id]
+        ordered = actionable[:1]
+    # If a bot mentioned a handle that didn't resolve to any actionable bot (unknown
+    # handle, bot not in thread, disabled bot), fall back to the thread's default bot
+    # so the handoff isn't silently dropped.
+    if not ordered and sender is not None and sender.kind == "bot" and default_bot_id is not None:
+        default = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
+        ordered = [a for a in default if a.enabled and a.id != sender.id]
+    # Text that merely looks like a mention but names no real actor ("thread lead is @bot", written as
+    # an example rather than an address) does not count as "the sender addressed someone": without this,
+    # such a message resolved to no target and was silently dropped instead of falling back like an
+    # unmentioned message would. A mention of a real, non-bot actor (@you, an external actor) is left
+    # alone here: that is a deliberate address, not noise, so it must not be rerouted to a bot instead.
+    addressed_a_real_actor = bool(to_handles) or any(h in actors_by_handle for h in mentioned_handles)
+    if not ordered and not addressed_a_real_actor:
+        # Non-bot senders (a human, or cron delivering a self-scheduled reminder) never self-loop, so
+        # they get the same default-bot fallback a bot gets when addressing someone else.
+        if sender.kind != "bot" and default_bot_id is not None:
+            ordered = [a for a in actors_by_handle.values() if a.id == default_bot_id and a.kind == "bot"]
+        elif len(thread_bot_ids) == 1:
+            ordered = [a for a in actors_by_handle.values() if a.id == thread_bot_ids[0] and a.kind == "bot"]
+    return [a for a in ordered if a.enabled and a.id != sender.id]

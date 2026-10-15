@@ -1,0 +1,316 @@
+backend	Set up job	﻿2026-10-06T19:54:39.3219219Z Current runner version: '2.337.0'
+backend	Set up job	2026-10-06T19:54:39.3244957Z ##[group]Runner Image Provisioner
+backend	Set up job	2026-10-06T19:54:39.3245895Z Hosted Compute Agent
+backend	Set up job	2026-10-06T19:54:39.3246491Z Version: 20260901.588
+backend	Set up job	2026-10-06T19:54:39.3247217Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+backend	Set up job	2026-10-06T19:54:39.3247933Z Build Date: 2026-09-01T19:56:44Z
+backend	Set up job	2026-10-06T19:54:39.3248629Z Worker ID: {0d9c94f7-5e73-46a5-990e-3f945006ca0e}
+backend	Set up job	2026-10-06T19:54:39.3249400Z Azure Region: westus2
+backend	Set up job	2026-10-06T19:54:39.3249973Z ##[endgroup]
+backend	Set up job	2026-10-06T19:54:39.3251694Z ##[group]Operating System
+backend	Set up job	2026-10-06T19:54:39.3252398Z Ubuntu
+backend	Set up job	2026-10-06T19:54:39.3252903Z 24.04.5
+backend	Set up job	2026-10-06T19:54:39.3253488Z LTS
+backend	Set up job	2026-10-06T19:54:39.3253991Z ##[endgroup]
+backend	Set up job	2026-10-06T19:54:39.3254799Z ##[group]Runner Image
+backend	Set up job	2026-10-06T19:54:39.3255427Z Image: ubuntu-24.04
+backend	Set up job	2026-10-06T19:54:39.3256016Z Version: 20260927.320.1
+backend	Set up job	2026-10-06T19:54:39.3257106Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+backend	Set up job	2026-10-06T19:54:39.3258846Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+backend	Set up job	2026-10-06T19:54:39.3259940Z ##[endgroup]
+backend	Set up job	2026-10-06T19:54:39.3261153Z ##[group]GITHUB_TOKEN Permissions
+backend	Set up job	2026-10-06T19:54:39.3263243Z Contents: read
+backend	Set up job	2026-10-06T19:54:39.3263864Z Metadata: read
+backend	Set up job	2026-10-06T19:54:39.3265046Z Packages: read
+backend	Set up job	2026-10-06T19:54:39.3265681Z ##[endgroup]
+backend	Set up job	2026-10-06T19:54:39.3267786Z Secret source: Actions
+backend	Set up job	2026-10-06T19:54:39.3268797Z Cache mode: write
+backend	Set up job	2026-10-06T19:54:39.3269891Z Prepare workflow directory
+backend	Set up job	2026-10-06T19:54:39.3612450Z Prepare all required actions
+backend	Set up job	2026-10-06T19:54:39.3662869Z Getting action download info
+backend	Set up job	2026-10-06T19:54:39.7543679Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+backend	Set up job	2026-10-06T19:54:39.8636730Z Download action repository 'astral-sh/setup-uv@v5' (SHA:d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86)
+backend	Set up job	2026-10-06T19:54:40.2670516Z Complete job name: backend
+backend	Run actions/checkout@v4	﻿2026-10-06T19:54:40.3430872Z ##[group]Run actions/checkout@v4
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3431838Z with:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3432321Z   repository: regnull/openbot
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3436571Z   token: ***
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3437058Z   ssh-strict: true
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3437521Z   ssh-user: git
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3437996Z   persist-credentials: true
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3438519Z   clean: true
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3438987Z   sparse-checkout-cone-mode: true
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3439542Z   fetch-depth: 1
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3440002Z   fetch-tags: false
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3440477Z   show-progress: true
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3440955Z   lfs: false
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3441390Z   submodules: false
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3441867Z   set-safe-directory: true
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3442411Z   allow-unsafe-pr-checkout: false
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.3443279Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4453975Z Syncing repository: regnull/openbot
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4456798Z ##[group]Getting Git version info
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4458005Z Working directory is '/home/runner/work/openbot/openbot'
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4459732Z [command]/usr/bin/git version
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4544585Z git version 2.55.0
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4580776Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4592061Z Temporarily overriding HOME='/home/runner/work/_temp/f68d0904-025a-44b0-82a2-cf549dee3b43' before making global git config changes
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4600464Z Adding repository directory to the temporary git global config as a safe directory
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4602382Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/openbot/openbot
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4648714Z Deleting the contents of '/home/runner/work/openbot/openbot'
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4652994Z ##[group]Initializing the repository
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4657178Z [command]/usr/bin/git init /home/runner/work/openbot/openbot
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4802067Z hint: Using 'master' as the name for the initial branch. This default branch name
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4804405Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4806682Z hint: to use in all of your new repositories, which will suppress this warning,
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4808205Z hint: call:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4809078Z hint:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4810068Z hint: 	git config --global init.defaultBranch <name>
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4811271Z hint:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4812526Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4814496Z hint: 'development'. The just-created branch can be renamed via this command:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4815950Z hint:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4816834Z hint: 	git branch -m <name>
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4817868Z hint:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4819190Z hint: Disable this message with "git config set advice.defaultBranchName false"
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4820974Z Initialized empty Git repository in /home/runner/work/openbot/openbot/.git/
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4824629Z [command]/usr/bin/git remote add origin https://github.com/regnull/openbot
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4872069Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4873408Z ##[group]Disabling automatic garbage collection
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4877391Z [command]/usr/bin/git config --local gc.auto 0
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4912037Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4913606Z ##[group]Setting up auth
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4921369Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.4963305Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.5393753Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.5433141Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.5668283Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.5709934Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.5942982Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.5994805Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.5996301Z ##[group]Fetching the repository
+backend	Run actions/checkout@v4	2026-10-06T19:54:40.6007158Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +e0b8fd3dd88c7422521e3ba528d319341f6b276d:refs/remotes/origin/feat/task-aware-model-picker
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1208452Z From https://github.com/regnull/openbot
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1236247Z  * [new ref]         e0b8fd3dd88c7422521e3ba528d319341f6b276d -> origin/feat/task-aware-model-picker
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1249195Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1250525Z ##[group]Determining the checkout info
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1251942Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1252835Z [command]/usr/bin/git sparse-checkout disable
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1292847Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1330674Z ##[group]Checking out the ref
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1338144Z [command]/usr/bin/git checkout --progress --force -B feat/task-aware-model-picker refs/remotes/origin/feat/task-aware-model-picker
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1811740Z Switched to a new branch 'feat/task-aware-model-picker'
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1818651Z branch 'feat/task-aware-model-picker' set up to track 'origin/feat/task-aware-model-picker'.
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1826182Z ##[endgroup]
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1871223Z [command]/usr/bin/git log -1 --format=%H
+backend	Run actions/checkout@v4	2026-10-06T19:54:41.1899168Z e0b8fd3dd88c7422521e3ba528d319341f6b276d
+backend	Run astral-sh/setup-uv@v5	﻿2026-10-06T19:54:41.2292801Z ##[group]Run astral-sh/setup-uv@v5
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2294151Z with:
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2305532Z   github-token: ***
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2306569Z   enable-cache: auto
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2307838Z   cache-dependency-glob: **/uv.lock
+backend	Run astral-sh/setup-uv@v5	**/requirements*.txt
+backend	Run astral-sh/setup-uv@v5	
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2309600Z   prune-cache: true
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2310644Z   ignore-nothing-to-cache: false
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2311862Z   ignore-empty-workdir: false
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.2312992Z ##[endgroup]
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.4240669Z (node:2276) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.4245832Z (Use `node --trace-deprecation ...` to show where the warning was created)
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:41.7476383Z Downloading uv from "https://github.com/astral-sh/uv/releases/download/0.12.23/uv-x86_64-unknown-linux-gnu.tar.gz" ...
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.0497224Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/6b5b4a6c-36f1-4d96-bfbc-db1479abf448 -f /home/runner/work/_temp/5d426547-64a9-44b5-9426-b57c1b43f92f
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.4782414Z Added /home/runner/.local/bin to the path
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.4786732Z Added /opt/hostedtoolcache/uv/0.12.23/x86_64 to the path
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.4806622Z Set UV_CACHE_DIR to /home/runner/work/_temp/setup-uv-cache
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.4807330Z Successfully installed uv version 0.12.23
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.4807832Z Searching files using cache dependency glob: **/uv.lock,**/requirements*.txt
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.5161580Z /home/runner/work/openbot/openbot/backend/uv.lock
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.5382809Z Found 1 files to hash.
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.6048600Z Trying to restore uv cache from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-3.12.3-4f0b2146d12f2bb2f80b666913d3d139fc30bfd47342e51f9d3694876e9cd522
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.8431596Z Cache hit for: setup-uv-1-x86_64-unknown-linux-gnu-3.12.3-4f0b2146d12f2bb2f80b666913d3d139fc30bfd47342e51f9d3694876e9cd522
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:42.8550092Z (node:2276) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:48.3454581Z Received 97427 of 97427 (100.0%), 0.5 MBs/sec
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:48.3456052Z Cache Size: ~0 MB (97427 B)
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:48.3491010Z [command]/usr/bin/tar -xf /home/runner/work/_temp/116402b6-8def-44cc-8332-cee16179a525/cache.tzst -P -C /home/runner/work/openbot/openbot --use-compress-program unzstd
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:48.3618806Z Cache restored successfully
+backend	Run astral-sh/setup-uv@v5	2026-10-06T19:54:48.3641613Z uv cache restored from GitHub Actions cache with key: setup-uv-1-x86_64-unknown-linux-gnu-3.12.3-4f0b2146d12f2bb2f80b666913d3d139fc30bfd47342e51f9d3694876e9cd522
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	﻿2026-10-06T19:54:48.3949325Z ##[group]Run cd backend && uv sync && uv run ruff check . && uv run pytest -q
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:48.3949972Z ^[[36;1mcd backend && uv sync && uv run ruff check . && uv run pytest -q^[[0m
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:48.4614609Z shell: /usr/bin/bash -e {0}
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:48.4615014Z env:
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:48.4615337Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:48.4615732Z ##[endgroup]
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:48.6363959Z Downloading cpython-3.13.16-linux-x86_64-gnu (download) (33.5MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.4951262Z  Downloaded cpython-3.13.16-linux-x86_64-gnu (download)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.6539606Z Using CPython 3.13.16
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.6540562Z Creating virtual environment at: .venv
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.6583503Z Resolved 101 packages in 0.98ms
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.6740378Z    Building openbot @ file:///home/runner/work/openbot/openbot/backend
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7109270Z Downloading uvloop (4.2MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7118171Z Downloading sqlalchemy (3.2MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7133040Z Downloading pydantic-core (2.0MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7143443Z Downloading cryptography (4.5MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7147880Z Downloading ruff (9.9MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7150091Z Downloading anthropic (1.2MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7166274Z Downloading openai (1.9MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7168861Z Downloading zstandard (5.3MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7196650Z Downloading pygments (1.2MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:49.7204519Z Downloading tiktoken (1.1MiB)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.0627076Z  Downloaded tiktoken
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.0653837Z  Downloaded pygments
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.0828014Z  Downloaded pydantic-core
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.1059286Z  Downloaded anthropic
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.1175177Z  Downloaded sqlalchemy
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.1436746Z  Downloaded uvloop
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.1460351Z  Downloaded cryptography
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.1470067Z  Downloaded zstandard
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.1589435Z  Downloaded openai
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.1802905Z  Downloaded ruff
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.6949848Z       Built openbot @ file:///home/runner/work/openbot/openbot/backend
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.6961112Z Prepared 97 packages in 1.03s
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7714701Z Installed 97 packages in 75ms
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7735313Z  + aiosqlite==0.22.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7735932Z  + alembic==1.20.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7736345Z  + annotated-doc==0.0.5
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7736776Z  + annotated-types==0.8.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7737206Z  + anthropic==1.5.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7737579Z  + anyio==4.15.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7737951Z  + asgi-lifespan==2.1.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7738382Z  + attrs==26.1.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7738765Z  + beautifulsoup4==4.15.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7739184Z  + certifi==2026.7.22
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7739564Z  + cffi==2.1.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7739944Z  + charset-normalizer==3.5.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7740374Z  + click==8.5.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7740774Z  + cryptography==50.0.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7741176Z  + distro==1.9.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7741559Z  + docstring-parser==0.18.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7741985Z  + dydantic==0.0.8
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7742359Z  + fastapi==0.141.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7742743Z  + greenlet==3.5.5
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7743097Z  + h11==0.16.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7743445Z  + httpcore==1.0.9
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7743823Z  + httpcore2==2.12.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7744382Z  + httptools==0.8.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7744761Z  + httpx==0.28.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7745125Z  + httpx-sse==0.4.3
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7745487Z  + httpx2==2.12.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7745846Z  + idna==3.19
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7746196Z  + iniconfig==2.3.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7746566Z  + jiter==0.17.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7746924Z  + jsonpatch==1.33
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7747301Z  + jsonpointer==3.1.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7747693Z  + jsonschema==4.26.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7748164Z  + jsonschema-specifications==2025.9.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7748657Z  + langchain==1.4.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7749052Z  + langchain-anthropic==1.7.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7749497Z  + langchain-core==1.6.3
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7749971Z  + langchain-mcp-adapters==0.3.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7750372Z  + langchain-ollama==1.1.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7750901Z  + langchain-openai==1.6.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7751152Z  + langchain-protocol==0.0.19
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7751394Z  + langgraph==1.2.11
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7751623Z  + langgraph-checkpoint==4.2.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7751890Z  + langgraph-checkpoint-postgres==3.1.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7752193Z  + langgraph-checkpoint-sqlite==3.1.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7752472Z  + langgraph-prebuilt==1.1.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7752709Z  + langgraph-sdk==0.4.4
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7752929Z  + langmem==0.0.30
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7753155Z  + langsmith==0.12.4
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7753358Z  + mako==1.4.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7753555Z  + markupsafe==3.0.3
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7753762Z  + mcp==1.30.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7753955Z  + ollama==0.6.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7754163Z  + openai==3.13.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7754776Z  + openbot==0.1.0 (from file:///home/runner/work/openbot/openbot/backend)
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7755153Z  + orjson==3.12.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7755357Z  + ormsgpack==1.12.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7755592Z  + packaging==26.3
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7755794Z  + pluggy==1.6.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7755996Z  + psycopg==3.3.5
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7756202Z  + psycopg-pool==3.3.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7756423Z  + pycparser==3.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7756620Z  + pydantic==2.13.5
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7756848Z  + pydantic-core==2.46.5
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7757153Z  + pydantic-settings==2.15.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7757394Z  + pygments==2.21.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7757722Z  + pyjwt==2.14.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7758094Z  + pytest==9.1.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7758300Z  + pytest-asyncio==1.4.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7758550Z  + python-dotenv==1.2.3
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7758780Z  + python-multipart==0.0.32
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7759010Z  + pyyaml==6.0.3
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7759212Z  + referencing==0.37.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7759427Z  + regex==2026.9.10
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7759625Z  + requests==2.34.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7759834Z  + requests-toolbelt==1.0.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7760067Z  + rpds-py==2026.6.3
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7760277Z  + ruff==0.16.7
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7760487Z  + sniffio==1.3.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7760687Z  + soupsieve==2.9.2
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7760891Z  + sqlalchemy==2.0.52
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7761103Z  + sqlite-vec==0.1.9
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7761337Z  + sse-starlette==3.4.11
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7761559Z  + starlette==1.6.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7761756Z  + tenacity==9.1.4
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7761953Z  + tiktoken==0.14.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7762157Z  + trustcall==0.0.39
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7762368Z  + truststore==0.10.4
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7762588Z  + typing-extensions==4.16.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7762835Z  + typing-inspection==0.4.4
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7763067Z  + urllib3==2.7.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7763265Z  + uuid-utils==0.17.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7763473Z  + uvicorn==0.52.4
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7763670Z  + uvloop==0.22.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7763866Z  + watchfiles==1.2.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7764078Z  + websockets==16.1.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7764638Z  + xxhash==4.0.1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.7764880Z  + zstandard==0.25.0
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8797691Z I001 [*] Import block is un-sorted or un-formatted
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8798135Z   --> tests/test_model_catalog.py:1:1
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8798429Z    |
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8798612Z  1 | / import json
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8798845Z  2 | | from pathlib import Path
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8799081Z  3 | |
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8799267Z  4 | | import pytest
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8799513Z  5 | |
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8799744Z  6 | | from openbot.runtime.model_catalog import (
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8800100Z  7 | |     CATALOG_PROVIDERS,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8800356Z  8 | |     OPENROUTER_RANKINGS_URL,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8800613Z  9 | |     MODELS_DEV_URL,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8800841Z 10 | |     ModelCatalog,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8801069Z 11 | |     _ranking_models,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8801387Z 12 | |     normalize_catalog,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8801771Z 13 | | )
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8802055Z    | |_^
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8802343Z 14 |
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8802973Z 15 |   SAMPLE = json.loads((Path(__file__).parent / "fixtures" / "models_dev_sample.json").read_text())
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8804064Z    |
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8804617Z help: Organize imports
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8804984Z    |
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8805289Z 7  |     CATALOG_PROVIDERS,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8805682Z 8  +     MODELS_DEV_URL,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8806076Z 9  |     OPENROUTER_RANKINGS_URL,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8806677Z    -     MODELS_DEV_URL,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8807315Z 10 |     ModelCatalog,
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8807870Z    |
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8808190Z 
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8808424Z Found 1 error.
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8808944Z [*] 1 fixable with the `--fix` option.
+backend	Run cd backend && uv sync && uv run ruff check . && uv run pytest -q	2026-10-06T19:54:50.8830621Z ##[error]Process completed with exit code 1.
+backend	Post Run actions/checkout@v4	﻿2026-10-06T19:54:50.8980305Z Post job cleanup.
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:50.9831630Z [command]/usr/bin/git version
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:50.9886235Z git version 2.55.0
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:50.9924839Z Temporarily overriding HOME='/home/runner/work/_temp/6f6363e0-2051-4d16-a190-30be977d1eeb' before making global git config changes
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:50.9925934Z Adding repository directory to the temporary git global config as a safe directory
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:50.9931990Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/openbot/openbot
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:50.9970817Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:51.0006335Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:51.0250924Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:51.0282093Z http.https://github.com/.extraheader
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:51.0293513Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:51.0332899Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:51.0588051Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+backend	Post Run actions/checkout@v4	2026-10-06T19:54:51.0626228Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+backend	Complete job	﻿2026-10-06T19:54:51.1078127Z Cleaning up orphan processes
+backend	Complete job	2026-10-06T19:54:51.1462618Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, astral-sh/setup-uv@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

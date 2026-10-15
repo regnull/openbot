@@ -1,0 +1,7 @@
+<svg viewBox="32 32 192 192" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OpenBot favicon">
+  <rect x="-32" y="-32" width="320" height="320" rx="88" fill="#16213E"/>
+  <polygon points="192,110 160,165.4 96,165.4 64,110 96,54.6 160,54.6" fill="#F6F4EF"/>
+  <polygon points="108,165.4 128,165.4 92,198" fill="#DD7A3D"/>
+  <circle cx="110" cy="100" r="9" fill="#16213E"/>
+  <circle cx="146" cy="100" r="9" fill="#16213E"/>
+</svg>

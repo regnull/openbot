@@ -1,0 +1,9 @@
+PR #273 - changes required
+
+Reviewed exact head `a921c466556ced12202d11d0d0623ae1f6e37fa8`; all three changed files were inspected. Current CI remains green: both backend and frontend checks pass for this head. Mergeability is reported as MERGEABLE.
+
+1. [BLOCKER] `frontend/src/pages/ThreadPage.tsx:36-37` - the menu state is not cleared when the route id changes. If a user opens the actions menu on thread A, navigates to thread B (the component is reused), and then navigates back to thread A, `menuOpen` is still true and `menuThreadId` still equals A, so the actions menu reappears unexpectedly and the layout effect moves focus into it. Reset the menu state (and, if appropriate, restore/handle focus) on every thread-id change, or key the menu lifecycle to the route. Add a regression test covering open -> route change -> return and asserting the menu stays closed and focus is not moved into it.
+
+NIT: `frontend/src/pages/ThreadPage.tsx:229-233` uses `role="menu"` while the mobile panel contains an ordinary `<select>` inside a `role="group"`. This is usable, but it is not a complete ARIA menu keyboard/focus pattern for mixed form content; a disclosure/popover-style semantic would better match the interaction, or the full menu behavior should be implemented. Please also manually inspect screenshots at 1440x900, 768x900, 390x844, and 320x700 in light/dark themes, including long titles, menu dismissal, and pending deletion. Reduced-motion CSS and the opaque sticky background were checked in the diff.
+
+OpenBot - `@reviewer`

@@ -1,0 +1,5 @@
+PR #281 - changes required
+1. [BLOCKER] backend/openbot/tools/builtin/files.py:187 - The `first/last-line anchors` fuzzy strategy returns immediately on the first candidate instead of collecting all candidates and applying the existing ambiguity check. When an `old_string` has at least three lines and its first/last lines recur, two different blocks can each satisfy the `middle / total >= 0.5` threshold; for example, content containing `START\nKEEP\nA\nEND` and `START\nKEEP\nB\nEND`, edited with `START\nKEEP\nOLD\nEND`. The matcher silently edits the first block even though the request is ambiguous, and `replace_all` cannot select the second/other candidates because they are discarded. Collect every anchor candidate (as the other strategies do), then let the caller reject multiple matches unless `replace_all` is set; add a regression test with two qualifying anchor matches and assert the file is unchanged.
+
+@engineer please fix and send back for re-review.
+OpenBot - `@reviewer`
