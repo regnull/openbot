@@ -42,9 +42,10 @@ export default function MessageList({ state, participants, onRunLoaded, iconByAc
             {m.hop > 0 && <span className="text-faint">hop {m.hop}</span>}
             {m.metadata?.interrupted === true && <span className="text-warn" title="The run was stopped before this reply was finished">interrupted</span>}
           </div>
+          {run && <RunCard run={run} events={eventsFor(run.id)} streaming={state.streaming[run.id]} />}
           <MarkdownContent content={m.content} />
           {messageImages(m).length > 0 && <div className="mt-2 flex flex-wrap gap-2">{messageImages(m).map((a, i) => <figure key={`${m.id}:${i}`} className="m-0"><img src={a.url} alt={`image attached to message by ${m.sender_name}`} className="max-h-40 rounded-ui border border-line" />{a.name && <figcaption className="mt-0.5 max-w-40 truncate text-[11px] text-faint">{a.name}</figcaption>}</figure>)}</div>}
-          {run && <RunCard run={run} events={eventsFor(run.id)} streaming={state.streaming[run.id]} />}{run?.status === "waiting_human" && <InterruptCard run={run} botName={botName(run.actor_id)} />}
+          {run?.status === "waiting_human" && <InterruptCard run={run} botName={botName(run.actor_id)} />}
         </div></div>;
     })}
     {active.map((r) => {
