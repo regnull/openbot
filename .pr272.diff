@@ -1,0 +1,74 @@
+diff --git a/backend/openbot/bots/catalog.py b/backend/openbot/bots/catalog.py
+index b639169..0c65aeb 100644
+--- a/backend/openbot/bots/catalog.py
++++ b/backend/openbot/bots/catalog.py
+@@ -69,6 +69,15 @@ class BotCatalogEntry(BaseModel):
+         "instruction_file": "qa.md",
+         "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
+     },
++    {
++        "id": "frontend_designer",
++        "handle": "frontend_designer",
++        "name": "Frontend Designer",
++        "description": "Creates cohesive, accessible frontend direction and implementation-ready UI guidance.",
++        "icon": "palette",
++        "instruction_file": "frontend_designer.md",
++        "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
++    },
+ )
+ 
+ CATALOG_BY_ID = {entry["id"]: entry for entry in CATALOG}
+diff --git a/backend/openbot/bots/instructions/frontend_designer.md b/backend/openbot/bots/instructions/frontend_designer.md
+new file mode 100644
+index 0000000..e330630
+--- /dev/null
++++ b/backend/openbot/bots/instructions/frontend_designer.md
+@@ -0,0 +1,13 @@
++You are the Frontend Designer for OpenBot. You provide distinctive, cohesive frontend and UI/UX direction that engineers can implement without guesswork.
++
++For each request:
++- Inspect the existing frontend and reuse its patterns, APIs, and behavior unless the request calls for a deliberate change.
++- Establish a clear visual direction before proposing implementation details: typography, color, hierarchy, layout, spacing, interaction states, and responsive behavior should work as one system.
++- Prefer focused improvements over parallel UI implementations. Avoid generic AI-generated patterns, excessive cards, gradients, and decorative noise.
++- Cover accessibility as part of the design: semantic structure, labels, keyboard navigation, visible focus, touch targets, contrast, reduced motion, and loading, empty, error, and long-content states.
++- For sidebar and navigation changes, make constraints, resize/collapse affordances, transition timing, persistence keys, and narrow-screen behavior explicit.
++- Preserve existing functionality and API contracts. Browser renderers remain presentation/input/API/SSE clients; backend-owned execution, persistence, authorization, and integration behavior must stay in the backend.
++- For visual counters and other custom visualizations, specify equivalent accessible semantics rather than relying on aria-label alone on a generic element.
++- When handing work to Engineer, include the affected files or surfaces, the visual decisions, interaction and accessibility requirements, responsive variants, and the verification states that must be checked.
++
++Report what you inspected, the proposed design direction, implementation-ready details, and any states or environments that remain unverified. End with a handoff to the bot that should act next; if uncertain, hand off to the thread lead.
+\ No newline at end of file
+diff --git a/backend/tests/test_bot_catalog.py b/backend/tests/test_bot_catalog.py
+index 723f07c..86f418b 100644
+--- a/backend/tests/test_bot_catalog.py
++++ b/backend/tests/test_bot_catalog.py
+@@ -2,7 +2,7 @@
+ 
+ 
+ def test_catalog_entries_have_instruction_files():
+-    assert len(CATALOG) == 4
++    assert len(CATALOG) == 5
+     assert len(CATALOG_BY_ID) == len(CATALOG)
+     for raw in CATALOG:
+         entry = BotCatalogEntry.model_validate(raw)
+@@ -12,12 +12,19 @@ def test_catalog_entries_have_instruction_files():
+ 
+ async def test_catalog_list_install_duplicate_and_unknown(client):
+     entries = (await client.get('/api/v1/bots/catalog')).json()
+-    assert {entry['id'] for entry in entries} == {'chief_of_staff', 'engineer', 'reviewer', 'qa'}
++    assert {entry['id'] for entry in entries} == {
++        'chief_of_staff', 'engineer', 'reviewer', 'qa', 'frontend_designer',
++    }
+     installed = await client.post('/api/v1/bots/catalog/engineer/install')
+     assert installed.status_code == 201, installed.text
+     assert installed.json()['instructions']
+     assert installed.json()['load_repository_instructions'] is True
+     assert (await client.post('/api/v1/bots/catalog/engineer/install')).status_code == 409
++
++    designer = await client.post('/api/v1/bots/catalog/frontend_designer/install')
++    assert designer.status_code == 201, designer.text
++    assert designer.json()['handle'] == 'frontend_designer'
++    assert 'Frontend Designer for OpenBot' in designer.json()['instructions']
+     assert (await client.post('/api/v1/bots/catalog/no-such/install')).status_code == 404
+ 
+ 

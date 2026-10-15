@@ -1,0 +1,263 @@
+diff --git a/frontend/src/components/Composer.tsx b/frontend/src/components/Composer.tsx
+index 3723378..b953977 100644
+--- a/frontend/src/components/Composer.tsx
++++ b/frontend/src/components/Composer.tsx
+@@ -54,7 +54,7 @@ async function decodeImages(files: File[]): Promise<{ attachments: AttachmentIn[
+  * The prompt. A `❯` in the gutter, the text you type, and the keys that send it — the one place
+  * the interface is allowed to look like a terminal on purpose.
+  */
+-export default function Composer({ handles, onSend, disabled, hint, autoFocus }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean }) {
++export default function Composer({ handles, onSend, disabled, hint, autoFocus, running }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean; running?: boolean }) {
+   const [text, setText] = useState("");
+   const [caret, setCaret] = useState(0);
+   const [sel, setSel] = useState(0);
+@@ -65,8 +65,9 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus }:
+   const ref = useRef<HTMLTextAreaElement>(null);
+   // Auto-focus the textarea on mount when requested (e.g. new thread).
+   useEffect(() => { if (autoFocus && ref.current) ref.current.focus(); }, [autoFocus]);
++  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+   const q = mentionQuery(text, caret);
+-  const options = q ? handles.filter((h) => h.startsWith(q.query)).slice(0, 6) : [];
++  const options = q && q.start !== dismissedAt ? handles.filter((h) => h.startsWith(q.query)).slice(0, 6) : [];
+   const pick = (h: string) => {
+     if (!q) return;
+     const r = applyMention(text, q.start, caret, h);
+@@ -93,6 +94,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus }:
+       setText("");
+       setCaret(0);
+       setSel(0);
++      setDismissedAt(null);
+       setAttachments([]);
+       setSkipped(false);
+       setDropped(false);
+@@ -149,7 +151,10 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus }:
+             aria-label="Message"
+             placeholder={hint ?? "Type a message. @handle addresses a bot."}
+             className="min-h-[4.25rem] flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed text-fg outline-none placeholder:text-faint disabled:cursor-not-allowed"
+-            onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setSel(0); }}
++            onChange={(e) => {
++              setText(e.target.value); setCaret(e.target.selectionStart); setSel(0);
++              setDismissedAt((d) => (mentionQuery(e.target.value, e.target.selectionStart)?.start === d ? d : null));
++            }}
+             onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
+             onPaste={(e) => {
+               const files = Array.from(e.clipboardData?.items ?? [], (it) => (it.kind === "file" ? it.getAsFile() : null))
+@@ -163,6 +168,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus }:
+                 if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => (s + 1) % options.length); return; }
+                 if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => (s - 1 + options.length) % options.length); return; }
+                 if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); pick(options[sel]); return; }
++                if (e.key === "Escape") { e.preventDefault(); setDismissedAt(q?.start ?? null); return; }
+               }
+               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
+             }}
+@@ -170,6 +176,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus }:
+         </div>
+         <div className="flex items-center justify-between gap-3 px-3 pb-2 pt-1">
+           <div className="hidden items-center gap-3 text-[11px] text-faint sm:flex" aria-hidden>
++            {running && <span className="inline-flex items-center gap-1"><Kbd>Esc</Kbd> stop</span>}
+             <span className="inline-flex items-center gap-1"><Kbd>⏎</Kbd> send</span>
+             <span className="inline-flex items-center gap-1"><Kbd>⇧⏎</Kbd> new line</span>
+             <span className="inline-flex items-center gap-1"><Kbd>@</Kbd> mention a bot</span>
+diff --git a/frontend/src/lib/threadState.ts b/frontend/src/lib/threadState.ts
+index d3f2ea0..ad83b5a 100644
+--- a/frontend/src/lib/threadState.ts
++++ b/frontend/src/lib/threadState.ts
+@@ -23,6 +23,10 @@ export function hydrate(state: ThreadState, detail: ThreadDetail): ThreadState {
+   return { ...state, title: detail.title, messages: sortMsgs([...byId.values()]), runs, waiters: detail.waiters ?? [] };
+ }
+ 
++/** Ids of this thread's runs that are still queued, running or waiting on a human. */
++export const openRunIds = (state: ThreadState): string[] =>
++  Object.values(state.runs).filter((r) => r.thread_id === state.threadId && OPEN_RUN_STATUSES.has(r.status)).map((r) => r.id);
++
+ /**
+  * Runs this page still shows as open that the thread response no longer lists. `GET /threads/{id}`
+  * returns every open run, so these finished while their run.updated event never reached the page
+diff --git a/frontend/src/pages/ThreadPage.test.tsx b/frontend/src/pages/ThreadPage.test.tsx
+index dceabde..d4b1139 100644
+--- a/frontend/src/pages/ThreadPage.test.tsx
++++ b/frontend/src/pages/ThreadPage.test.tsx
+@@ -1,7 +1,7 @@
+ // @vitest-environment jsdom
+ // React 19: act() must know it runs in a test environment (no RTL here to set it for us).
+ (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+-import { describe, expect, it, vi, beforeEach } from "vitest";
++import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+ import { act, useEffect } from "react";
+ import { createRoot, type Root } from "react-dom/client";
+ import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+@@ -108,6 +108,8 @@ describe("ThreadPage window re-entry", () => {
+     document.body.appendChild(el);
+     root = createRoot(el);
+   });
++  // A page left mounted keeps its window Esc listener, which would cancel runs in later tests.
++  afterEach(() => { act(() => root.unmount()); el.remove(); });
+ 
+   it("restores history after leaving to another window and returning mid-run", async () => {
+     await mount("/threads/t1");
+@@ -213,3 +215,119 @@ describe("ThreadPage window re-entry", () => {
+     expect(text()).not.toContain("running");
+   });
+ });
++
++describe("ThreadPage Esc stops open runs", () => {
++  let root: Root;
++  let el: HTMLDivElement;
++  let cancelled: string[];
++  let runs: Run[];
++
++  const text = (): string => el.textContent ?? "";
++  const until = async (cond: () => boolean, what: string): Promise<void> => {
++    const deadline = Date.now() + 2_000;
++    while (!cond()) {
++      if (Date.now() > deadline) throw new Error(`timeout waiting for ${what}; page text: ${text().slice(0, 300)}`);
++      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
++    }
++  };
++  const esc = async (target: EventTarget = document.body): Promise<void> => {
++    await act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
++  };
++  const textarea = () => el.querySelector("textarea")!;
++  const type = async (value: string): Promise<void> => {
++    await act(async () => {
++      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea(), value);
++      textarea().setSelectionRange(value.length, value.length);
++      textarea().dispatchEvent(new Event("input", { bubbles: true }));
++    });
++  };
++  const mount = async (): Promise<void> => {
++    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 5_000, retry: false } } });
++    await act(async () => {
++      root.render(
++        <QueryClientProvider client={qc}>
++          <MemoryRouter initialEntries={["/threads/t1"]}>
++            <Routes><Route path="/threads/:id" element={<ThreadPage />} /></Routes>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++    });
++    await until(() => text().includes("first reply"), "thread loaded");
++  };
++
++  beforeEach(() => {
++    Element.prototype.scrollTo = () => {};
++    cancelled = [];
++    runs = [run("r1", "running"), { ...run("r2", "queued"), actor_id: "b2" }];
++    fake.api.getThread = () => Promise.resolve({ ...detail("t1", [m1]), runs }) as never;
++    fake.api.getThreadUsage = () => Promise.resolve({ model_calls: 0, prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0 }) as never;
++    fake.api.listBots = () => Promise.resolve([{ id: "b1", name: "Coder", handle: "coder", enabled: true, icon: null } as unknown as Bot]) as never;
++    fake.api.ackThread = () => Promise.resolve({ acked: 0 }) as never;
++    fake.api.getRun = (id: string) => Promise.resolve({ ...(runs.find((r) => r.id === id) ?? run(id, "completed")), events: [] }) as never;
++    fake.api.cancelRun = (id: string) => { cancelled.push(id); return Promise.resolve(run(id, "cancelled")) as never; };
++    el = document.createElement("div");
++    document.body.appendChild(el);
++    root = createRoot(el);
++  });
++  afterEach(() => { act(() => root.unmount()); el.remove(); });
++
++  it("cancels every open run in the thread once, and shows the hint while they run", async () => {
++    await mount();
++    expect(text()).toContain("Esc stop");
++    await esc(el.querySelector("textarea")!);
++    expect(cancelled.sort()).toEqual(["r1", "r2"]);
++    await esc();
++    expect(cancelled).toHaveLength(2);
++  });
++
++  it("does nothing when no run is open", async () => {
++    runs = [];
++    await mount();
++    expect(text()).not.toContain("Esc stop");
++    await esc();
++    expect(cancelled).toEqual([]);
++  });
++
++  it("leaves Esc to an open menu", async () => {
++    await mount();
++    await act(async () => { el.querySelector<HTMLButtonElement>('[aria-label="Thread actions"]')!.click(); });
++    expect(el.querySelector('[role="menu"]')).not.toBeNull();
++    await esc();
++    await until(() => el.querySelector('[role="menu"]') === null, "menu closed");
++    expect(cancelled).toEqual([]);
++  });
++
++  it("closes the mention list first, then stops on the next Esc", async () => {
++    await mount();
++    const listOpen = () => el.querySelector('[role="listbox"]') !== null;
++    await type("@c");
++    expect(listOpen()).toBe(true);
++    await esc(textarea());
++    expect(listOpen()).toBe(false);
++    expect(cancelled).toEqual([]);
++    await type("@co");
++    expect(listOpen()).toBe(false);
++    await esc(textarea());
++    expect(cancelled.sort()).toEqual(["r1", "r2"]);
++  });
++
++  it("offers the mention list again for a new mention after dismissing one", async () => {
++    await mount();
++    await type("@c");
++    await esc(textarea());
++    await type("");
++    await type("@c");
++    expect(el.querySelector('[role="listbox"]')).not.toBeNull();
++  });
++
++  it("forgets a dismissed mention list once the draft is sent", async () => {
++    fake.api.postMessage = () => Promise.resolve({ unaddressed: false }) as never;
++    await mount();
++    await type("@c");
++    await esc(textarea());
++    await act(async () => { textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
++    await until(() => textarea().value === "", "draft sent");
++    await type("@");
++    expect(el.querySelector('[role="listbox"]')).not.toBeNull();
++  });
++});
+diff --git a/frontend/src/pages/ThreadPage.tsx b/frontend/src/pages/ThreadPage.tsx
+index f9f81d6..0eb5b75 100644
+--- a/frontend/src/pages/ThreadPage.tsx
++++ b/frontend/src/pages/ThreadPage.tsx
+@@ -11,7 +11,7 @@ import MessageList from "../components/MessageList";
+ import { Button, ErrorText, IconButton, OfflineNotice, Spinner } from "../components/ui";
+ import { ChevronLeftIcon, MoreIcon } from "../components/icons";
+ import { isNearBottom, scrollToBottom } from "../lib/autoScroll";
+-import { emptyThreadState, hydrate, mergeRun, missedRunEnds, reduceThreadEvent, type ThreadState } from "../lib/threadState";
++import { emptyThreadState, hydrate, mergeRun, missedRunEnds, openRunIds, reduceThreadEvent, type ThreadState } from "../lib/threadState";
+ import { threadUsageLabel } from "../lib/threadUsage";
+ import { setOpenBotTitle } from "../lib/documentTitle";
+ 
+@@ -126,6 +126,23 @@ export default function ThreadPage() {
+       qc.invalidateQueries({ queryKey: ["threads"] });
+     },
+   }, "Default bot saved");
++  // Esc stops every open run in the thread, unless an open menu, list or dialog takes the key.
++  const openRuns = openRunIds(state).join(" ");
++  const stopping = useRef(new Set<string>());
++  useEffect(() => {
++    if (!openRuns) return;
++    const onKeyDown = (event: KeyboardEvent) => {
++      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
++      if (document.querySelector('[role="menu"], [role="listbox"], [role="dialog"]')) return;
++      for (const runId of openRuns.split(" ")) {
++        if (stopping.current.has(runId)) continue;
++        stopping.current.add(runId);
++        Api.cancelRun(runId).catch(() => stopping.current.delete(runId));
++      }
++    };
++    window.addEventListener("keydown", onKeyDown);
++    return () => window.removeEventListener("keydown", onKeyDown);
++  }, [openRuns]);
+   const latestMessageId = state.messages.at(-1)?.id;
+   const streamedChars = Object.values(state.streaming).reduce((a, s) => a + s.length, 0);
+   const runEventCount = Object.values(state.runEvents).reduce((a, events) => a + events.length, 0);
+@@ -218,7 +235,7 @@ export default function ThreadPage() {
+       <div className="border-t border-line pt-3">
+         {notice && <p className="mb-1.5 text-xs text-warn">{notice}</p>}
+         <ErrorText error={send.error} />
+-        <Composer handles={handles} autoFocus={detail.data.messages.length === 0} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />      </div>
++        <Composer handles={handles} running={!!openRuns} autoFocus={detail.data.messages.length === 0} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />      </div>
+     </div>
+   );
+ }

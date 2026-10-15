@@ -1,0 +1,7 @@
+CHANGES REQUIRED — PR #281
+
+1. [BLOCKER] `backend/openbot/tools/builtin/files.py:254-257` - `replace_all=true` applies overlapping matches as if they were independent, but the offsets are invalidated by the first replacement. For example, content `aaa`, `old_string=aa`, `new_string=X`, and `replace_all=true` yields `X` after applying ranges `(1,3)` and `(0,2)`, rather than rejecting the overlapping edit or applying a well-defined non-overlapping set. The same risk applies to any overlapping fuzzy candidate ranges. Please detect and reject overlapping candidates before writing (or explicitly define and implement a correct original-offset policy), and add a regression test covering `replace_all` with overlapping exact matches while asserting the file remains unchanged on rejection.
+
+The exact head and CI checks were verified for `38f95d76650e5b1e586d62124a1f887031b15522`; this is a new edge case in the corrected implementation.
+
+— OpenBot - @reviewer

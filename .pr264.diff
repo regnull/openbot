@@ -1,0 +1,275 @@
+diff --git a/backend/openbot/api/bots.py b/backend/openbot/api/bots.py
+index 53fe5d7..808d7cc 100644
+--- a/backend/openbot/api/bots.py
++++ b/backend/openbot/api/bots.py
+@@ -124,7 +124,7 @@ async def install_catalog_entry(entry_id: str, body: BotCatalogInstall | None =
+     data = {"handle": handle, "name": item.name, "description": item.description, "icon": item.icon,
+             "instructions": instructions, "provider": "auto", "model": "", "model_settings": item.model_settings,
+             "tool_names": list(item.tool_names), "approval_tools": list(item.approval_tools),
+-            "memory_enabled": True, "enabled": True}
++            "memory_enabled": True, "load_repository_instructions": item.load_repository_instructions, "enabled": True}
+     _validate_tools(services, data["tool_names"], data["approval_tools"])
+     actor = Actor(kind="bot", **{k: data.pop(k) for k in ACTOR_FIELDS}, bot=BotProfile(**data))
+     session.add(actor)
+diff --git a/backend/openbot/api/schemas.py b/backend/openbot/api/schemas.py
+index 5f1d1d2..d6e42fa 100644
+--- a/backend/openbot/api/schemas.py
++++ b/backend/openbot/api/schemas.py
+@@ -68,6 +68,7 @@ class BotCreate(BaseModel):
+     tool_names: list[str] = []
+     approval_tools: list[str] = []
+     memory_enabled: bool = True
++    load_repository_instructions: bool = False
+     enabled: bool = True
+ 
+     @field_validator("icon")
+@@ -100,6 +101,7 @@ class BotUpdate(BaseModel):
+     tool_names: list[str] | None = None
+     approval_tools: list[str] | None = None
+     memory_enabled: bool | None = None
++    load_repository_instructions: bool | None = None
+     enabled: bool | None = None
+ 
+     @field_validator("icon")
+@@ -128,6 +130,7 @@ class BotOut(BaseModel):
+     tool_names: list[str]
+     approval_tools: list[str]
+     memory_enabled: bool
++    load_repository_instructions: bool
+     model_calls: int = 0
+     prompt_tokens: int = 0
+     completion_tokens: int = 0
+@@ -405,6 +408,7 @@ def bot_out(actor, *, active: bool = False, usage: dict[str, int | float] | None
+                   icon=p.icon or DEFAULT_BOT_ICON, enabled=actor.enabled, active=active,
+                   instructions=p.instructions, provider=p.provider, model=p.model, model_settings=p.model_settings,
+                   tool_names=p.tool_names, approval_tools=p.approval_tools, memory_enabled=p.memory_enabled,
++                  load_repository_instructions=p.load_repository_instructions,
+                   model_calls=int(usage.get("model_calls", 0)), prompt_tokens=int(usage.get("prompt_tokens", 0)),
+                   completion_tokens=int(usage.get("completion_tokens", 0)), cache_read_tokens=int(usage.get("cache_read_tokens", 0)),
+                   cache_write_tokens=int(usage.get("cache_write_tokens", 0)), reasoning_tokens=int(usage.get("reasoning_tokens", 0)),
+diff --git a/backend/openbot/bots/catalog.py b/backend/openbot/bots/catalog.py
+index c8a8725..b639169 100644
+--- a/backend/openbot/bots/catalog.py
++++ b/backend/openbot/bots/catalog.py
+@@ -21,6 +21,7 @@ class BotCatalogEntry(BaseModel):
+     tool_names: tuple[str, ...] = ()
+     approval_tools: tuple[str, ...] = ()
+     model_settings: dict = {}
++    load_repository_instructions: bool = False
+ 
+ 
+ CATALOG: tuple[dict, ...] = (
+@@ -48,6 +49,7 @@ class BotCatalogEntry(BaseModel):
+         "icon": "wrench",
+         "instruction_file": "engineer.md",
+         "tool_names": ("run_shell", "read_file", "write_file", "list_files", "search_code"),
++        "load_repository_instructions": True,
+     },
+     {
+         "id": "reviewer",
+diff --git a/backend/openbot/db/migrations/versions/0018_bot_repository_instructions.py b/backend/openbot/db/migrations/versions/0018_bot_repository_instructions.py
+new file mode 100644
+index 0000000..2ff189b
+--- /dev/null
++++ b/backend/openbot/db/migrations/versions/0018_bot_repository_instructions.py
+@@ -0,0 +1,15 @@
++"""allow bots to load repository instructions
++
++Revision ID: 0018
++Revises: 0017
++"""
++import sqlalchemy as sa
++from alembic import op
++
++revision = "0018"
++down_revision = "0017"
++branch_labels = depends_on = None
++def upgrade():
++    op.add_column("bot_profiles", sa.Column("load_repository_instructions", sa.Boolean(), nullable=False, server_default=sa.false()))
++def downgrade():
++    op.drop_column("bot_profiles", "load_repository_instructions")
+diff --git a/backend/openbot/db/models.py b/backend/openbot/db/models.py
+index 6f90054..98799fc 100644
+--- a/backend/openbot/db/models.py
++++ b/backend/openbot/db/models.py
+@@ -101,6 +101,7 @@ class BotProfile(Base):
+     tool_names: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+     approval_tools: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+     memory_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
++    load_repository_instructions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+     actor: Mapped[Actor] = relationship(back_populates="bot")
+ 
+ 
+diff --git a/backend/openbot/runtime/prompt.py b/backend/openbot/runtime/prompt.py
+index 6bc17cf..1011982 100644
+--- a/backend/openbot/runtime/prompt.py
++++ b/backend/openbot/runtime/prompt.py
+@@ -8,9 +8,12 @@
+ from openbot.db.models import Actor, Message
+ 
+ SYSTEM_PROMPT_FILE = Path(__file__).with_name("system_prompt.md")
++REPOSITORY_INSTRUCTIONS_CAP = 32_000
+ _SYSTEM_PROMPT_FIELDS = frozenset({
+     "bot_name", "bot_handle", "bot_description", "bot_instructions", "lead_context", "participants",
+     "default_note", "lead_note", "lead_instructions", "older", "workspace_root", "tool_names", "roster", "mem",
++    "repository_instructions",
++
+ })
+ 
+ 
+@@ -39,6 +42,24 @@ def _load_system_prompt_template() -> str:
+     return template
+ 
+ 
++def load_repository_instructions(workspace_root: str, *, enabled: bool) -> str:
++    """Discover repository instructions using OpenCode's AGENTS/CLAUDE precedence."""
++    if not enabled:
++        return ""
++    current = Path(workspace_root).expanduser().resolve()
++    while True:
++        for name in ("AGENTS.md", "CLAUDE.md"):
++            path = current / name
++            try:
++                if path.is_file():
++                    return path.read_text(encoding="utf-8")[:REPOSITORY_INSTRUCTIONS_CAP].strip()
++            except OSError:
++                pass
++        if current.parent == current:
++            return ""
++        current = current.parent
++
++
+ # Read once at import, so the template always matches the code that fills it. Bots edit OpenBot's own
+ # source in the workspace; re-reading the file per run let a half-applied edit (a new placeholder the
+ # running code doesn't fill) fail every run until restart.
+@@ -111,11 +132,13 @@ def build_system_prompt(*, bot: Actor, all_bots: list[Actor], participants: list
+                     if default_bot_handle else "")
+     lead_instructions = ("- you are the lead for this thread. When human talks to you, follow this process: 1. Understand the request. If it's a simple question, answer it. 2. If it's a task request, plan the task execution. 3. Your plan must include which bots will be called, and in which order. 4. Call the next bot with comprehensive instructions. 5. When a bot does a handoff to you, understand where you are in task execution, and either handoff to the next bot, or reply to human. 6. When the task is complete, reply to human.\n"
+                          if default_bot_handle and bot.handle == default_bot_handle else "")
++    repository_instructions = load_repository_instructions(workspace_root, enabled=bot.bot.load_repository_instructions)
++    repository_instructions = (f"# Repository instructions\n{repository_instructions}" if repository_instructions else "")
+     return _SYSTEM_PROMPT_TEMPLATE.substitute(
+         bot_name=bot.name, bot_handle=bot.handle, bot_description=bot.description,
+         bot_instructions=bot.bot.instructions, lead_context=lead_context,
+         participants=', '.join(participants) or 'nobody else', default_note=default_note,
+         lead_note=lead_note, lead_instructions=lead_instructions, older=older,
+         workspace_root=workspace_root, tool_names=', '.join(tool_names) or 'none besides the built-ins',
+-        roster=roster, mem=mem,
++        roster=roster, mem=mem, repository_instructions=repository_instructions,
+     )
+diff --git a/backend/openbot/runtime/system_prompt.md b/backend/openbot/runtime/system_prompt.md
+index ce6239e..e0c5ecf 100644
+--- a/backend/openbot/runtime/system_prompt.md
++++ b/backend/openbot/runtime/system_prompt.md
+@@ -30,6 +30,8 @@ ${lead_instructions}- If newer messages for you arrived while you were working,
+ # Your instructions
+ ${bot_instructions}
+ 
++${repository_instructions}
++
+ # Other bots you can mention
+ ${roster}
+ 
+diff --git a/backend/openbot/seed.py b/backend/openbot/seed.py
+index 6e2e706..ec18c2d 100644
+--- a/backend/openbot/seed.py
++++ b/backend/openbot/seed.py
+@@ -161,7 +161,8 @@ async def seed_demo_bots(services) -> int:
+                               bot=BotProfile(provider="auto", model="", instructions=spec["instructions"],
+                                              icon=spec["icon"],
+                                              model_settings=dict(spec.get("model_settings", {})),
+-                                             tool_names=spec["tool_names"], approval_tools=spec["approval_tools"])))
++                                             tool_names=spec["tool_names"], approval_tools=spec["approval_tools"],
++                                             load_repository_instructions=spec.get("load_repository_instructions", False))))
+         try:
+             await session.commit()
+         except IntegrityError:
+@@ -182,7 +183,7 @@ async def seed_demo_bots(services) -> int:
+     return len(DEMO_BOTS)
+ 
+ 
+-SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon")
++SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon", "load_repository_instructions")
+ 
+ 
+ async def sync_demo_bots(services) -> int:
+@@ -201,7 +202,7 @@ async def sync_demo_bots(services) -> int:
+                 continue
+             actor.name, actor.description = spec["name"], spec["description"]
+             for field in SYNCED_FIELDS:
+-                setattr(actor.bot, field, spec.get(field, {} if field == "model_settings" else []))
++                setattr(actor.bot, field, spec.get(field, {} if field == "model_settings" else False if field == "load_repository_instructions" else []))
+             n += 1
+         await session.commit()
+     log.info("synced %d demo bots from the seed definitions", n)
+diff --git a/backend/openbot/tools/builtin/bots.py b/backend/openbot/tools/builtin/bots.py
+index 148a8ce..2687585 100644
+--- a/backend/openbot/tools/builtin/bots.py
++++ b/backend/openbot/tools/builtin/bots.py
+@@ -26,6 +26,7 @@ async def create_bot(
+     tool_names: list[str] | None = None,
+     approval_tools: list[str] | None = None,
+     memory_enabled: bool = True,
++    load_repository_instructions: bool = False,
+     enabled: bool = True,
+ ) -> str:
+     """Create a bot definition that can immediately receive messages and participate in threads."""
+@@ -34,7 +35,7 @@ async def create_bot(
+         "instructions": instructions, "provider": provider, "model": model,
+         "model_settings": model_settings or {}, "tool_names": tool_names or [],
+         "approval_tools": approval_tools or [], "memory_enabled": memory_enabled,
+-        "enabled": enabled,
++        "load_repository_instructions": load_repository_instructions, "enabled": enabled,
+     }
+     if icon is not None:
+         values["icon"] = icon
+diff --git a/backend/tests/test_prompt.py b/backend/tests/test_prompt.py
+index eef0b03..e5754b5 100644
+--- a/backend/tests/test_prompt.py
++++ b/backend/tests/test_prompt.py
+@@ -181,3 +181,45 @@ def test_history_marks_the_bots_own_interrupted_reply():
+     hist, _ = build_history([msg(1, "human", "You", "go"), cut, empty, msg(4, "bot", "Eng", "done", "eng")], "eng",
+                             token_budget=10_000, max_messages=80)
+     assert [m.content for m in hist[1:]] == ["half a\n\n[interrupted by the user]", "[interrupted by the user]", "done"]
++
++
++def test_repository_instructions_are_loaded_from_nearest_parent_with_agents_precedence(tmp_path):
++    from openbot.runtime.prompt import load_repository_instructions
++
++    repo = tmp_path / "repo"
++    nested = repo / "src"
++    nested.mkdir(parents=True)
++    (repo / "CLAUDE.md").write_text("claude", encoding="utf-8")
++    (repo / "AGENTS.md").write_text("agents", encoding="utf-8")
++    assert load_repository_instructions(str(nested), enabled=True) == "agents"
++
++
++def test_repository_instructions_searches_upward_and_caps_content(tmp_path):
++    from openbot.runtime.prompt import load_repository_instructions
++
++    repo = tmp_path / "repo"
++    nested = repo / "a" / "b"
++    nested.mkdir(parents=True)
++    content = "x" * 40_000
++    (repo / "CLAUDE.md").write_text(content, encoding="utf-8")
++    loaded = load_repository_instructions(str(nested), enabled=True)
++    assert len(loaded) == 32_000
++
++
++def test_repository_instructions_can_be_disabled(tmp_path):
++    from openbot.runtime.prompt import load_repository_instructions
++
++    (tmp_path / "AGENTS.md").write_text("secret", encoding="utf-8")
++    assert load_repository_instructions(str(tmp_path), enabled=False) == ""
++
++
++def test_repository_instructions_are_rendered_through_validated_template(tmp_path):
++    bot = bot_actor("eng", name="Engineer", instructions="Be terse.")
++    (tmp_path / "AGENTS.md").write_text("Use the repository rules.", encoding="utf-8")
++    bot.bot.load_repository_instructions = True
++
++    prompt = build_system_prompt(bot=bot, all_bots=[bot], participants=[], memories=[],
++                                 workspace_root=str(tmp_path), older_count=0, tool_names=[])
++
++    assert "# Repository instructions\nUse the repository rules." in prompt
++    assert "${repository_instructions}" not in prompt

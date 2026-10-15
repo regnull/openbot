@@ -574,3 +574,57 @@ async def test_find_files_caps_at_100_results(tmp_path):
 
 def test_find_files_is_selectable():
     assert "find_files" in [t.name for t in SELECTABLE_TOOLS]
+
+
+async def test_search_code_uses_rg_when_available(tmp_path, monkeypatch):
+    """When shutil.which('rg') finds rg, _search_code_rg is called."""
+    from openbot.tools.builtin.search import search_code
+
+    # Create a file the rg mock will "search"
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("needle = 1\n")
+
+    calls: list[list[str]] = []
+
+    def fake_rg(*cmd_parts: str) -> str:
+        calls.append(list(cmd_parts))
+        # Simulate rg --json output
+        return (
+            '{"type":"begin","data":{"path":{"text":"src/a.py"}}}\n'
+            '{"type":"match","data":{"path":{"text":"src/a.py"},"lines":{"text":"needle = 1\\n"},"line_number":1}}\n'
+            '{"type":"end","data":{"path":{"text":"src/a.py"}}}\n'
+            '{"type":"summary","data":{"stats":{"elapsed":{"secs":0,"nanos":0},"searches_with_match":1}}}\n'
+        )
+
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/rg")
+    # Replace subprocess.run with a fake that returns our canned output
+    import subprocess
+
+    def fake_run(cmd, **kwargs):
+        # Return canned rg output
+        class FakeResult:
+            returncode = 0
+            stdout = fake_rg(*cmd)
+            stderr = ""
+        return FakeResult()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    r = rt(tmp_path)
+    out = await search_code.ainvoke({"pattern": "needle", "runtime": r})
+    assert "src/a.py:1: needle = 1" in out
+
+
+async def test_find_files_handles_root_level_skip_dir_names(tmp_path):
+    """A file named .git is fine; only directories named .git are skipped."""
+    from openbot.tools.builtin.search import find_files
+
+    (tmp_path / ".git").write_text("not really a dir\n")          # file, not dir
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "work.py").write_text("real code\n")
+
+    r = rt(tmp_path)
+    out = await find_files.ainvoke({"glob_pattern": "*", "runtime": r})
+    assert "src/work.py" in out
+    # The file named ".git" should appear because it's a file, not a directory
+    assert ".git" in out

@@ -1,0 +1,13 @@
+LGTM, risk 4/10 - PR #283
+
+Reviewed exact head `81cc0af7892952b0daf6483a4fb9dc8e04a561ec`.
+
+Evidence: inspected all 9 changed files; traced shell output through `run_shell` -> `cap()` and MCP success/error output through `_wrap()` -> `cap()`; searched callers of `cap`, `_wrap`, `resolve_in_workspace`, and `workspace_root`; verified caller-level regression coverage now persists full shell output, MCP success output, MCP error output, returns relative hints, performs retention cleanup, and preserves legacy MCP settings without `workspace_root`; confirmed the output cap remains enforced. All four required CI check runs passed against this exact head SHA (two backend and two frontend), and GitHub reports the PR clean and mergeable.
+
+Risk driver: shared output truncation and filesystem persistence affect shell/MCP tool paths, but both integration paths and the compatibility fallback are covered.
+
+NITs: no nits.
+
+@qa please test and merge.
+
+OpenBot - `@reviewer`

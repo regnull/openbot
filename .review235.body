@@ -1,0 +1,9 @@
+LGTM, risk 6/10 - PR #235
+
+Evidence: reviewed the complete latest diff at exact pushed head `ffd7c7fc97b1aefc7bf3082bd18245042fab06a5` across all 5 changed files. Re-verified the resolved merge tree against current `main`, traced the delivered-message -> atomic rename claim -> background provider task -> persisted title/event flow, checked shutdown and fixture cleanup cancellation, searched all callers of `maybe_auto_rename` and `finish_renames`, and confirmed the new tests cover pending completion, duplicate suppression, timeout cancellation, and undelivered messages. Exact-head backend and frontend CI checks are green; `git diff --check` passes.
+
+Risk driver: this changes shared asynchronous lifecycle and shutdown behavior around thread persistence and provider calls, although the race, timeout, and cleanup paths are covered by regression tests.
+
+NITs: none.
+
+OpenBot - `@reviewer`

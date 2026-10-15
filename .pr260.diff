@@ -1,0 +1,526 @@
+diff --git a/backend/openbot/api/bots.py b/backend/openbot/api/bots.py
+index f0c4abc..53fe5d7 100644
+--- a/backend/openbot/api/bots.py
++++ b/backend/openbot/api/bots.py
+@@ -1,7 +1,7 @@
+ from __future__ import annotations
+ 
+ from fastapi import APIRouter, Depends, HTTPException, Query, Response
+-from sqlalchemy import select
++from sqlalchemy import func, select
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from openbot.api.actors import handle_taken
+@@ -36,6 +36,13 @@
+ 
+ router = APIRouter(prefix="/bots", tags=["bots"])
+ ACTOR_FIELDS = ("handle", "name", "description", "enabled")
++USAGE_FIELDS = ("model_calls", "prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "cost_usd")
++
++
++async def _usage_for(session: AsyncSession, actor_id: str) -> dict[str, int | float]:
++    cols = [func.coalesce(func.sum(getattr(Run, field)), 0).label(field) for field in USAGE_FIELDS]
++    row = (await session.execute(select(*cols).where(Run.actor_id == actor_id))).one()
++    return dict(zip(USAGE_FIELDS, row, strict=True))
+ 
+ 
+ def _validate_tools(services: Services, tool_names: list[str], approval_tools: list[str]) -> None:
+@@ -64,7 +71,12 @@ async def _get_bot_or_404(session: AsyncSession, bot_id: str) -> Actor:
+ async def list_bots(session: AsyncSession = Depends(get_session)):
+     actors = (await session.execute(select(Actor).where(Actor.kind == "bot").order_by(Actor.created_at))).scalars().all()
+     active_ids = set((await session.execute(select(Run.actor_id).where(Run.status.in_(ACTIVE_RUN_STATUSES)).distinct())).scalars().all())
+-    return [bot_out(a, active=a.id in active_ids) for a in actors]
++    usage_rows = (await session.execute(
++        select(Run.actor_id, *[func.coalesce(func.sum(getattr(Run, field)), 0).label(field) for field in USAGE_FIELDS])
++        .group_by(Run.actor_id)
++    )).all()
++    usage = {row[0]: dict(zip(USAGE_FIELDS, row[1:], strict=True)) for row in usage_rows}
++    return [bot_out(a, active=a.id in active_ids, usage=usage.get(a.id)) for a in actors]
+ 
+ 
+ @router.post("", response_model=BotOut, status_code=201)
+@@ -130,7 +142,7 @@ async def install_catalog_entry(entry_id: str, body: BotCatalogInstall | None =
+ async def get_bot(bot_id: str, session: AsyncSession = Depends(get_session)):
+     actor = await _get_bot_or_404(session, bot_id)
+     active = (await session.execute(select(Run.id).where(Run.actor_id == bot_id, Run.status.in_(ACTIVE_RUN_STATUSES)).limit(1))).first() is not None
+-    return bot_out(actor, active=active)
++    return bot_out(actor, active=active, usage=await _usage_for(session, bot_id))
+ 
+ 
+ @router.patch("/{bot_id}", response_model=BotOut)
+diff --git a/backend/openbot/api/schemas.py b/backend/openbot/api/schemas.py
+index f54104b..5f1d1d2 100644
+--- a/backend/openbot/api/schemas.py
++++ b/backend/openbot/api/schemas.py
+@@ -128,6 +128,13 @@ class BotOut(BaseModel):
+     tool_names: list[str]
+     approval_tools: list[str]
+     memory_enabled: bool
++    model_calls: int = 0
++    prompt_tokens: int = 0
++    completion_tokens: int = 0
++    cache_read_tokens: int = 0
++    cache_write_tokens: int = 0
++    reasoning_tokens: int = 0
++    cost_usd: float = 0.0
+     created_at: datetime
+     updated_at: datetime
+ 
+@@ -195,7 +202,10 @@ class RunOut(BaseModel):
+     prompt_tokens: int | None = None
+     completion_tokens: int | None = None
+     cache_read_tokens: int | None = None
++    cache_write_tokens: int | None = None
++    reasoning_tokens: int | None = None
+     total_tokens: int | None = None
++    cost_usd: float | None = None
+     model_calls: int | None = None
+     created_at: datetime
+     started_at: datetime | None
+@@ -260,6 +270,9 @@ class ThreadUsage(BaseModel):
+     prompt_tokens: int = 0
+     completion_tokens: int = 0
+     cache_read_tokens: int = 0
++    cache_write_tokens: int = 0
++    reasoning_tokens: int = 0
++    cost_usd: float = 0.0
+ 
+ 
+ MAX_IMAGES = 4
+@@ -385,13 +398,17 @@ def actor_out(actor) -> ActorOut:
+                     created_at=actor.created_at, updated_at=actor.updated_at)
+ 
+ 
+-def bot_out(actor, *, active: bool = False) -> BotOut:
++def bot_out(actor, *, active: bool = False, usage: dict[str, int | float] | None = None) -> BotOut:
+     p = actor.bot
++    usage = usage or {}
+     return BotOut(id=actor.id, handle=actor.handle, name=actor.name, description=actor.description,
+                   icon=p.icon or DEFAULT_BOT_ICON, enabled=actor.enabled, active=active,
+                   instructions=p.instructions, provider=p.provider, model=p.model, model_settings=p.model_settings,
+                   tool_names=p.tool_names, approval_tools=p.approval_tools, memory_enabled=p.memory_enabled,
+-                  created_at=actor.created_at, updated_at=actor.updated_at)
++                  model_calls=int(usage.get("model_calls", 0)), prompt_tokens=int(usage.get("prompt_tokens", 0)),
++                  completion_tokens=int(usage.get("completion_tokens", 0)), cache_read_tokens=int(usage.get("cache_read_tokens", 0)),
++                  cache_write_tokens=int(usage.get("cache_write_tokens", 0)), reasoning_tokens=int(usage.get("reasoning_tokens", 0)),
++                  cost_usd=float(usage.get("cost_usd", 0)), created_at=actor.created_at, updated_at=actor.updated_at)
+ 
+ 
+ class McpServerOut(BaseModel):
+@@ -529,6 +546,9 @@ class CatalogModelOut(BaseModel):
+     output: int | None = None
+     cost_input: float | None = None
+     cost_output: float | None = None
++    cost_cache_read: float | None = None
++    cost_cache_write: float | None = None
++    cost_tiers: list[dict[str, Any]] = []
+     release_date: str = ""
+     status: str | None = None
+ 
+diff --git a/backend/openbot/db/migrations/versions/0017_run_usage_cost.py b/backend/openbot/db/migrations/versions/0017_run_usage_cost.py
+new file mode 100644
+index 0000000..f1e2352
+--- /dev/null
++++ b/backend/openbot/db/migrations/versions/0017_run_usage_cost.py
+@@ -0,0 +1,24 @@
++"""record detailed token usage and estimated cost per run
++
++Revision ID: 0017
++Revises: 0015
++"""
++
++import sqlalchemy as sa
++from alembic import op
++
++revision = "0017"
++down_revision = "0016"
++branch_labels = depends_on = None
++
++
++def upgrade():
++    op.add_column("runs", sa.Column("cache_write_tokens", sa.Integer(), nullable=True))
++    op.add_column("runs", sa.Column("reasoning_tokens", sa.Integer(), nullable=True))
++    op.add_column("runs", sa.Column("cost_usd", sa.Float(), nullable=True))
++
++
++def downgrade():
++    op.drop_column("runs", "cost_usd")
++    op.drop_column("runs", "reasoning_tokens")
++    op.drop_column("runs", "cache_write_tokens")
+diff --git a/backend/openbot/db/models.py b/backend/openbot/db/models.py
+index f28697f..6f90054 100644
+--- a/backend/openbot/db/models.py
++++ b/backend/openbot/db/models.py
+@@ -7,6 +7,7 @@
+     JSON,
+     Boolean,
+     DateTime,
++    Float,
+     ForeignKey,
+     Index,
+     Integer,
+@@ -199,7 +200,10 @@ class Run(Base):
+     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+     cache_read_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    cache_write_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    reasoning_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+     model_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+diff --git a/backend/openbot/runtime/model_catalog.py b/backend/openbot/runtime/model_catalog.py
+index e723d91..9d7e99b 100644
+--- a/backend/openbot/runtime/model_catalog.py
++++ b/backend/openbot/runtime/model_catalog.py
+@@ -51,6 +51,7 @@ def normalize_model(key: str, m: dict) -> dict:
+     mod = m.get("modalities") or {}
+     limit = m.get("limit") or {}
+     cost = m.get("cost") or {}
++    tiers = cost.get("tiers") if isinstance(cost.get("tiers"), list) else []
+     return {
+         "id": str(m.get("id") or key),
+         "name": str(m.get("name") or key),
+@@ -63,6 +64,9 @@ def normalize_model(key: str, m: dict) -> dict:
+         "output": int(limit["output"]) if limit.get("output") is not None else None,
+         "cost_input": float(cost["input"]) if cost.get("input") is not None else None,
+         "cost_output": float(cost["output"]) if cost.get("output") is not None else None,
++        "cost_cache_read": float(cost["cache_read"]) if cost.get("cache_read") is not None else None,
++        "cost_cache_write": float(cost["cache_write"]) if cost.get("cache_write") is not None else None,
++        "cost_tiers": tiers,
+         "release_date": str(m.get("release_date") or ""),
+         "status": "beta" if m.get("status") == "beta" else None,
+     }
+@@ -117,6 +121,12 @@ def __init__(self, session_factory: async_sessionmaker, http_client: httpx.Async
+         self._url = url
+         self._ttl = ttl
+         self._task: asyncio.Task | None = None
++        self._prices: dict[tuple[str, str], dict[str, float | None]] = {}
++
++    def price_for(self, provider: str, model_id: str) -> dict[str, float | None] | None:
++        """Return cached per-token prices without doing I/O; None means unknown/stale cache."""
++        row = getattr(self, "_prices", {}).get((provider, model_id))
++        return dict(row) if row is not None else None
+ 
+     async def get(self, provider: str) -> CatalogResult | None:
+         if provider not in CATALOG_SOURCES:
+@@ -152,6 +162,9 @@ async def refresh(self) -> bool:
+             log.warning("model catalog refresh from %s failed: %s", self._url, e)
+             return False
+         now = utcnow()
++        self._prices = {(provider, model["id"]): {"input": model.get("cost_input"), "output": model.get("cost_output"),
++                                                 "cache_read": model.get("cost_cache_read"), "cache_write": model.get("cost_cache_write"), "tiers": model.get("cost_tiers", [])}
++                        for provider, models in catalog.items() for model in models}
+         try:
+             async with self._sessions() as session:
+                 for provider, models in catalog.items():
+diff --git a/backend/openbot/runtime/runner.py b/backend/openbot/runtime/runner.py
+index d329e7f..fcc9aba 100644
+--- a/backend/openbot/runtime/runner.py
++++ b/backend/openbot/runtime/runner.py
+@@ -48,27 +48,47 @@
+ TOOL_RESULT_CAP = 4000
+ LOG_PREVIEW_CAP = 500
+ CLEARED_TOOL_RESULT = "[earlier tool result cleared to save context; re-run the tool if you still need it]"
+-USAGE_KEYS = ("prompt_tokens", "completion_tokens", "cache_read_tokens", "total_tokens", "model_calls")
++USAGE_KEYS = ("prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "total_tokens", "model_calls")
+ 
+ 
+-def empty_usage() -> dict[str, int]:
+-    return dict.fromkeys(USAGE_KEYS, 0)
++def empty_usage() -> dict[str, int | float]:
++    return {**dict.fromkeys(USAGE_KEYS, 0), "cost_usd": 0.0}
+ 
+ 
+-def add_usage(total: dict[str, int], message: AIMessage) -> dict[str, int] | None:
+-    """Fold one model reply's usage_metadata into `total`; returns the increment, or None if the
+-    provider reported nothing (scripted/test models, some OpenAI-compatible endpoints)."""
++def add_usage(total: dict[str, int | float], message: AIMessage, price: dict[str, Any] | None = None) -> dict[str, int | float] | None:
++    """Fold one model reply's usage_metadata into `total`, including estimated USD cost.
++
++    Pricing tiers follow OpenCode's session cost calculation: the tier selected by the prompt size
++    prices the complete input, rather than only the tokens above the tier boundary.
++    """
+     um = getattr(message, "usage_metadata", None)
+     if not um:
+         return None
+-    details = um.get("input_token_details") or {}
+-    inc = {
++    input_details = um.get("input_token_details") or {}
++    output_details = um.get("output_token_details") or {}
++    inc: dict[str, int | float] = {
+         "prompt_tokens": int(um.get("input_tokens") or 0),
+         "completion_tokens": int(um.get("output_tokens") or 0),
+-        "cache_read_tokens": int(details.get("cache_read") or 0),
++        "cache_read_tokens": int(input_details.get("cache_read") or 0),
++        "cache_write_tokens": int(input_details.get("cache_write") or 0),
++        "reasoning_tokens": int(output_details.get("reasoning") or um.get("reasoning_tokens") or 0),
+         "total_tokens": int(um.get("total_tokens") or 0),
+         "model_calls": 1,
+     }
++    if price:
++        rates = price
++        tiers = [t for t in price.get("tiers", []) if isinstance(t, dict) and isinstance(t.get("tier"), dict)]
++        if tiers:
++            applicable = [t for t in tiers if int(t["tier"].get("size", 0)) <= inc["prompt_tokens"]]
++            if applicable:
++                rates = {**price, **applicable[-1]}
++        uncached_input = max(0, inc["prompt_tokens"] - inc["cache_read_tokens"] - inc["cache_write_tokens"])
++        inc["cost_usd"] = (uncached_input * float(rates.get("input") or 0)
++                            + inc["completion_tokens"] * float(rates.get("output") or 0)
++                            + inc["cache_read_tokens"] * float(rates.get("cache_read") or 0)
++                            + inc["cache_write_tokens"] * float(rates.get("cache_write") or 0)) / 1_000_000
++    else:
++        inc["cost_usd"] = 0.0
+     for k, v in inc.items():
+         total[k] += v
+     return inc
+@@ -170,8 +190,16 @@ class Runner:
+     def __init__(self, services) -> None:
+         self.s = services
+ 
++    def _model_price(self, bot: Actor) -> dict[str, float | None] | None:
++        catalog = getattr(self.s, "model_catalog", None)
++        if catalog is None:
++            return None
++        provider, model = effective_bot_profile(bot.bot, self.s.settings)
++        result = getattr(catalog, "price_for", None)
++        return result(provider, model) if result is not None else None
++
+     async def _set_status(self, run_id: str, status: str, *, interrupt: dict | None = None, error: str | None = None,
+-                          langsmith_run_id: str | None = None, usage: dict[str, int] | None = None) -> Run:
++                          langsmith_run_id: str | None = None, usage: dict[str, int | float] | None = None) -> Run:
+         async with self.s.session_factory() as session:
+             run = await session.get(Run, run_id)
+             run.status, run.interrupt = status, interrupt
+@@ -180,8 +208,7 @@ async def _set_status(self, run_id: str, status: str, *, interrupt: dict | None
+             if langsmith_run_id:
+                 run.langsmith_run_id = langsmith_run_id
+             if usage and usage.get("model_calls"):
+-                # Resumed runs (after a question) add to what the earlier segment already recorded.
+-                for k in USAGE_KEYS:
++                for k in (*USAGE_KEYS, "cost_usd"):
+                     setattr(run, k, (getattr(run, k) or 0) + usage[k])
+             if status == "running" and run.started_at is None:
+                 run.started_at = utcnow()
+@@ -346,7 +373,7 @@ def _build_agent(self, bot: Actor, system_prompt: str):
+                             checkpointer=self.s.checkpointer, store=self.s.store, context_schema=RunContext)
+ 
+     async def _stream(self, agent, inputs, config, ctx: RunContext, run: Run, seq: int,
+-                      progress: RunProgress | None = None) -> tuple[str, dict | None, int, dict[str, int]]:
++                      progress: RunProgress | None = None, price: dict[str, float | None] | None = None) -> tuple[str, dict | None, int, dict[str, int | float]]:
+         progress = progress if progress is not None else RunProgress()
+         final_text, interrupt = "", None
+         usage = empty_usage()
+@@ -391,7 +418,7 @@ async def _stream(self, agent, inputs, config, ctx: RunContext, run: Run, seq: i
+                         # Before any await: a cancel in between must find this turn, not the one before.
+                         progress.streaming, progress.reply = "", _text(m) or progress.reply
+                         progress.tool_calls += len(m.tool_calls)
+-                        inc = add_usage(usage, m)
++                        inc = add_usage(usage, m, price)
+                         if inc is not None:
+                             log.info("run %s model call %d: prompt=%d (cache_read=%d) completion=%d", run.id, usage["model_calls"],
+                                      inc["prompt_tokens"], inc["cache_read_tokens"], inc["completion_tokens"])
+@@ -459,7 +486,7 @@ async def execute(self, run_id: str, resume: Command | None = None) -> None:
+             config["recursion_limit"] = self.recursion_limit(agent, bot)
+             with collect_runs() as cb:
+                 final_text, interrupt, seq, usage = await self._stream(agent, resume if resume is not None else inputs, config, ctx, run, seq,
+-                                                                       progress)
++                                                                       progress, self._model_price(bot))
+             ls_id = str(trace_id) if cb.traced_runs else None
+             usage_line = (f"model_calls={usage['model_calls']} prompt_tokens={usage['prompt_tokens']} "
+                           f"cache_read_tokens={usage['cache_read_tokens']} completion_tokens={usage['completion_tokens']}")
+diff --git a/backend/tests/test_bots_api.py b/backend/tests/test_bots_api.py
+index 4198c74..edd3367 100644
+--- a/backend/tests/test_bots_api.py
++++ b/backend/tests/test_bots_api.py
+@@ -27,6 +27,27 @@ async def test_create_list_get_update_delete(client):
+     assert (await client.get(f"/api/v1/bots/{bot['id']}")).status_code == 404
+ 
+ 
++async def test_bot_usage_totals_are_returned(client, services):
++    bot = (await client.post("/api/v1/bots", json=BOT)).json()
++    from openbot.db.models import Thread
++    async with services.session_factory() as session:
++        thread = Thread(title="usage")
++        session.add(thread)
++        await session.flush()
++        session.add_all([
++            Run(actor_id=bot["id"], thread_id=thread.id, status="completed", prompt_tokens=100, completion_tokens=20,
++                cache_read_tokens=40, cache_write_tokens=5, reasoning_tokens=8, model_calls=2, cost_usd=0.125),
++            Run(actor_id=bot["id"], thread_id=thread.id, status="completed", prompt_tokens=50, completion_tokens=10,
++                cache_read_tokens=10, reasoning_tokens=3, model_calls=1, cost_usd=0.025),
++        ])
++        await session.commit()
++    expected = {"model_calls": 3, "prompt_tokens": 150, "completion_tokens": 30, "cache_read_tokens": 50,
++                "cache_write_tokens": 5, "reasoning_tokens": 11, "cost_usd": 0.15}
++    assert {k: (await client.get(f"/api/v1/bots/{bot['id']}")).json()[k] for k in expected} == expected
++    listed = next(b for b in (await client.get("/api/v1/bots")).json() if b["id"] == bot["id"])
++    assert {k: listed[k] for k in expected} == expected
++
++
+ async def test_validation(client):
+     assert (await client.post("/api/v1/bots", json={**BOT, "handle": "Bad Handle"})).status_code == 422
+     assert (await client.post("/api/v1/bots", json={**BOT, "provider": "nope"})).status_code == 422
+diff --git a/backend/tests/test_model_catalog.py b/backend/tests/test_model_catalog.py
+index e0f6f71..cf2bdb5 100644
+--- a/backend/tests/test_model_catalog.py
++++ b/backend/tests/test_model_catalog.py
+@@ -24,7 +24,7 @@ def test_normalized_record_shape():
+     assert m == {
+         "id": "claude-opus-5-5", "name": "Claude Opus 5.5", "family": "claude-opus", "description": "Most capable Claude",
+         "reasoning": True, "effort_levels": ["low", "medium", "high", "xhigh", "max"], "image_input": True,
+-        "context": 200000, "output": 64000, "cost_input": 5.0, "cost_output": 25.0, "release_date": "2026-03-01", "status": None,
++        "context": 200000, "output": 64000, "cost_input": 5.0, "cost_output": 25.0, "cost_cache_read": 0.5, "cost_cache_write": None, "cost_tiers": [], "release_date": "2026-03-01", "status": None,
+     }
+ 
+ 
+diff --git a/backend/tests/test_token_efficiency.py b/backend/tests/test_token_efficiency.py
+index 4151bf4..6f34a18 100644
+--- a/backend/tests/test_token_efficiency.py
++++ b/backend/tests/test_token_efficiency.py
+@@ -28,6 +28,28 @@ def rt(root: Path, cap_chars: int = 8000, shell_cap_chars: int | None = None) ->
+     return ToolRuntime(context=ctx, store=None, state={}, tool_call_id="c", config={}, stream_writer=lambda *_: None)
+ 
+ 
++# --- usage accounting ---------------------------------------------------------------------------------
++
++def test_add_usage_tracks_cache_reasoning_and_tiered_cost():
++    from openbot.runtime.runner import add_usage, empty_usage
++    message = ai("done")
++    message.usage_metadata = {
++        "input_tokens": 250_000,
++        "output_tokens": 1_000,
++        "total_tokens": 251_000,
++        "input_token_details": {"cache_read": 100_000, "cache_write": 20_000},
++        "output_token_details": {"reasoning": 400},
++    }
++    usage = empty_usage()
++    inc = add_usage(usage, message, {"input": 1.0, "output": 2.0, "cache_read": 0.1, "cache_write": 0.2,
++                                    "tiers": [{"tier": {"size": 200_000}, "input": 2.0, "output": 3.0,
++                                               "cache_read": 0.2, "cache_write": 0.4}]})
++    assert inc == {"prompt_tokens": 250_000, "completion_tokens": 1_000, "cache_read_tokens": 100_000,
++                   "cache_write_tokens": 20_000, "reasoning_tokens": 400, "total_tokens": 251_000,
++                   "model_calls": 1, "cost_usd": 0.291}
++    assert usage == {**inc, "cost_usd": 0.291}
++
++
+ # --- tool output ------------------------------------------------------------------------------------
+ 
+ def test_cap_keeps_head_and_tail_and_says_how_much_was_dropped():
+@@ -196,7 +218,7 @@ async def test_thread_usage_sums_all_runs(client, services):
+         thread_id = thread.id
+     r = await client.get(f"/api/v1/threads/{thread_id}/usage")
+     assert r.status_code == 200
+-    assert r.json() == {"model_calls": 4, "prompt_tokens": 110, "completion_tokens": 22, "cache_read_tokens": 5}
++    assert r.json() == {"model_calls": 4, "prompt_tokens": 110, "completion_tokens": 22, "cache_read_tokens": 5, "cache_write_tokens": 0, "reasoning_tokens": 0, "cost_usd": 0.0}
+ 
+ 
+ async def test_thread_usage_is_zero_for_thread_without_runs(client, services):
+@@ -208,7 +230,7 @@ async def test_thread_usage_is_zero_for_thread_without_runs(client, services):
+         thread_id = thread.id
+     r = await client.get(f"/api/v1/threads/{thread_id}/usage")
+     assert r.status_code == 200
+-    assert r.json() == {"model_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cache_read_tokens": 0}
++    assert r.json() == {"model_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0, "reasoning_tokens": 0, "cost_usd": 0.0}
+     assert (await client.get("/api/v1/threads/nope/usage")).status_code == 404
+ 
+ 
+diff --git a/frontend/src/api/types.ts b/frontend/src/api/types.ts
+index 9e02684..3390faa 100644
+--- a/frontend/src/api/types.ts
++++ b/frontend/src/api/types.ts
+@@ -1,7 +1,7 @@
+ export type ActorKind = "bot" | "human" | "external" | "system";
+ export interface Actor { id: string; kind: ActorKind; handle: string; name: string; description: string; enabled: boolean; webhook_url: string | null; created_at: string; updated_at: string; }
+ export interface BotCatalogEntry { id: string; handle: string; name: string; description: string; icon: string; instruction_file: string; tool_names: string[]; approval_tools: string[]; model_settings: Record<string, unknown>; }
+-export interface Bot { id: string; handle: string; name: string; description: string; icon: string; enabled: boolean; active: boolean; instructions: string; provider: string; model: string; model_settings: Record<string, unknown>; tool_names: string[]; approval_tools: string[]; memory_enabled: boolean; created_at: string; updated_at: string; }
++export interface Bot { id: string; handle: string; name: string; description: string; icon: string; enabled: boolean; active: boolean; instructions: string; provider: string; model: string; model_settings: Record<string, unknown>; tool_names: string[]; approval_tools: string[]; memory_enabled: boolean; model_calls?: number; prompt_tokens?: number; completion_tokens?: number; cache_read_tokens?: number; cache_write_tokens?: number; reasoning_tokens?: number; cost_usd?: number; created_at: string; updated_at: string; }
+ export type BotInput = Omit<Bot, "id" | "created_at" | "updated_at" | "active">;
+ export interface Participant { actor_id: string; kind: ActorKind; handle: string; name: string; }
+ export interface Thread { id: string; title: string; kind: "chat" | "direct"; created_by_actor_id: string | null; default_bot_actor_id: string | null; default_bot_handle: string | null; working_directory: string | null; external_ref: string | null; created_at: string; updated_at: string; last_message_at: string | null; participants: Participant[]; active?: boolean; }
+@@ -9,7 +9,7 @@ export interface Thread { id: string; title: string; kind: "chat" | "direct"; cr
+ export interface MessageAttachment { url: string; name?: string | null; }
+ export interface Message { id: string; thread_id: string; sender_actor_id: string | null; sender_kind: string; sender_name: string; content: string; mentions: string[]; hop: number; run_id: string | null; metadata: Record<string, unknown>; created_at: string; }
+ export interface Interrupt { kind: "question" | "approval"; question?: string; actions?: { name: string; args: Record<string, unknown> }[]; }
+-export interface Run { id: string; actor_id: string; thread_id: string; status: string; interrupt: Interrupt | null; error: string | null; langsmith_run_id: string | null; prompt_tokens?: number | null; completion_tokens?: number | null; cache_read_tokens?: number | null; total_tokens?: number | null; model_calls?: number | null; created_at: string; started_at: string | null; finished_at: string | null; }
++export interface Run { id: string; actor_id: string; thread_id: string; status: string; interrupt: Interrupt | null; error: string | null; langsmith_run_id: string | null; prompt_tokens?: number | null; completion_tokens?: number | null; cache_read_tokens?: number | null; cache_write_tokens?: number | null; reasoning_tokens?: number | null; total_tokens?: number | null; cost_usd?: number | null; model_calls?: number | null; created_at: string; started_at: string | null; finished_at: string | null; }
+ export interface RunEvent { id: string; run_id: string; seq: number; type: string; payload: Record<string, any>; created_at: string; }
+ export interface RunDetail extends Run { events: RunEvent[]; }
+ /** A bot with queued, unpicked mail in this thread (see the backend WaiterOut schema). */
+@@ -17,7 +17,7 @@ export interface Waiter { actor_id: string; handle: string | null; name: string
+ export interface ThreadDetail extends Thread { messages: Message[]; has_more: boolean; runs: Run[]; waiters?: Waiter[]; }
+ export interface DirectoryEntry { name: string; path: string; }
+ export interface DirectoryListing { path: string; parent: string | null; entries: DirectoryEntry[]; }
+-export interface ThreadUsage { model_calls: number; prompt_tokens: number; completion_tokens: number; cache_read_tokens: number; }
++export interface ThreadUsage { model_calls: number; prompt_tokens: number; completion_tokens: number; cache_read_tokens: number; cache_write_tokens?: number; reasoning_tokens?: number; cost_usd?: number; }
+ export interface InboxItem { id: string; actor_id: string; thread_id: string; kind: "message" | "question" | "resume"; message_id: string | null; run_id: string | null; payload: Record<string, any>; status: string; attempts: number; last_error: string | null; created_at: string; processed_at: string | null; message: Message | null; }
+ export interface BotInboxItem extends InboxItem { thread_kind: "chat" | "direct"; run_status: string | null; reply: Message | null; }
+ export interface BotMemory { key: string; content: string; created_at: string | null; updated_at: string | null; }
+@@ -26,7 +26,7 @@ export interface PurgeResult { cancelled_runs: number; purged_items: number; }
+ export interface ToolInfo { name: string; description: string; source: string; args_schema: Record<string, unknown>; }
+ export interface ProviderInfo { id: string; configured: boolean; models: string[]; default_model: string; }
+ export interface ProvidersOut { providers: ProviderInfo[]; embedding_model: string; embeddings_configured: boolean; }
+-export interface CatalogModel { id: string; name: string; family: string; description: string; reasoning: boolean; effort_levels: string[]; image_input: boolean; context: number | null; output: number | null; cost_input: number | null; cost_output: number | null; release_date: string; status: string | null; }
++export interface CatalogModel { id: string; name: string; family: string; description: string; reasoning: boolean; effort_levels: string[]; image_input: boolean; context: number | null; output: number | null; cost_input: number | null; cost_output: number | null; cost_cache_read?: number | null; cost_cache_write?: number | null; cost_tiers?: Record<string, unknown>[]; release_date: string; status: string | null; }
+ export interface ModelsOut { provider: string; configured: boolean; source: "catalog" | "builtin"; stale: boolean; fetched_at: string | null; models: CatalogModel[]; }
+ export interface BusEvent { event: string; thread_id: string | null; data: any; }
+ export interface McpServer { name: string; transport: "stdio" | "http"; status: "connected" | "connecting" | "authorizing" | "needs_auth" | "disconnected" | "error" | "disabled"; enabled: boolean; oauth: boolean; url: string | null; error: string | null; tools: string[]; source: "file" | "db"; authorization_url: string | null; command: string | null; args: string[]; cwd: string | null; env: Record<string, string>; headers: Record<string, string>; }
+diff --git a/frontend/src/lib/modelCatalog.ts b/frontend/src/lib/modelCatalog.ts
+index 981f149..599c74f 100644
+--- a/frontend/src/lib/modelCatalog.ts
++++ b/frontend/src/lib/modelCatalog.ts
+@@ -10,7 +10,7 @@ export interface ModelGroup { label: string; models: CatalogModel[] }
+ 
+ /** A bare row for an id the catalog does not know: an installed Ollama tag, or the configured default. */
+ export function placeholderModel(id: string): CatalogModel {
+-  return { id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: null, output: null, cost_input: null, cost_output: null, release_date: "", status: null };
++  return { id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: null, output: null, cost_input: null, cost_output: null, cost_cache_read: null, cost_cache_write: null, cost_tiers: [], release_date: "", status: null };
+ }
+ 
+ /** The catalog plus a placeholder for every suggested id it does not know, so those still list and pin. */
+diff --git a/frontend/src/lib/threadUsage.ts b/frontend/src/lib/threadUsage.ts
+index 9fc513e..4f73edb 100644
+--- a/frontend/src/lib/threadUsage.ts
++++ b/frontend/src/lib/threadUsage.ts
+@@ -5,5 +5,5 @@ export const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFix
+ /** Header line with the thread's running LLM totals; null until any run has made a model call. */
+ export function threadUsageLabel(u: ThreadUsage): string | null {
+   if (!u.model_calls) return null;
+-  return `${u.model_calls} LLM call${u.model_calls === 1 ? "" : "s"} · ${compact(u.prompt_tokens)} in · ${compact(u.completion_tokens)} out`;
++  return `${u.model_calls} LLM call${u.model_calls === 1 ? "" : "s"} · ${compact(u.prompt_tokens)} in · ${compact(u.completion_tokens)} out · $${(u.cost_usd ?? 0).toFixed(4)}`;
+ }
+diff --git a/frontend/src/lib/threadUsageLabel.test.ts b/frontend/src/lib/threadUsageLabel.test.ts
+index 0af2715..ea8a9ad 100644
+--- a/frontend/src/lib/threadUsageLabel.test.ts
++++ b/frontend/src/lib/threadUsageLabel.test.ts
+@@ -7,8 +7,8 @@ describe("threadUsageLabel", () => {
+   });
+ 
+   it("shows the call count and compact input/output token totals", () => {
+-    expect(threadUsageLabel({ model_calls: 7, prompt_tokens: 34_500, completion_tokens: 2_100, cache_read_tokens: 0 })).toBe("7 LLM calls · 34.5k in · 2.1k out");
+-    expect(threadUsageLabel({ model_calls: 1, prompt_tokens: 820, completion_tokens: 40, cache_read_tokens: 0 })).toBe("1 LLM call · 820 in · 40 out");
+-    expect(threadUsageLabel({ model_calls: 90, prompt_tokens: 2_500_000, completion_tokens: 12_000, cache_read_tokens: 9 })).toBe("90 LLM calls · 2.5M in · 12.0k out");
++    expect(threadUsageLabel({ model_calls: 7, prompt_tokens: 34_500, completion_tokens: 2_100, cache_read_tokens: 0, cost_usd: 0.1234 })).toBe("7 LLM calls · 34.5k in · 2.1k out · $0.1234");
++    expect(threadUsageLabel({ model_calls: 1, prompt_tokens: 820, completion_tokens: 40, cache_read_tokens: 0, cost_usd: 0 })).toBe("1 LLM call · 820 in · 40 out · $0.0000");
++    expect(threadUsageLabel({ model_calls: 90, prompt_tokens: 2_500_000, completion_tokens: 12_000, cache_read_tokens: 9, cost_usd: 12.5 })).toBe("90 LLM calls · 2.5M in · 12.0k out · $12.5000");
+   });
+ });
+diff --git a/frontend/src/pages/BotPage.tsx b/frontend/src/pages/BotPage.tsx
+index 2526084..80498ac 100644
+--- a/frontend/src/pages/BotPage.tsx
++++ b/frontend/src/pages/BotPage.tsx
+@@ -49,6 +49,12 @@ export default function BotPage() {
+         </div>
+       </div>
+       {purged && <Hint>{purgeSummary(purged)}</Hint>}
++      <Card className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
++        <span>{b.model_calls} model call{b.model_calls === 1 ? "" : "s"}</span>
++        <span>{(b.prompt_tokens ?? 0).toLocaleString()} in</span>
++        <span>{(b.completion_tokens ?? 0).toLocaleString()} out</span>
++        <span>${(b.cost_usd ?? 0).toFixed(4)}</span>
++      </Card>
+       <ErrorText error={purge.error} />
+       <div className="flex gap-5 border-b border-line" role="tablist">
+         {TABS.map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tabClass(t)} onClick={() => setParams({ tab: t })}>{t[0].toUpperCase() + t.slice(1)}</button>)}

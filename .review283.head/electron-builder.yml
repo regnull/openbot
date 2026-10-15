@@ -1,0 +1,61 @@
+appId: com.openbot.desktop
+productName: OpenBot
+copyright: "Copyright © OpenBot"
+directories:
+  output: release
+files:
+  - electron/**/*
+  - dist/**/*
+extraResources:
+  - from: ../backend
+    to: backend
+    # uv creates .venv with an absolute shebang back to the machine that ran `uv sync`, so a
+    # bundled .venv is not relocatable: on any other machine it points at a path that doesn't
+    # exist. Ship the source, pyproject.toml, and uv.lock instead, and let the launcher's
+    # (frontend/electron/backend-launcher.cjs) `uv run` build a venv rooted in the *installed* app on first launch.
+    filter:
+      - "**/*"
+      - "!.venv"
+      - "!.venv/**"
+      - "!**/__pycache__/**"
+      - "!.pytest_cache/**"
+      - "!.ruff_cache/**"
+      - "!.mypy_cache/**"
+      - "!logs/**"
+      - "!openbot.db*"
+      - "!openbot.langgraph.db*"
+      # Not needed at runtime: the test suite (with its fixtures) never runs in the app.
+      - "!tests"
+      - "!tests/**"
+      # `make electron-release` packages the working copy, so anything a backend started from
+      # backend/ left behind would ship too: its state directory (database with encrypted
+      # secrets), workspace, generated keys and local config.
+      - "!.openbot/**"
+      - "!workspace/**"
+      - "!secret.key"
+      - "!mcp_token.key"
+      - "!.env"
+      - "!.env.*"
+      - "!mcp.json"
+      - "!.coverage"
+      - "!htmlcov/**"
+  - from: ../tools
+    to: tools
+icon: electron/assets/icon.png
+mac:
+  # Name both architectures explicitly; by default only arm64 gets a suffix, leaving x64 unlabeled.
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  extendInfo:
+    CFBundleDisplayName: OpenBot
+    CFBundleName: OpenBot
+    LSApplicationCategoryType: public.app-category.developer-tools
+win:
+  target: nsis
+linux:
+  target: AppImage

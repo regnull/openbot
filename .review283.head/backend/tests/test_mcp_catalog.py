@@ -1,0 +1,81 @@
+from openbot.mcp.catalog import CATALOG, CATALOG_BY_ID
+
+
+def test_catalog_is_curated_and_complete():
+    assert len(CATALOG) >= 30
+    assert len(CATALOG_BY_ID) == len(CATALOG)
+    for entry in CATALOG:
+        assert entry["id"] and entry["name"] and entry["description"]
+        assert entry["provider"] and entry["source_url"].startswith("https://")
+        assert entry["transport"] in ("stdio", "http")
+        if entry["transport"] == "stdio" and entry["status"] == "template":
+            assert entry["command"] and entry["args"]
+        elif entry["transport"] == "http":
+            assert entry["url"]
+
+
+def test_catalog_contains_requested_examples():
+    assert {"serena", "context7"} <= CATALOG_BY_ID.keys()
+
+
+def test_catalog_commands_match_documented_runners():
+    by_id = {entry["id"]: entry for entry in CATALOG}
+    assert by_id["serena"]["command"] == "uvx"
+    assert by_id["serena"]["args"] == [
+        "--from", "serena-agent", "serena", "start-mcp-server", "--project-from-cwd"
+    ]
+    assert by_id["aws"]["command"] == "uvx"
+    assert by_id["aws"]["args"] == ["awslabs.aws-documentation-mcp-server@latest"]
+
+    for entry in CATALOG:
+        if entry["transport"] == "http":
+            assert entry["url"].startswith("https://")
+        elif entry["id"] in {"duckdb", "vercel"}:
+            assert entry["status"] == "unverified" and not entry["command"] and not entry["args"]
+        elif entry["command"] == "npx":
+            assert entry["args"][:1] == ["-y"]
+            assert len(entry["args"]) >= 2
+            assert entry["args"][1] not in {"@oraios/serena", "awslabs.mcp-server-aws-documentation"}
+        elif entry["command"] == "uvx":
+            assert entry["args"]
+            assert not entry["args"][0].startswith("@")
+        else:
+            raise AssertionError(f"Unsupported catalog runner: {entry['command']}")
+
+
+async def test_catalog_install_is_disabled_and_rejects_unknown_or_duplicate(settings, tmp_path):
+    from asgi_lifespan import LifespanManager
+    from httpx import ASGITransport, AsyncClient
+
+    from openbot.main import create_app
+    from tests.conftest import build_test_services
+
+    settings.mcp_config = tmp_path / "mcp.json"
+    settings.mcp_config.write_text('{"mcpServers": {}}')
+    settings.mcp_token_key_file = tmp_path / "key"
+    services = await build_test_services(settings)
+    app = create_app(settings, services=services)
+    async with LifespanManager(app), AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        entries = (await client.get("/api/v1/mcp/catalog")).json()
+        assert len(entries) >= 30
+        response = await client.post(
+            "/api/v1/mcp/catalog/time/install",
+            json={"name": "catalog-time", "enabled": True},
+        )
+        assert response.status_code == 201, response.text
+        installed = response.json()
+        assert installed["enabled"] is False
+        assert installed["command"] == "uvx"
+        assert installed["args"] == ["mcp-server-time"]
+        assert (await client.post("/api/v1/mcp/catalog/time/install", json={"name": "catalog-time"})).status_code == 409
+        assert (await client.post("/api/v1/mcp/catalog/no-such/install", json={"name": "nope"})).status_code == 404
+
+        # URL-based catalog entries (e.g. Linear) install with url, not command
+        response = await client.post(
+            "/api/v1/mcp/catalog/linear/install",
+            json={"name": "catalog-linear"},
+        )
+        assert response.status_code == 201, response.text
+        installed = response.json()
+        assert installed["enabled"] is False
+        assert installed["url"] == "https://mcp.linear.app/mcp"

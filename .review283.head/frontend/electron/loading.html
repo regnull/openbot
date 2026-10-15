@@ -1,0 +1,71 @@
+<!doctype html>
+<!--
+  Shown by the Electron main process while the bundled backend starts, and when the app URL
+  cannot be loaded. It is a static local page: no scripts, no preload, nothing but inline styles.
+  The state comes from the URL hash (#starting, #unavailable) and is selected with :target.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" />
+    <title>OpenBot</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --canvas: #f6f4ef;
+        --fg: #16213e;
+        --muted: #62697c;
+        --line: #d9d4c7;
+        --accent: #dd7a3d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #0e1426;
+          --fg: #e9e6dc;
+          --muted: #94a0bf;
+          --line: #273459;
+          --accent: #e9884a;
+        }
+      }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--canvas);
+        color: var(--fg);
+        font: 14px/1.6 "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      section { display: none; max-width: 28rem; padding: 2rem; text-align: center; }
+      h1 { margin: 1rem 0 0.25rem; font-size: 16px; font-weight: 600; }
+      p { margin: 0; color: var(--muted); }
+      .spinner {
+        width: 22px;
+        height: 22px;
+        margin: 0 auto;
+        border: 2px solid var(--line);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+      /* Default to the starting state; #unavailable swaps in the retry message. */
+      #starting { display: block; }
+      #unavailable:target { display: block; }
+      #unavailable:target ~ #starting { display: none; }
+    </style>
+  </head>
+  <body>
+    <section id="unavailable" role="alert">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>Can't reach OpenBot</h1>
+      <p>The app did not respond. Retrying every few seconds; check that the backend and UI are running.</p>
+    </section>
+    <section id="starting" role="status">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>Starting OpenBot…</h1>
+      <p>The first launch sets up the backend and can take a minute or two.</p>
+    </section>
+  </body>
+</html>

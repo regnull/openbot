@@ -1,0 +1,168 @@
+diff --git a/frontend/src/components/Composer.tsx b/frontend/src/components/Composer.tsx
+index b953977..7c7f146 100644
+--- a/frontend/src/components/Composer.tsx
++++ b/frontend/src/components/Composer.tsx
+@@ -4,6 +4,7 @@ import type { AttachmentIn } from "../api/client";
+ import { Button, Kbd } from "./ui";
+ import { CloseIcon } from "./icons";
+ import { modKey } from "../lib/shortcuts";
++import { clearThreadDraft, getThreadDraft, setThreadDraft } from "../lib/threadDrafts";
+ 
+ // Paste constraints for attached images (client-side guard; the API re-validates).
+ const MAX_IMAGES = 4;
+@@ -54,8 +55,8 @@ async function decodeImages(files: File[]): Promise<{ attachments: AttachmentIn[
+  * The prompt. A `❯` in the gutter, the text you type, and the keys that send it — the one place
+  * the interface is allowed to look like a terminal on purpose.
+  */
+-export default function Composer({ handles, onSend, disabled, hint, autoFocus, running }: { handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean; running?: boolean }) {
+-  const [text, setText] = useState("");
++export default function Composer({ threadId, handles, onSend, disabled, hint, autoFocus, running }: { threadId: string; handles: string[]; onSend: (text: string, attachments: AttachmentIn[]) => Promise<void>; disabled?: boolean; hint?: string; autoFocus?: boolean; running?: boolean }) {
++  const [text, setText] = useState(() => getThreadDraft(threadId));
+   const [caret, setCaret] = useState(0);
+   const [sel, setSel] = useState(0);
+   const [sending, setSending] = useState(false);
+@@ -92,6 +93,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus, r
+     try {
+       await onSend(t, attachments);
+       setText("");
++      clearThreadDraft(threadId);
+       setCaret(0);
+       setSel(0);
+       setDismissedAt(null);
+@@ -152,7 +154,7 @@ export default function Composer({ handles, onSend, disabled, hint, autoFocus, r
+             placeholder={hint ?? "Type a message. @handle addresses a bot."}
+             className="min-h-[4.25rem] flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed text-fg outline-none placeholder:text-faint disabled:cursor-not-allowed"
+             onChange={(e) => {
+-              setText(e.target.value); setCaret(e.target.selectionStart); setSel(0);
++              setText(e.target.value); setThreadDraft(threadId, e.target.value); setCaret(e.target.selectionStart); setSel(0);
+               setDismissedAt((d) => (mentionQuery(e.target.value, e.target.selectionStart)?.start === d ? d : null));
+             }}
+             onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
+diff --git a/frontend/src/lib/threadDrafts.ts b/frontend/src/lib/threadDrafts.ts
+new file mode 100644
+index 0000000..040a5a6
+--- /dev/null
++++ b/frontend/src/lib/threadDrafts.ts
+@@ -0,0 +1,14 @@
++const drafts = new Map<string, string>();
++
++export function getThreadDraft(threadId: string): string {
++  return drafts.get(threadId) ?? "";
++}
++
++export function setThreadDraft(threadId: string, text: string): void {
++  if (text) drafts.set(threadId, text);
++  else drafts.delete(threadId);
++}
++
++export function clearThreadDraft(threadId: string): void {
++  drafts.delete(threadId);
++}
+diff --git a/frontend/src/pages/ThreadPage.test.tsx b/frontend/src/pages/ThreadPage.test.tsx
+index d4b1139..a392312 100644
+--- a/frontend/src/pages/ThreadPage.test.tsx
++++ b/frontend/src/pages/ThreadPage.test.tsx
+@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import ThreadPage from "./ThreadPage";
+ import type { Bot, Message, Run, ThreadDetail } from "../api/types";
++import { clearThreadDraft } from "../lib/threadDrafts";
+ 
+ // SSE is replaced wholesale: the page only consumes callbacks, and jsdom has no EventSource.
+ // Capturing them lets a test inject live events as if they came off the bus.
+@@ -57,6 +58,14 @@ describe("ThreadPage window re-entry", () => {
+   const navRef: { current: null | ((to: string) => void) } = { current: null };
+ 
+   const text = (): string => el.textContent ?? "";
++  const textarea = (): HTMLTextAreaElement => el.querySelector("textarea")!;
++  const type = async (value: string): Promise<void> => {
++    await act(async () => {
++      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea(), value);
++      textarea().setSelectionRange(value.length, value.length);
++      textarea().dispatchEvent(new Event("input", { bubbles: true }));
++    });
++  };
+   const until = async (cond: () => boolean, what: string): Promise<void> => {
+     const deadline = Date.now() + 2_000;
+     while (!cond()) {
+@@ -91,6 +100,8 @@ describe("ThreadPage window re-entry", () => {
+   const go = async (path: string): Promise<void> => { await act(async () => { navRef.current?.(path); }); };
+ 
+   beforeEach(() => {
++    clearThreadDraft("t1");
++    clearThreadDraft("t2");
+     Element.prototype.scrollTo = () => {};
+     getThreadCalls = [];
+     server = { t1: [m1], t2: [] };
+@@ -111,6 +122,49 @@ describe("ThreadPage window re-entry", () => {
+   // A page left mounted keeps its window Esc listener, which would cancel runs in later tests.
+   afterEach(() => { act(() => root.unmount()); el.remove(); });
+ 
++  it("restores each thread's draft after switching away and back", async () => {
++    await mount("/threads/t1");
++    await until(() => text().includes("first reply"), "initial history");
++    await type("draft for t1");
++    await go("/threads/t2");
++    await until(() => text().includes("title-t2"), "second thread window");
++    expect(textarea().value).toBe("");
++    await type("draft for t2");
++    await go("/threads/t1");
++    await until(() => textarea().value === "draft for t1", "t1 draft restored");
++    await go("/threads/t2");
++    await until(() => textarea().value === "draft for t2", "t2 draft restored");
++  });
++
++  it("clears a draft only after sending succeeds", async () => {
++    const posted: string[] = [];
++    fake.api.postMessage = (_id: string, body: { content: string }) => { posted.push(body.content); return Promise.resolve({ unaddressed: false }) as never; };
++    await mount("/threads/t1");
++    await until(() => text().includes("first reply"), "initial history");
++    await type("send this draft");
++    await act(async () => { textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
++    await until(() => textarea().value === "", "draft cleared after send");
++    expect(posted).toEqual(["send this draft"]);
++    await go("/threads/t2");
++    await until(() => text().includes("title-t2"), "second thread window");
++    await go("/threads/t1");
++    await until(() => textarea().value === "", "cleared draft stays cleared");
++  });
++
++  it("retains a draft after a failed send and restores it after switching threads", async () => {
++    fake.api.postMessage = () => Promise.reject(new Error("send failed")) as never;
++    await mount("/threads/t1");
++    await until(() => text().includes("first reply"), "initial history");
++    await type("retry this draft");
++    await act(async () => { textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
++    await until(() => textarea().value === "retry this draft", "failed send retains draft");
++
++    await go("/threads/t2");
++    await until(() => text().includes("title-t2"), "second thread window");
++    await go("/threads/t1");
++    await until(() => textarea().value === "retry this draft", "failed draft restored");
++  });
++
+   it("restores history after leaving to another window and returning mid-run", async () => {
+     await mount("/threads/t1");
+     await until(() => text().includes("first reply"), "initial history");
+@@ -256,6 +310,8 @@ describe("ThreadPage Esc stops open runs", () => {
+   };
+ 
+   beforeEach(() => {
++    clearThreadDraft("t1");
++    clearThreadDraft("t2");
+     Element.prototype.scrollTo = () => {};
+     cancelled = [];
+     runs = [run("r1", "running"), { ...run("r2", "queued"), actor_id: "b2" }];
+diff --git a/frontend/src/pages/ThreadPage.tsx b/frontend/src/pages/ThreadPage.tsx
+index 0eb5b75..a3c8814 100644
+--- a/frontend/src/pages/ThreadPage.tsx
++++ b/frontend/src/pages/ThreadPage.tsx
+@@ -235,7 +235,7 @@ export default function ThreadPage() {
+       <div className="border-t border-line pt-3">
+         {notice && <p className="mb-1.5 text-xs text-warn">{notice}</p>}
+         <ErrorText error={send.error} />
+-        <Composer handles={handles} running={!!openRuns} autoFocus={detail.data.messages.length === 0} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />      </div>
++        <Composer key={id} threadId={id} handles={handles} running={!!openRuns} autoFocus={detail.data.messages.length === 0} onSend={async (text, attachments) => { await send.mutateAsync({ content: text, attachments }); }} />      </div>
+     </div>
+   );
+ }

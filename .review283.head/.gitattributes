@@ -1,0 +1,4 @@
+# Run by bash or make, also inside Linux containers; a CRLF checkout (the Git for Windows default) breaks them.
+*.sh text eol=lf
+/openbot text eol=lf
+Makefile text eol=lf

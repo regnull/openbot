@@ -1,0 +1,177 @@
+{
+  "normalization": "$SANDBOX/$AUDIT/$CODEX_HOME/$PRIVATE_HOME replace local absolute roots only; traffic otherwise retained",
+  "original_log_sha256": "3c807ed419b92a850476bbaae043b346464c3ee8af1491ce0095dd577d8a11f0",
+  "receipt": {
+    "id": "time",
+    "package": "mcp-server-time",
+    "version": "2026.8.18",
+    "metadata_source": "https://pypi.org/pypi/mcp-server-time/json",
+    "catalog_argv": [
+      "uvx",
+      "mcp-server-time"
+    ],
+    "launch_argv": [
+      "$SANDBOX/venvs/time/bin/mcp-server-time"
+    ],
+    "sandbox_launcher": [
+      "$CODEX_HOME/bin/codex",
+      "sandbox",
+      "-c",
+      "default_permissions=\"sandbox\"",
+      "-c",
+      "permissions.sandbox.extends=\":workspace\"",
+      "-c",
+      "permissions.sandbox.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"={\".\"=\"write\"},\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\",\"$CODEX_HOME\"=\"read\"}",
+      "-c",
+      "permissions.sandbox.network.enabled=true",
+      "-c",
+      "features.network_proxy=true",
+      "-P",
+      "sandbox",
+      "-C",
+      "$SANDBOX",
+      "--",
+      "/usr/bin/env",
+      "-i",
+      "HOME=$SANDBOX/home",
+      "PATH=$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR=$SANDBOX/tmp",
+      "XDG_CACHE_HOME=$SANDBOX/cache",
+      "LANG=C.UTF-8",
+      "PYTHONNOUSERSITE=1",
+      "UV_OFFLINE=true",
+      "PIP_NO_INDEX=1",
+      "PIP_FIND_LINKS=$SANDBOX/wheels",
+      "npm_config_offline=true",
+      "npm_config_ignore_scripts=true",
+      "MEMORY_FILE_PATH=$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM=1",
+      "/bin/sh",
+      "-c",
+      "cd \"$1\" && shift && exec \"$@\"",
+      "sandbox-cwd",
+      "$SANDBOX/fixtures",
+      "$SANDBOX/venvs/time/bin/mcp-server-time"
+    ],
+    "environment": {
+      "HOME": "$SANDBOX/home",
+      "PATH": "$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR": "$SANDBOX/tmp",
+      "XDG_CACHE_HOME": "$SANDBOX/cache",
+      "LANG": "C.UTF-8",
+      "PYTHONNOUSERSITE": "1",
+      "UV_OFFLINE": "true",
+      "PIP_NO_INDEX": "1",
+      "PIP_FIND_LINKS": "$SANDBOX/wheels",
+      "npm_config_offline": "true",
+      "npm_config_ignore_scripts": "true",
+      "MEMORY_FILE_PATH": "$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM": "1"
+    },
+    "cwd": "$SANDBOX/fixtures",
+    "sandbox_probe": {
+      "$PRIVATE_HOME/.ssh": "FileNotFoundError",
+      "$PRIVATE_HOME/.hermes": "FileNotFoundError",
+      "$AUDIT/openbot": "FileNotFoundError",
+      "/run/user/1000": "FileNotFoundError",
+      "/var/run/docker.sock": "FileNotFoundError",
+      "outbound": "OSError",
+      "workspace": true,
+      "local_socket": true,
+      "env_keys": [
+        "GIT_CONFIG_NOSYSTEM",
+        "HOME",
+        "LANG",
+        "MEMORY_FILE_PATH",
+        "PATH",
+        "PIP_FIND_LINKS",
+        "PIP_NO_INDEX",
+        "PYTHONNOUSERSITE",
+        "TMPDIR",
+        "UV_OFFLINE",
+        "XDG_CACHE_HOME",
+        "npm_config_ignore_scripts",
+        "npm_config_offline"
+      ]
+    },
+    "checked_at": "2026-09-28T21:19:18.036715+00:00",
+    "status": "pass",
+    "initialize": {
+      "ok": true,
+      "server_name": "mcp-time",
+      "server_version": "1.30.0",
+      "protocol": "2025-11-25",
+      "response": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "experimental": {},
+          "tools": {
+            "listChanged": false
+          }
+        },
+        "serverInfo": {
+          "name": "mcp-time",
+          "version": "1.30.0"
+        }
+      }
+    },
+    "tools_list": {
+      "ok": true,
+      "names": [
+        "get_current_time",
+        "convert_time"
+      ],
+      "count": 2,
+      "pages": 1
+    },
+    "tool_calls": "not-run",
+    "startup_seconds": 0.272,
+    "cleanup": {
+      "method": "stdin closed; process exited",
+      "exit_code": 0,
+      "process_group_gone": true
+    }
+  },
+  "events": [
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-11-25",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "openbot-catalog-audit",
+            "version": "1.0"
+          }
+        }
+      }
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"experimental\":{},\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"mcp-time\",\"version\":\"1.30.0\"}}}\n"
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      }
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+      }
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"get_current_time\",\"description\":\"Get current time in a specific timezone\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"timezone\":{\"type\":\"string\",\"description\":\"IANA timezone name (e.g., 'America/New_York', 'Europe/London'). Use 'America/Chicago' as local timezone if no timezone provided by the user.\"}},\"required\":[\"timezone\"]},\"annotations\":{\"readOnlyHint\":true,\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false}},{\"name\":\"convert_time\",\"description\":\"Convert time between timezones\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"source_timezone\":{\"type\":\"string\",\"description\":\"Source IANA timezone name (e.g., 'America/New_York', 'Europe/London'). Use 'America/Chicago' as local timezone if no source timezone provided by the user.\"},\"time\":{\"type\":\"string\",\"description\":\"Time to convert in 24-hour format (HH:MM)\"},\"target_timezone\":{\"type\":\"string\",\"description\":\"Target IANA timezone name (e.g., 'Asia/Tokyo', 'America/San_Francisco'). Use 'America/Chicago' as local timezone if no target timezone provided by the user.\"}},\"required\":[\"source_timezone\",\"time\",\"target_timezone\"]},\"annotations\":{\"readOnlyHint\":true,\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false}}]}}\n"
+    }
+  ]
+}

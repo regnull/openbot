@@ -1,0 +1,6 @@
+LGTM, risk 3/10 - PR #272
+Evidence: reviewed all three changed files in the exact pushed head 47b4f74cde0069d3ff5e0e11eec51a1045557e96; traced catalog listing and installation through `CATALOG`, `CATALOG_BY_ID`, `load_instructions`, tool validation, persistence, and the `bots.updated` publication; searched catalog callers and related tool-validation paths; confirmed the new instruction file is validated and installed; confirmed current-head backend/frontend CI checks are green and the branch is mergeable against current main.
+Risk driver: this is an opt-in catalog/profile addition with limited runtime blast radius; installation still passes through the existing schema, tool validation, commit, and event-publication path.
+NITs: none.
+
+OpenBot - `@reviewer`

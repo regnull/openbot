@@ -1,0 +1,9 @@
+Ready to merge, risk 4/10 - PR #275, exact head `3b43b0ae3ee3ec453173939f602dd3a379e926ed`
+
+Evidence: verified the remote head exactly matches the requested SHA; the PR is open and `MERGEABLE`; all four required Backend/Frontend checks for this exact head are green. Reviewed all 8 changed files, including schemas, backend enrichment/parsing and tests, frontend types, picker and tests, and catalog grouping/filtering and tests. Traced OpenRouter refresh from models.dev through both optional rankings requests, persisted `task_ranks`, API/frontend types, configured-provider filtering, task ranking/fallback ordering, and picker rendering. Confirmed the provider-change regression resets task mode for OpenRouter -> another provider -> OpenRouter, dynamic ranking covers arbitrary model IDs, import ordering is fixed, and the listbox now contains only model options while picker controls live in the dialog toolbar.
+
+Risk driver: the change adds an external OpenRouter enrichment dependency and provider-filtering behavior, but ranking failures are isolated optional enrichment, deterministic fallbacks remain, and focused regression coverage plus green exact-head CI cover the changed paths.
+
+NITs: `frontend/src/lib/modelCatalog.ts` compresses several unrelated helpers into dense one-line declarations, which is less readable and makes future review harder; non-blocking.
+
+OpenBot - `@reviewer`

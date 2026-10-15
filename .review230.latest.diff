@@ -1,0 +1,334 @@
+diff --git a/.gitattributes b/.gitattributes
+new file mode 100644
+index 0000000..5e8b1c4
+--- /dev/null
++++ b/.gitattributes
+@@ -0,0 +1,2 @@
++# Entrypoints are executed directly by Linux containers; never check them out with CRLF.
++docker-entrypoint.sh text eol=lf
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 0000000..5a989fc
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,36 @@
++# The backend in a container, the UI on the host. Usage is in compose.yaml. The backend stays
++# root in here so it can start run_shell commands as the shell user below.
++FROM python:3.13-bookworm
++
++# tini as PID 1 reaps what killed commands leave behind. Without it every timed-out or cancelled
++# run_shell that had a background process leaves a zombie, because the backend never waits on
++# children that aren't its own.
++RUN apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/*
++
++COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /usr/local/bin/uv
++ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy
++
++# run_shell commands run as this user (SHELL_USER), not as root. The workspace group lets it and
++# the backend edit each other's files.
++RUN groupadd --gid 1001 workspace \
++    && useradd --uid 1001 --gid workspace --create-home --shell /bin/bash shell
++
++WORKDIR /app
++COPY backend/pyproject.toml backend/uv.lock backend/.python-version backend/
++RUN cd backend && uv sync --frozen --no-dev --no-install-project
++COPY backend/ backend/
++COPY tools/ tools/
++RUN cd backend && uv sync --frozen --no-dev
++
++# State lives in /data (root only), bots work in /workspace.
++ENV DATABASE_URL=sqlite+aiosqlite:////data/openbot.db \
++    SECRET_KEY_FILE=/data/secret.key \
++    MCP_TOKEN_KEY_FILE=/data/mcp_token.key \
++    MCP_CONFIG=/data/mcp.json \
++    LOG_FILE=/data/logs/openbot.log \
++    WORKSPACE_ROOT=/workspace \
++    TOOLS_DIR=/app/tools
++
++COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
++EXPOSE 8000
++ENTRYPOINT ["/usr/bin/tini", "--", "docker-entrypoint.sh"]
+diff --git a/README.md b/README.md
+index 619634f..c7def71 100644
+--- a/README.md
++++ b/README.md
+@@ -263,6 +263,30 @@ port 8000:
+ make run               # builds frontend/dist, then serves it from the FastAPI app on :8000
+ ```
+ 
++### Backend in Docker
++
++The backend runs in a container and the UI stays on the host. Shell commands run as a separate
++`shell` user without the server's environment, so they can't read provider keys, `secret.key` or
++the database (see `docs/superpowers/specs/2026-09-29-shell-sandbox-design.md`).
++
++```bash
++echo "OPENBOT_API_KEY=$(openssl rand -hex 24)" >> .env   # required, see the design note
++docker compose up --build                                # backend on 127.0.0.1:8000
++```
++
++On Windows PowerShell 5.1, use a UTF-8-safe command when adding the API key; its default
++`Out-File` encoding is UTF-16, which Compose does not accept:
++
++```powershell
++$key = -join (1..24 | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
++[IO.File]::AppendAllText('.env', "OPENBOT_API_KEY=$key`r`n", (New-Object Text.UTF8Encoding($false)))
++```
++
++Then start the desktop app with `--backend_url http://127.0.0.1:8000`, or run `make frontend`.
++Bots work in `./workspace`, and state is in a Docker volume (`openbot-data`). Set `OPENBOT_PORT`
++if 8000 is taken. Shell commands still have network access. On Linux, create `./workspace`
++yourself before the first start, or Docker creates it owned by root.
++
+ ## Demo walkthrough
+ 
+ The seeded bots are set up to run a small software workflow end to end against a real git
+@@ -352,7 +376,8 @@ For how these pieces fit together inside the backend, see [docs/architecture.md]
+ > [!TIP]
+ > Practical guidance: bind to `127.0.0.1`, keep it off shared networks, set `OPENBOT_API_KEY` even
+ > locally, and run it as a dedicated low-privilege user (or in a VM/container) if bots have
+-> `run_shell`. Docker sandboxing for tools is on the roadmap, not in v1.
++> `run_shell`. [Backend in Docker](#backend-in-docker) does the container part and keeps shell
++> commands away from the server's keys; sandboxing each tool call is still on the roadmap.
+ 
+ ## Tools and plugins
+ 
+@@ -542,6 +567,7 @@ as `model_settings.reasoning_effort`). It applies to OpenAI, xAI, OpenRouter and
+ | `PUBLIC_URL` | `http://127.0.0.1:8000` | Where browsers reach this server; builds the OAuth redirect URI for remote MCP servers. While it is this local default, it follows the port the backend CLI was started on (e.g. `:8001` under `make app`); set it explicitly for any other address. |
+ | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed origins. |
+ | `WORKSPACE_ROOT` | `./workspace` | Default thread working directory and the confinement root for file tools. `run_shell` only *starts* there. |
++| `SHELL_USER` | *(unset)* | Run `run_shell` commands as this user with a minimal environment, so they don't see the server's keys. Needs `OPENBOT_API_KEY` and a server running as root; `compose.yaml` sets it. |
+ | `TOOLS_DIR` | `./tools` | Directory of plugin tool modules, loaded at startup. |
+ | `FRONTEND_DIST` | `frontend/dist` | Built frontend served at `/` when it exists. Empty means this default. |
+ | `MCP_CONFIG` | `./mcp.json` | Optional `mcpServers` file imported into the database once at startup, then ignored. See [MCP servers](#mcp-servers). |
+diff --git a/backend/openbot/config.py b/backend/openbot/config.py
+index 9a81b3a..99a64b8 100644
+--- a/backend/openbot/config.py
++++ b/backend/openbot/config.py
+@@ -107,6 +107,12 @@ class Settings(BaseSettings):
+     telegram_webhook_secret: str | None = None
+     telegram_transport: str = "long_polling"  # "long_polling" or "webhook"
+ 
++    # Run run_shell commands as this user (name or uid), with a minimal environment instead of the
++    # server's. Meant for the Docker setup (compose.yaml), where the backend runs as root and its
++    # keys, database and secret.key stay out of the shell's reach. Env only on purpose, so a bot
++    # can't switch it off through the settings API.
++    shell_user: str | None = None
++
+     @model_validator(mode="after")
+     def _local_public_url_follows_listen_port(self):
+         if self.listen_port and self.public_url.rstrip("/") == LOCAL_PUBLIC_URL:
+@@ -208,6 +214,19 @@ class Settings(BaseSettings):
+             )
+         return v
+ 
++    @field_validator("shell_user", mode="before")
++    @classmethod
++    def _empty_shell_user_means_unset(cls, v):
++        return None if v == "" else v
++
++    @model_validator(mode="after")
++    def _shell_user_needs_api_key(self):
++        # The shell user shares the backend's localhost, so without an API key it could call the
++        # settings API and undo what the separate user is for.
++        if self.shell_user and not self.openbot_api_key:
++            raise ValueError("SHELL_USER needs OPENBOT_API_KEY: without it shell commands can call the API on localhost.")
++        return self
++
+     @field_validator("telegram_transport", mode="before")
+     @classmethod
+     def _validate_telegram_transport(cls, v):
+diff --git a/backend/openbot/runtime/runner.py b/backend/openbot/runtime/runner.py
+index f10d4ee..0c954aa 100644
+--- a/backend/openbot/runtime/runner.py
++++ b/backend/openbot/runtime/runner.py
+@@ -418,7 +418,8 @@ class Runner:
+                                   model_call_limit=self.model_call_limit(bot))
+             ctx = RunContext(bot.id, bot.handle, bot.name, thread.id, run.id, workspace_root, self.s,
+                              thread.working_directory, hop, tool_output_cap=self.s.settings.tool_output_cap,
+-                             shell_output_cap=self.s.settings.shell_output_cap)
++                             shell_output_cap=self.s.settings.shell_output_cap,
++                             shell_user=self.s.settings.shell_user)
+             agent = self._build_agent(bot, system_prompt)
+             # The model-call limit is the real cap; the graph's recursion limit only has to be high enough
+             # that the limit middleware ends the run first, and is derived from the graph so adding a
+diff --git a/backend/openbot/tools/builtin/shell.py b/backend/openbot/tools/builtin/shell.py
+index 7e48006..2d2148d 100644
+--- a/backend/openbot/tools/builtin/shell.py
++++ b/backend/openbot/tools/builtin/shell.py
+@@ -10,6 +10,27 @@ from openbot.tools.builtin.git_for_windows import INSTALL_HINT, find_git_bash
+ from openbot.tools.builtin.workspace import cap, resolve_in_workspace
+ from openbot.tools.context import RunContext
+ 
++# PATH for commands run as SHELL_USER: the standard one, not the server's (which points at its venv).
++SHELL_USER_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
++
++
++def _as_shell_user(name: str) -> tuple[list[str], dict[str, str]]:
++    """Command prefix and environment that run a command as `name`, seeing none of the server's
++    variables (provider keys, SECRET_KEY). Raises KeyError for an unknown user.
++
++    setpriv rather than Popen's user=/group=: uvicorn runs on uvloop, whose subprocess support
++    rejects those. setpriv execs the shell in place, so the pid and process group stay the same and
++    _kill_group still reaps everything. --no-new-privs keeps setuid binaries like su from getting
++    back to root."""
++    import pwd  # POSIX only
++
++    entry = pwd.getpwuid(int(name)) if name.isdigit() else pwd.getpwnam(name)
++    prefix = ["setpriv", f"--reuid={entry.pw_uid}", f"--regid={entry.pw_gid}", "--init-groups", "--no-new-privs",
++              "--"]
++    env = {"PATH": SHELL_USER_PATH, "HOME": entry.pw_dir, "USER": entry.pw_name, "LOGNAME": entry.pw_name,
++           "LANG": "C.UTF-8"}
++    return prefix, env
++
+ 
+ async def _kill_group(proc: asyncio.subprocess.Process, job=None) -> None:
+     if sys.platform == "win32":
+@@ -47,11 +68,30 @@ async def run_shell(command: str, runtime: ToolRuntime[RunContext], cwd: str | N
+         shell, group = str(bash), {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+     else:
+         shell, group = "bash", {"start_new_session": True}
++    # With SHELL_USER set, every failure below is an error result: never fall back to running the
++    # command as the server user.
++    prefix: list[str] = []
++    env: dict[str, str] | None = None
++    user = runtime.context.shell_user
++    if user:
++        if sys.platform == "win32":
++            return "error: SHELL_USER is not supported on Windows"
++        if os.geteuid() != 0:
++            return f"error: cannot run commands as SHELL_USER {user!r}: the server has to run as root"
++        try:
++            prefix, env = _as_shell_user(user)
++        except KeyError:
++            return f"error: SHELL_USER {user!r} does not exist on this system"
+     workdir.mkdir(parents=True, exist_ok=True)
+-    proc = await asyncio.create_subprocess_exec(
+-        shell, "-lc", command, cwd=str(workdir),
+-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+-        **group)
++    try:
++        proc = await asyncio.create_subprocess_exec(
++            *prefix, shell, "-lc", command, cwd=str(workdir), env=env,
++            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
++            **group)
++    except FileNotFoundError:
++        if not prefix:
++            raise
++        return "error: SHELL_USER needs setpriv (util-linux), which isn't installed"
+     job = None
+     if sys.platform == "win32":
+         from openbot.tools.builtin.windows_job import WindowsJob
+diff --git a/backend/openbot/tools/context.py b/backend/openbot/tools/context.py
+index 8287791..2d5158d 100644
+--- a/backend/openbot/tools/context.py
++++ b/backend/openbot/tools/context.py
+@@ -18,3 +18,4 @@ class RunContext:
+     hop: int = 0
+     tool_output_cap: int = 8000
+     shell_output_cap: int = 4000
++    shell_user: str | None = None
+diff --git a/backend/pyproject.toml b/backend/pyproject.toml
+index fa92414..8a4a4ee 100644
+--- a/backend/pyproject.toml
++++ b/backend/pyproject.toml
+@@ -34,10 +34,12 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6", "asgi-lifespan>=2.1"]
+ [tool.pytest.ini_options]
+ asyncio_mode = "auto"
+ testpaths = ["tests"]
+-markers = ["smoke: live provider calls (costs money)"]
++markers = ["smoke: live provider calls (costs money)",
++           "docker: builds the Docker image and checks it (needs a running Docker daemon)"]
+ # Smoke tests hit real provider APIs and bill real tokens, so they are opt-in: `make smoke`
+ # (or `uv run pytest -m smoke`) is the only thing that runs them.
+-addopts = "-m 'not smoke'"
++# The Docker checks are opt-in the same way (`uv run pytest -m docker`): they build the image.
++addopts = "-m 'not smoke and not docker'"
+ 
+ [tool.ruff]
+ line-length = 100
+diff --git a/backend/tests/test_docker_files.py b/backend/tests/test_docker_files.py
+new file mode 100644
+index 0000000..e9a3048
+--- /dev/null
++++ b/backend/tests/test_docker_files.py
+@@ -0,0 +1,11 @@
++from pathlib import Path
++
++REPO = Path(__file__).resolve().parents[2]
++
++
++def test_docker_entrypoint_is_checked_out_with_linux_line_endings():
++    entrypoint = REPO / "docker-entrypoint.sh"
++    attributes = REPO / ".gitattributes"
++
++    assert entrypoint.read_bytes().count(b"\r\n") == 0
++    assert "docker-entrypoint.sh text eol=lf" in attributes.read_text()
+diff --git a/compose.yaml b/compose.yaml
+new file mode 100644
+index 0000000..6221d46
+--- /dev/null
++++ b/compose.yaml
+@@ -0,0 +1,37 @@
++# The backend in Docker, the UI on the host.
++#
++#   echo "OPENBOT_API_KEY=$(openssl rand -hex 24)" >> .env
++#   docker compose up --build
++#
++# Then start the desktop app with `--backend_url http://127.0.0.1:8000`, or run `make frontend`
++# and open http://localhost:5173 (paste the key when it asks). Bots work in ./workspace.
++# OPENBOT_PORT changes the host port if 8000 is taken, e.g. by `make dev`.
++services:
++  backend:
++    build: .
++    ports:
++      - "127.0.0.1:${OPENBOT_PORT:-8000}:8000"
++    env_file:
++      - path: .env
++        required: false
++    environment:
++      # Shell commands run as a separate user without the server's environment, so they can't
++      # read the provider keys, the database or secret.key. That user can still reach the API on
++      # localhost, which is why the API key is required.
++      SHELL_USER: shell
++      OPENBOT_API_KEY: ${OPENBOT_API_KEY:?set OPENBOT_API_KEY, shell commands can reach the API on localhost}
++      # These win over a copied .env, whose paths point at the host.
++      DATABASE_URL: sqlite+aiosqlite:////data/openbot.db
++      SECRET_KEY_FILE: /data/secret.key
++      MCP_TOKEN_KEY_FILE: /data/mcp_token.key
++      MCP_CONFIG: /data/mcp.json
++      LOG_FILE: /data/logs/openbot.log
++      WORKSPACE_ROOT: /workspace
++      TOOLS_DIR: /app/tools
++      FRONTEND_DIST: ""
++    volumes:
++      - openbot-data:/data
++      - ./workspace:/workspace
++
++volumes:
++  openbot-data:
+diff --git a/docker-entrypoint.sh b/docker-entrypoint.sh
+new file mode 100755
+index 0000000..d5efc7b
+--- /dev/null
++++ b/docker-entrypoint.sh
+@@ -0,0 +1,19 @@
++#!/bin/sh
++# Prepares /data and /workspace, then execs the backend. tini (PID 1) passes on the stop signal.
++set -e
++
++# Files the backend writes stay editable by the shell user (same group).
++umask 002
++
++mkdir -p /data/logs
++chmod 700 /data
++
++# /workspace is usually a bind mount, so on Linux this changes the host folder. Only touch it when
++# it isn't set up already, and don't fail if the file system won't allow it.
++mkdir -p /workspace
++if [ "$(stat -c %G:%a /workspace)" != "workspace:2775" ]; then
++    chgrp workspace /workspace && chmod 2775 /workspace \
++        || echo "warning: could not make /workspace group-writable for the shell user" >&2
++fi
++
++exec /app/backend/.venv/bin/python -m openbot.cli --host 0.0.0.0 --port 8000 "$@"

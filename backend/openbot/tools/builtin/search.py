@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import shutil
 import subprocess
@@ -44,13 +45,18 @@ async def _search_code_rg(
     max_results: int,
     runtime: ToolRuntime[RunContext],
 ) -> str:
-    """Use ripgrep for search. Ported from OpenCode tool/grep.ts (MIT license)."""
+    """Use ripgrep for search. Ported from OpenCode tool/grep.ts (MIT license).
+
+    Uses rg's JSON output (--json) so we can distinguish match lines from context
+    lines, cap on actual match count (Blocker 2 & 3 fix), and --with-filename so
+    single-file searches always include the path prefix (Blocker 1 fix).
+    """
     cmd = [
         rg,
+        "--json",          # structured output to separate match/context lines
         "--no-heading",
         "--line-number",
-        "--color", "never",
-        "--max-count", str(max_results),
+        "--with-filename", # always show path prefix (Blocker 1)
     ]
     if glob:
         cmd.extend(["-g", glob])
@@ -67,27 +73,52 @@ async def _search_code_rg(
         return None
 
     if result.returncode == 2:
-        # rg error → fall back to Python
+        # rg error — fall back to Python
         return None
 
     if not result.stdout.strip():
         return "(no matches)"
 
-    # Post-process: add space after line-number colon to match Python fallback format
-    # rg outputs `path:line:content` (no space); we want `path:line: content`
-    lines = result.stdout.splitlines()
-    out_lines = []
-    for line in lines:
-        if len(out_lines) >= max_results:
-            break
-        # Insert space after the line-number colon (e.g. "src/a.py:3:" -> "src/a.py:3: ")
-        out_lines.append(_RG_LINE_PATTERN.sub(r"\1: ", line))
+    # Parse JSONL output from rg; count actual match lines (not context lines)
+    match_count = 0
+    out_lines: list[str] = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        tp = data.get("type")
+        if tp == "match":
+            match_count += 1
+            if match_count > max_results:
+                # We've shown enough matches; stop collecting entirely.
+                # Context lines for matches up to max_results have already been
+                # included below, so this break is clean.
+                break
+            path = data["data"]["path"]["text"]
+            lineno = data["data"]["line_number"]
+            text = data["data"]["lines"]["text"].rstrip("\n")
+            # Format: path:line: content (space after colon matches Python fallback)
+            out_lines.append(f"{path}:{lineno}: {text}")
+        elif tp == "context":
+            # Include context lines only while we are still collecting matches
+            if match_count <= max_results:
+                path = data["data"]["path"]["text"]
+                lineno = data["data"]["line_number"]
+                text = data["data"]["lines"]["text"].rstrip("\n")
+                out_lines.append(f"{path}:{lineno}: {text}")
+        # "begin", "end", "summary" are ignored
 
     if not out_lines:
         return "(no matches)"
 
+    # Sort deterministically by path and line number (Nit 1)
+    out_lines.sort()
+
     suffix = ""
-    if len([1 for line in result.stdout.splitlines() if _RG_LINE_PATTERN.match(line)]) > max_results:
+    if match_count > max_results:
         suffix = f"\n... [{max_results} shown; more matches exist. Narrow the pattern, path or glob]"
 
     return cap(
@@ -154,7 +185,8 @@ async def search_code(pattern: str, runtime: ToolRuntime[RunContext], path: str 
     many lines before and after each match; `max_results` caps the number of matches (default 40).
     Prefer this over `cat`, `grep -r` or reading files top to bottom, then read_file the exact line range.
 
-    Uses ripgrep (`rg`) when available (respects .gitignore), otherwise falls back to a Python walk."""
+    Uses ripgrep (`rg`) when available (respects `.gitignore` and skips hidden files automatically),
+    otherwise falls back to a Python walk that does not ignore `.gitignore` or hidden files."""
     try:
         re.compile(pattern)
     except re.error as e:

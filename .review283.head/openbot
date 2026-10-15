@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Start OpenBot using the repository's production-style launcher.
+set -Eeuo pipefail
+
+# Set OPENBOT_REPOSITORY when this launcher is installed outside the repository.
+OPENBOT_REPOSITORY="${OPENBOT_REPOSITORY:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: openbot [--root DIRECTORY] [--db-root DIRECTORY] [--include-llm-call-details]
+
+Start OpenBot with DIRECTORY as the workspace root and DIRECTORY/.openbot/openbot.db
+as the SQLite database. DIRECTORY defaults to the current working directory; the database
+root defaults to ~/.openbot. Detailed per-model-call token data is omitted by default;
+use --include-llm-call-details to opt in.
+EOF
+}
+
+error() {
+  printf 'openbot: %s\n' "$1" >&2
+  usage
+  exit 2
+}
+
+expand_path() {
+  local value="$1"
+  if [[ "$value" == "~" ]]; then
+    value="$HOME"
+  elif [[ "$value" == "~/"* ]]; then
+    value="$HOME/${value:2}"
+  fi
+  printf '%s' "$value"
+}
+
+canonical_directory() {
+  local value="$1"
+  if [[ ! -d "$value" ]]; then
+    error "directory does not exist or is not a directory: $value"
+  fi
+  if ! (cd -- "$value" && pwd -P); then
+    error "cannot access directory: $value"
+  fi
+}
+
+workspace_input="$(pwd -P)"
+db_input=""
+db_root_explicit=false
+include_llm_call_details=false
+while (($#)); do
+  case "$1" in
+    --root|--db-root)
+      option="$1"
+      shift
+      (($#)) || error "$option requires a directory"
+      [[ "$1" != -* ]] || error "$option requires a directory, got: $1"
+      if [[ "$option" == "--root" ]]; then
+        workspace_input="$1"
+      else
+        db_input="$1"
+        db_root_explicit=true
+      fi
+      shift
+      ;;
+    --include-llm-call-details)
+      include_llm_call_details=true
+      shift
+      ;;
+    -h|--help)
+      usage >&2
+      exit 0
+      ;;
+    *)
+      error "unknown argument: $1"
+      ;;
+  esac
+done
+
+workspace_root="$(canonical_directory "$(expand_path "$workspace_input")")"
+if [[ "$db_root_explicit" == false && -d "$workspace_root/.openbot" ]]; then
+  db_input="$workspace_root/.openbot"
+elif [[ "$db_root_explicit" == false ]]; then
+  db_input="${HOME:?HOME is not set}/.openbot"
+fi
+db_root="$(expand_path "$db_input")"
+if [[ ! -e "$db_root" ]]; then
+  if ! mkdir -p -- "$db_root"; then
+    error "cannot create database directory: $db_root"
+  fi
+fi
+db_root="$(canonical_directory "$db_root")"
+repository_root="$(canonical_directory "$(expand_path "$OPENBOT_REPOSITORY")")"
+
+# `make app` delegates to the established Electron development launcher. These environment
+# variables provide the caller-specific paths without reimplementing backend initialization here.
+export WORKSPACE_ROOT="$workspace_root"
+export DATABASE_URL="sqlite+aiosqlite:///$db_root/openbot.db"
+export OPENBOT_INCLUDE_LLM_CALL_DETAILS="$include_llm_call_details"
+# Each instance logs beside its own database (overriding a LOG_FILE pinned in .env), so two instances
+# never write to, or rotate, the same file. A LOG_FILE set in the caller's environment still wins.
+export LOG_FILE="${LOG_FILE:-$db_root/logs/openbot.log}"
+
+exec make -C "$repository_root" app ROOT_DIRECTORY="$workspace_root"

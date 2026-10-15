@@ -1,0 +1,216 @@
+{
+  "normalization": "$SANDBOX/$AUDIT/$CODEX_HOME/$PRIVATE_HOME replace local absolute roots only; traffic otherwise retained",
+  "original_log_sha256": "982afcbedb6e19f6a8a636a500fd63080cbef128a67c13ccfe12280f44c4a1e4",
+  "receipt": {
+    "id": "sqlite",
+    "package": "mcp-server-sqlite",
+    "version": "2025.4.25",
+    "metadata_source": "https://pypi.org/pypi/mcp-server-sqlite/json",
+    "catalog_argv": [
+      "uvx",
+      "--with",
+      "mcp<2",
+      "mcp-server-sqlite",
+      "--db-path",
+      "${OPENBOT_MCP_SQLITE_DB}"
+    ],
+    "launch_argv": [
+      "$SANDBOX/bin/uv",
+      "tool",
+      "run",
+      "--no-index",
+      "--find-links",
+      "$SANDBOX/wheels/sqlite",
+      "--with",
+      "mcp<2",
+      "mcp-server-sqlite==2025.4.25",
+      "--db-path",
+      "$SANDBOX/fixtures/synthetic.sqlite"
+    ],
+    "sandbox_launcher": [
+      "$CODEX_HOME/bin/codex",
+      "sandbox",
+      "-c",
+      "default_permissions=\"sandbox\"",
+      "-c",
+      "permissions.sandbox.extends=\":workspace\"",
+      "-c",
+      "permissions.sandbox.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"={\".\"=\"write\"},\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\",\"$CODEX_HOME\"=\"read\"}",
+      "-c",
+      "permissions.sandbox.network.enabled=true",
+      "-c",
+      "features.network_proxy=true",
+      "-P",
+      "sandbox",
+      "-C",
+      "$SANDBOX",
+      "--",
+      "/usr/bin/env",
+      "-i",
+      "HOME=$SANDBOX/home",
+      "PATH=$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR=$SANDBOX/tmp",
+      "XDG_CACHE_HOME=$SANDBOX/cache",
+      "LANG=C.UTF-8",
+      "PYTHONNOUSERSITE=1",
+      "UV_OFFLINE=true",
+      "PIP_NO_INDEX=1",
+      "PIP_FIND_LINKS=$SANDBOX/wheels",
+      "npm_config_offline=true",
+      "npm_config_ignore_scripts=true",
+      "MEMORY_FILE_PATH=$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM=1",
+      "/bin/sh",
+      "-c",
+      "cd \"$1\" && shift && exec \"$@\"",
+      "sandbox-cwd",
+      "$SANDBOX/fixtures",
+      "$SANDBOX/bin/uv",
+      "tool",
+      "run",
+      "--no-index",
+      "--find-links",
+      "$SANDBOX/wheels/sqlite",
+      "--with",
+      "mcp<2",
+      "mcp-server-sqlite==2025.4.25",
+      "--db-path",
+      "$SANDBOX/fixtures/synthetic.sqlite"
+    ],
+    "environment": {
+      "HOME": "$SANDBOX/home",
+      "PATH": "$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR": "$SANDBOX/tmp",
+      "XDG_CACHE_HOME": "$SANDBOX/cache",
+      "LANG": "C.UTF-8",
+      "PYTHONNOUSERSITE": "1",
+      "UV_OFFLINE": "true",
+      "PIP_NO_INDEX": "1",
+      "PIP_FIND_LINKS": "$SANDBOX/wheels",
+      "npm_config_offline": "true",
+      "npm_config_ignore_scripts": "true",
+      "MEMORY_FILE_PATH": "$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM": "1"
+    },
+    "cwd": "$SANDBOX/fixtures",
+    "sandbox_probe": {
+      "$PRIVATE_HOME/.ssh": "FileNotFoundError",
+      "$PRIVATE_HOME/.hermes": "FileNotFoundError",
+      "$AUDIT/openbot": "FileNotFoundError",
+      "/run/user/1000": "FileNotFoundError",
+      "/var/run/docker.sock": "FileNotFoundError",
+      "outbound": "OSError",
+      "workspace": true,
+      "local_socket": true,
+      "env_keys": [
+        "GIT_CONFIG_NOSYSTEM",
+        "HOME",
+        "LANG",
+        "MEMORY_FILE_PATH",
+        "PATH",
+        "PIP_FIND_LINKS",
+        "PIP_NO_INDEX",
+        "PYTHONNOUSERSITE",
+        "TMPDIR",
+        "UV_OFFLINE",
+        "XDG_CACHE_HOME",
+        "npm_config_ignore_scripts",
+        "npm_config_offline"
+      ]
+    },
+    "checked_at": "2026-09-28T21:27:12.878915+00:00",
+    "status": "pass",
+    "initialize": {
+      "ok": true,
+      "server_name": "sqlite",
+      "server_version": "0.1.0",
+      "protocol": "2025-11-25",
+      "response": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "experimental": {},
+          "prompts": {
+            "listChanged": false
+          },
+          "resources": {
+            "subscribe": false,
+            "listChanged": false
+          },
+          "tools": {
+            "listChanged": false
+          }
+        },
+        "serverInfo": {
+          "name": "sqlite",
+          "version": "0.1.0"
+        }
+      }
+    },
+    "tools_list": {
+      "ok": true,
+      "names": [
+        "read_query",
+        "write_query",
+        "create_table",
+        "list_tables",
+        "describe_table",
+        "append_insight"
+      ],
+      "count": 6,
+      "pages": 1
+    },
+    "tool_calls": "not-run",
+    "startup_seconds": 0.734,
+    "cleanup": {
+      "method": "stdin closed; process exited",
+      "exit_code": 0,
+      "process_group_gone": true
+    }
+  },
+  "events": [
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-11-25",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "openbot-catalog-audit",
+            "version": "1.0"
+          }
+        }
+      }
+    },
+    {
+      "direction": "stderr",
+      "text": "Installed 37 packages in 6ms\n"
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"experimental\":{},\"prompts\":{\"listChanged\":false},\"resources\":{\"subscribe\":false,\"listChanged\":false},\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"sqlite\",\"version\":\"0.1.0\"}}}\n"
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      }
+    },
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+      }
+    },
+    {
+      "direction": "stdout",
+      "text": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"read_query\",\"description\":\"Execute a SELECT query on the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"SELECT SQL query to execute\"}},\"required\":[\"query\"]}},{\"name\":\"write_query\",\"description\":\"Execute an INSERT, UPDATE, or DELETE query on the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"SQL query to execute\"}},\"required\":[\"query\"]}},{\"name\":\"create_table\",\"description\":\"Create a new table in the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"CREATE TABLE SQL statement\"}},\"required\":[\"query\"]}},{\"name\":\"list_tables\",\"description\":\"List all tables in the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},{\"name\":\"describe_table\",\"description\":\"Get the schema information for a specific table\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Name of the table to describe\"}},\"required\":[\"table_name\"]}},{\"name\":\"append_insight\",\"description\":\"Add a business insight to the memo\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"insight\":{\"type\":\"string\",\"description\":\"Business insight discovered from data analysis\"}},\"required\":[\"insight\"]}}]}}\n"
+    }
+  ]
+}

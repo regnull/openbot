@@ -1,0 +1,194 @@
+{
+  "normalization": "local path roots only",
+  "original_log_sha256": "ef458042f67a4607043f785f78d8e7cc9bf0686aefd6a8c687e09968a1fad228",
+  "receipt": {
+    "id": "sqlite",
+    "package": "mcp-server-sqlite",
+    "version": "2025.4.25",
+    "metadata_source": "https://pypi.org/pypi/mcp-server-sqlite/json",
+    "catalog_argv": [
+      "uvx",
+      "mcp-server-sqlite",
+      "--db-path",
+      "${OPENBOT_MCP_SQLITE_DB}"
+    ],
+    "launch_argv": [
+      "$SANDBOX/venvs/sqlite/bin/mcp-server-sqlite",
+      "--db-path",
+      "$SANDBOX/fixtures/synthetic.sqlite"
+    ],
+    "sandbox_launcher": [
+      "$CODEX_HOME/bin/codex",
+      "sandbox",
+      "-c",
+      "default_permissions=\"sandbox\"",
+      "-c",
+      "permissions.sandbox.extends=\":workspace\"",
+      "-c",
+      "permissions.sandbox.filesystem={\":root\"=\"deny\",\":minimal\"=\"read\",\":workspace_roots\"={\".\"=\"write\"},\":tmpdir\"=\"deny\",\":slash_tmp\"=\"deny\",\"$CODEX_HOME\"=\"read\"}",
+      "-c",
+      "permissions.sandbox.network.enabled=true",
+      "-c",
+      "features.network_proxy=true",
+      "-P",
+      "sandbox",
+      "-C",
+      "$SANDBOX",
+      "--",
+      "/usr/bin/env",
+      "-i",
+      "HOME=$SANDBOX/home",
+      "PATH=$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR=$SANDBOX/tmp",
+      "XDG_CACHE_HOME=$SANDBOX/cache",
+      "LANG=C.UTF-8",
+      "PYTHONNOUSERSITE=1",
+      "UV_OFFLINE=true",
+      "PIP_NO_INDEX=1",
+      "PIP_FIND_LINKS=$SANDBOX/wheels",
+      "npm_config_offline=true",
+      "npm_config_ignore_scripts=true",
+      "MEMORY_FILE_PATH=$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM=1",
+      "/bin/sh",
+      "-c",
+      "cd \"$1\" && shift && exec \"$@\"",
+      "sandbox-cwd",
+      "$SANDBOX/fixtures",
+      "$SANDBOX/venvs/sqlite/bin/mcp-server-sqlite",
+      "--db-path",
+      "$SANDBOX/fixtures/synthetic.sqlite"
+    ],
+    "environment": {
+      "HOME": "$SANDBOX/home",
+      "PATH": "$SANDBOX/bin:/usr/bin:/bin",
+      "TMPDIR": "$SANDBOX/tmp",
+      "XDG_CACHE_HOME": "$SANDBOX/cache",
+      "LANG": "C.UTF-8",
+      "PYTHONNOUSERSITE": "1",
+      "UV_OFFLINE": "true",
+      "PIP_NO_INDEX": "1",
+      "PIP_FIND_LINKS": "$SANDBOX/wheels",
+      "npm_config_offline": "true",
+      "npm_config_ignore_scripts": "true",
+      "MEMORY_FILE_PATH": "$SANDBOX/fixtures/memory.json",
+      "GIT_CONFIG_NOSYSTEM": "1"
+    },
+    "cwd": "$SANDBOX/fixtures",
+    "sandbox_probe": {
+      "$PRIVATE_HOME/.ssh": "FileNotFoundError",
+      "$PRIVATE_HOME/.hermes": "FileNotFoundError",
+      "$AUDIT/openbot": "FileNotFoundError",
+      "/run/user/1000": "FileNotFoundError",
+      "/var/run/docker.sock": "FileNotFoundError",
+      "outbound": "OSError",
+      "workspace": true,
+      "local_socket": true,
+      "env_keys": [
+        "GIT_CONFIG_NOSYSTEM",
+        "HOME",
+        "LANG",
+        "MEMORY_FILE_PATH",
+        "PATH",
+        "PIP_FIND_LINKS",
+        "PIP_NO_INDEX",
+        "PYTHONNOUSERSITE",
+        "TMPDIR",
+        "UV_OFFLINE",
+        "XDG_CACHE_HOME",
+        "npm_config_ignore_scripts",
+        "npm_config_offline"
+      ]
+    },
+    "checked_at": "2026-09-28T21:19:19.473318+00:00",
+    "status": "blocked",
+    "initialize": {
+      "ok": false
+    },
+    "tools_list": {
+      "ok": false,
+      "names": []
+    },
+    "tool_calls": "not-run",
+    "blocker": "RuntimeError: server streams closed; exit 1",
+    "cleanup": {
+      "method": "stdin closed; process exited",
+      "exit_code": 1,
+      "process_group_gone": true
+    }
+  },
+  "events": [
+    {
+      "direction": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-11-25",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "openbot-catalog-audit",
+            "version": "1.0"
+          }
+        }
+      }
+    },
+    {
+      "direction": "stderr",
+      "text": "Traceback (most recent call last):\n  File \"$SANDBOX/venvs/sqlite/bin/mcp-server-sqlite\", line 10, in <module>\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "    sys.exit(main())\n             ^^^^^^\n  File \"$SANDBOX/venvs/sqlite/lib/python3.12/site-packages/mcp_server_sqlite/__init__.py\", line 14, in main\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "    asyncio.run(server.main(args.db_path))\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 194, in run\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "    return runner.run(main)\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "           ^^^^^^^^^^^^^^^^\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "  File \"/usr/lib/python3.12/asyncio/runners.py\", line 118, in run\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "    return self._loop.run_until_complete(task)\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/asyncio/base_events.py\", line 687, in run_until_complete\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "    return future.result()\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "           ^^^^^^^^^^^^^^^\n  File \"$SANDBOX/venvs/sqlite/lib/python3.12/site-packages/mcp_server_sqlite/server.py\", line 173, in main\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "    @server.list_resources()\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "     ^^^^^^^^^^^^^^^^^^^^^\n"
+    },
+    {
+      "direction": "stderr",
+      "text": "AttributeError: 'Server' object has no attribute 'list_resources'\n"
+    }
+  ]
+}

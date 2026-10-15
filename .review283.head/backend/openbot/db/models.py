@@ -1,0 +1,288 @@
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    TypeDecorator,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from openbot.bot_icons import DEFAULT_BOT_ICON
+
+# "Active" is a live/paused run occupying a bot right now, for busy indicators; "open" adds "queued"
+# for callers (e.g. purge) that must also catch a run before a worker has picked it up.
+ACTIVE_RUN_STATUSES = ("running", "waiting_human")
+OPEN_RUN_STATUSES = ("queued", "running", "waiting_human")
+
+
+def new_id() -> str:
+    return str(uuid.uuid4())
+
+
+def utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def now_local() -> datetime:
+    """Current local time (host timezone), used for human-facing timestamps."""
+    return datetime.now().astimezone()
+
+
+class UTCDateTime(TypeDecorator):
+    """DateTime type that always round-trips as a tz-aware UTC datetime.
+
+    SQLite has no native timezone support, so values written as tz-aware UTC
+    come back from the driver as naive datetimes. This decorator normalizes
+    on the way in (converting aware datetimes to UTC, treating naive input as
+    already UTC) and re-attaches UTC on the way out (treating naive values
+    read back as UTC, converting any aware value to UTC just in case).
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is None:
+            return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class TimestampMixin:
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class Actor(TimestampMixin, Base):
+    __tablename__ = "actors"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    handle: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    bot: Mapped[BotProfile | None] = relationship(back_populates="actor", uselist=False, lazy="selectin",
+                                                   cascade="all, delete-orphan")
+    external: Mapped[ExternalProfile | None] = relationship(back_populates="actor", uselist=False, lazy="selectin",
+                                                             cascade="all, delete-orphan")
+
+
+class BotProfile(Base):
+    __tablename__ = "bot_profiles"
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), primary_key=True)
+    icon: Mapped[str] = mapped_column(String(32), default=DEFAULT_BOT_ICON, nullable=False)
+    instructions: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), default="auto", nullable=False)
+    model: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    model_settings: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    tool_names: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    approval_tools: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    memory_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    load_repository_instructions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    actor: Mapped[Actor] = relationship(back_populates="bot")
+
+
+class ExternalProfile(Base):
+    __tablename__ = "external_profiles"
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), primary_key=True)
+    webhook_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    webhook_secret: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    actor: Mapped[Actor] = relationship(back_populates="external")
+
+
+class Thread(TimestampMixin, Base):
+    __tablename__ = "threads"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    # "chat" is a conversation; "direct" is the hidden one-shot container behind a post made straight
+    # into a bot's inbox (see api/bots.py). Direct threads are excluded from the thread list and from
+    # human inbox notifications.
+    kind: Mapped[str] = mapped_column(String(16), default="chat", server_default="chat", nullable=False)
+    created_by_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    default_bot_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    working_directory: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    external_ref: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
+    hop_limit_notified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_renamed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_message_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class ThreadParticipant(Base):
+    __tablename__ = "thread_participants"
+    __table_args__ = (UniqueConstraint("thread_id", "actor_id", name="uq_participant"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), nullable=False)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (Index("ix_messages_thread_created", "thread_id", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False)
+    sender_actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sender_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    sender_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    mentions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    hop: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    meta: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class ScheduledMessage(TimestampMixin, Base):
+    """Durable one-shot message waiting for the scheduler."""
+    __tablename__ = "scheduled_messages"
+    __table_args__ = (Index("ix_scheduled_status_due", "status", "due_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False)
+    sender_actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), nullable=False)
+    to_handles: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class InboxItem(Base):
+    __tablename__ = "inbox_items"
+    __table_args__ = (Index("ix_inbox_actor_status_created", "actor_id", "status", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class Run(Base):
+    __tablename__ = "runs"
+    __table_args__ = (Index("ix_runs_actor_thread_status", "actor_id", "thread_id", "status"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("actors.id", ondelete="CASCADE"), nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(36), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
+    interrupt: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    langsmith_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Token usage summed over every model call of the run (None until the first call reports usage).
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cache_read_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cache_write_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    model_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class RunEvent(Base):
+    __tablename__ = "run_events"
+    __table_args__ = (UniqueConstraint("run_id", "seq", name="uq_run_event_seq"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(String(36), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class ActivityLog(Base):
+    """One step in the life of a message, an inbox item or a run (see runtime/activity.py): the
+    database-side diagnostic timeline for "why is this thread not progressing?".
+
+    No foreign keys on purpose: the log must outlive the thread, bot or run it describes, or deleting
+    a stuck thread would also delete the evidence. The integer id is the timeline order."""
+    __tablename__ = "activity_log"
+    __table_args__ = (Index("ix_activity_thread", "thread_id", "id"), Index("ix_activity_actor", "actor_id", "id"),
+                      Index("ix_activity_run", "run_id", "id"), Index("ix_activity_created", "created_at"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    level: Mapped[str] = mapped_column(String(8), default="info", nullable=False)
+    event: Mapped[str] = mapped_column(String(48), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    thread_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    item_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    message_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class McpServer(Base):
+    """An MCP server spec (see mcp/store.py). `secrets` is Fernet-encrypted JSON holding `headers` (http)
+    or `env` (stdio); `mcp.json` is only ever imported into this table."""
+    __tablename__ = "mcp_servers"
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    transport: Mapped[str] = mapped_column(String(16), default="http", server_default="http", nullable=False)
+    url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    command: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    args: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    cwd: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    secrets: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class McpCredential(Base):
+    """OAuth client registration and tokens for one remote MCP server, Fernet-encrypted (see mcp/oauth.py)."""
+    __tablename__ = "mcp_credentials"
+    server: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # The server URL the credentials were granted for: a config name re-pointed at another host must not
+    # send the old bearer token there (see DbTokenStorage._current_row).
+    resource_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    client_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class AppSetting(Base):
+    """A runtime override of one Settings field (see runtime/app_settings.py). Absent row = environment value."""
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[object] = mapped_column(JSON, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class ModelCatalogRow(Base):
+    """One provider's slice of the models.dev catalog, already filtered and normalized (see runtime/model_catalog.py)."""
+    __tablename__ = "model_catalog"
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    models: Mapped[list] = mapped_column(JSON, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)

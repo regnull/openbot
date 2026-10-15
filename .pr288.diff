@@ -1,0 +1,83 @@
+diff --git a/backend/openbot/bots/catalog.py b/backend/openbot/bots/catalog.py
+index ccfbc00..341b560 100644
+--- a/backend/openbot/bots/catalog.py
++++ b/backend/openbot/bots/catalog.py
+@@ -39,7 +39,6 @@ class BotCatalogEntry(BaseModel):
+             "update_bot_description",
+             "update_bot_instructions",
+         ),
+-        "model_settings": {"max_model_calls": 6},
+     },
+     {
+         "id": "engineer",
+diff --git a/backend/openbot/seed.py b/backend/openbot/seed.py
+index 9063a7f..c098005 100644
+--- a/backend/openbot/seed.py
++++ b/backend/openbot/seed.py
+@@ -61,9 +61,6 @@ async def ensure_cron_actor(services) -> Actor:
+ Keep messages short and action-oriented. One or two model turns per message is the norm.
+ Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @.""",
+         "tool_names": ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"], "approval_tools": [],
+-        # A coordinator makes one decision per turn; if it is still calling tools after this many turns it is
+-        # doing someone else's job.
+-        "model_settings": {"max_model_calls": 6},
+     },
+     {
+         "handle": "engineer", "name": "Engineer",
+diff --git a/backend/tests/test_seed.py b/backend/tests/test_seed.py
+index 0c2584e..26bfae0 100644
+--- a/backend/tests/test_seed.py
++++ b/backend/tests/test_seed.py
+@@ -65,7 +65,7 @@ async def test_sync_updates_existing_demo_bots_without_touching_the_rest(service
+     assert await seed_demo_bots(services) == 4
+     async with services.session_factory() as s:
+         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
+-        chief.bot.instructions, chief.bot.tool_names, chief.bot.model_settings = "old", ["read_file"], {}
++        chief.bot.instructions, chief.bot.tool_names, chief.bot.model_settings = "old", ["read_file"], {"max_model_calls": 6}
+         chief.bot.provider, chief.bot.model = "ollama", "qwen3.6"
+         s.add(Actor(kind="bot", handle="custom", name="Custom", bot=BotProfile(instructions="mine", tool_names=["run_shell"])))
+         await s.commit()
+@@ -74,7 +74,7 @@ async def test_sync_updates_existing_demo_bots_without_touching_the_rest(service
+         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
+         spec = next(b for b in DEMO_BOTS if b["handle"] == "chief_of_staff")
+         assert chief.bot.instructions == spec["instructions"] and chief.bot.tool_names == spec["tool_names"]
+-        assert chief.bot.model_settings == spec["model_settings"]
++        assert chief.bot.model_settings == spec.get("model_settings", {})
+         assert (chief.bot.provider, chief.bot.model) == ("ollama", "qwen3.6")      # the operator's pin survives
+         custom = (await s.execute(select(Actor).where(Actor.handle == "custom"))).scalar_one()
+         assert custom.bot.instructions == "mine" and custom.bot.tool_names == ["run_shell"]
+diff --git a/backend/tests/test_token_efficiency.py b/backend/tests/test_token_efficiency.py
+index 5cf4280..1093e54 100644
+--- a/backend/tests/test_token_efficiency.py
++++ b/backend/tests/test_token_efficiency.py
+@@ -274,9 +274,17 @@ async def test_migration_adds_usage_columns(tmp_path):
+ # --- seeded team --------------------------------------------------------------------------------------
+ 
+ def test_seeded_division_of_labour():
++    from openbot.bots.catalog import CATALOG
++    from openbot.config import Settings
++
++    default_limit = Settings(_env_file=None).max_model_calls_per_run
+     bots = {b["handle"]: b for b in DEMO_BOTS}
+     assert bots["chief_of_staff"]["tool_names"] == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
+-    assert bots["chief_of_staff"]["model_settings"] == {"max_model_calls": 6}
++    assert bots["chief_of_staff"].get("model_settings", {}) == {}
++    for collection in (DEMO_BOTS, CATALOG):
++        for entry in collection:
++            cap = (entry.get("model_settings") or {}).get("max_model_calls")
++            assert cap is None or cap >= default_limit, entry["handle"]
+     assert "first reply" in bots["chief_of_staff"]["instructions"]
+     assert "Do not run the test suite" in bots["reviewer"]["instructions"]
+     assert "--name-only" in bots["reviewer"]["instructions"]
+@@ -292,9 +300,9 @@ async def test_seed_persists_model_settings(services):
+     assert await seed_demo_bots(services) == 4
+     async with services.session_factory() as s:
+         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
+-    assert chief.bot.model_settings == {"max_model_calls": 6}
++    assert chief.bot.model_settings == {}
+     assert chief.bot.tool_names == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
+-    assert services.runner.model_call_limit(chief) == 6
++    assert services.runner.model_call_limit(chief) == services.settings.max_model_calls_per_run
+ 
+ 
+ async def test_thread_usage_sums_all_runs(client, services):

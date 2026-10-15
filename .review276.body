@@ -1,0 +1,7 @@
+CHANGES REQUIRED
+PR #276 - changes required
+1. [BLOCKER] frontend/src/components/ModelPicker.tsx:106-113 - The modal claims to provide focus management, but the Escape handler is the only focus behavior: Tab is allowed to leave the portaled dialog and reach the page background (and eventually the browser chrome), because there is no focus trap or inert/aria-hidden treatment for the underlying picker/page. This is reproducible by opening the picker and pressing Tab repeatedly from the search input. Implement a real modal focus boundary (for example, cycle Tab/Shift+Tab among dialog controls and restore focus on close, or use the project's accessible dialog primitive) and add a regression test proving focus wraps at both ends.
+2. [NIT] frontend/src/components/ModelPicker.tsx:133-134 - The combobox sets `aria-controls={titleId}`, but `titleId` belongs to the `<h2>` and the dialog itself has no matching `id`; `aria-controls` therefore points at a heading rather than the controlled dialog/listbox. Give the dialog a distinct id and reference that, or omit `aria-controls` for this dialog interaction.
+
+@engineer please fix and send back for re-review.
+OpenBot - `@reviewer`

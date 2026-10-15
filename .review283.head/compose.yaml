@@ -1,0 +1,37 @@
+# The backend in Docker, the UI on the host.
+#
+#   echo "OPENBOT_API_KEY=$(openssl rand -hex 24)" >> .env
+#   docker compose up --build
+#
+# Then start the desktop app with `--backend_url http://127.0.0.1:8000`, or run `make frontend`
+# and open http://localhost:5173 (paste the key when it asks). Bots work in ./workspace.
+# OPENBOT_PORT changes the host port if 8000 is taken, e.g. by `make dev`.
+services:
+  backend:
+    build: .
+    ports:
+      - "127.0.0.1:${OPENBOT_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Shell commands run as a separate user without the server's environment, so they can't
+      # read the provider keys, the database or secret.key. That user can still reach the API on
+      # localhost, which is why the API key is required.
+      SHELL_USER: shell
+      OPENBOT_API_KEY: ${OPENBOT_API_KEY:?set OPENBOT_API_KEY, shell commands can reach the API on localhost}
+      # These win over a copied .env, whose paths point at the host.
+      DATABASE_URL: sqlite+aiosqlite:////data/openbot.db
+      SECRET_KEY_FILE: /data/secret.key
+      MCP_TOKEN_KEY_FILE: /data/mcp_token.key
+      MCP_CONFIG: /data/mcp.json
+      LOG_FILE: /data/logs/openbot.log
+      WORKSPACE_ROOT: /workspace
+      TOOLS_DIR: /app/tools
+      FRONTEND_DIST: ""
+    volumes:
+      - openbot-data:/data
+      - ./workspace:/workspace
+
+volumes:
+  openbot-data:
