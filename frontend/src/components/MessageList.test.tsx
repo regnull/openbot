@@ -58,7 +58,7 @@ describe("MessageList busy indicator", () => {
     } finally { cleanup(); }
   });
 
-it("switches to RunCard when tool_call events arrive", () => {
+  it("switches to RunCard when tool_call events arrive", () => {
     let s = emptyThreadState("t");
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r1", "running") });
     s = reduceThreadEvent(s, {
