@@ -75,11 +75,6 @@ describe("ThreadPage window re-entry", () => {
     }
   };
   const t1Calls = (): number => getThreadCalls.filter((c) => c === "t1").length;
-  // RunCard is collapsed by default; click its header button to expand it.
-  const expandRunCard = (): void => {
-    const btn = el.querySelector<HTMLButtonElement>('[aria-expanded="false"]');
-    if (btn) act(() => btn.click());
-  };
   // ThreadPage reads the thread id from the router, so window switches are driven through the
   // router itself: another thread window is just another route, like in the real app.
   const App = () => {
