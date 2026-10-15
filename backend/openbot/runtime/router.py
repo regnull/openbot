@@ -4,7 +4,9 @@ import re
 
 from openbot.db.models import Actor
 
-MENTION_RE = re.compile(r"(?:^|\s)@([a-z0-9_-]{2,32})(?![\w-])(?!\.\w)", re.MULTILINE)
+# Markdown emphasis right before the @ ("**@engineer** — please ...") still counts: bots bold their
+# hand-offs, and without this the hand-off parsed as no mention and was routed to nobody.
+MENTION_RE = re.compile(r"(?:^|\s)[*~]*@([a-z0-9_-]{2,32})(?![\w-])(?!\.\w)", re.MULTILINE)
 
 
 def parse_mentions(content: str) -> list[str]:
