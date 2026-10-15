@@ -15,18 +15,10 @@ const tone = (s: string): BadgeTone => (s === "completed" ? "green" : s === "fai
  * transcript. Tool calls read like shell lines — `$ name(args)` with the result folded beneath.
  */
 export default function RunCard({ run, events, streaming }: { run: Run; events: RunEvent[]; streaming?: string }) {
-  // Runs arrive as `queued` before they run, so "open while active" has to react to the
-  // status changing, not just to its value at mount — otherwise a live card mounts
-  // collapsed and hides the streaming text. A card the reader collapsed stays collapsed.
+  // Always collapsed by default regardless of run status; the user clicks to expand.
   const active = ACTIVE.includes(run.status);
-  const [open, setOpen] = useState(active);
-  const [collapsedByReader, setCollapsedByReader] = useState(false);
-  const [wasActive, setWasActive] = useState(active);
-  if (active !== wasActive) {
-    setWasActive(active);
-    if (active && !collapsedByReader) setOpen(true);
-  }
-  const toggle = () => { setCollapsedByReader(open); setOpen(!open); };
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen((o) => !o);
   // Nothing to invalidate: the cancel lands as a `run.updated` over SSE like any other status change.
   const cancel = useMutation({ mutationFn: () => Api.cancelRun(run.id) });
   // Events arrive sorted by seq; group contiguous text events and build a chronological list of content blocks.
