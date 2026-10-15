@@ -58,7 +58,7 @@ describe("MessageList busy indicator", () => {
     } finally { cleanup(); }
   });
 
-  it("switches to RunCard when tool_call events arrive", () => {
+it("switches to RunCard when tool_call events arrive", () => {
     let s = emptyThreadState("t");
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r1", "running") });
     s = reduceThreadEvent(s, {
@@ -68,6 +68,8 @@ describe("MessageList busy indicator", () => {
     const { container, cleanup } = render(s);
     try {
       expect(container.querySelector("[role='status']")).toBeNull();
+      // Card is collapsed by default; click header to expand and see the tool call.
+      act(() => container.querySelector<HTMLButtonElement>('[aria-expanded="false"]')!.click());
       expect(container.textContent).toContain("shell");
     } finally { cleanup(); }
   });
@@ -82,6 +84,8 @@ describe("MessageList busy indicator", () => {
     const { container, cleanup } = render(s);
     try {
       expect(container.querySelector("[role='status']")).toBeNull();
+      // Card is collapsed by default; click header to expand and see streaming text.
+      act(() => container.querySelector<HTMLButtonElement>('[aria-expanded="false"]')!.click());
       expect(container.textContent).toContain("Hello");
     } finally { cleanup(); }
   });

@@ -75,6 +75,11 @@ describe("ThreadPage window re-entry", () => {
     }
   };
   const t1Calls = (): number => getThreadCalls.filter((c) => c === "t1").length;
+  // RunCard is collapsed by default; click its header button to expand it.
+  const expandRunCard = (): void => {
+    const btn = el.querySelector<HTMLButtonElement>('[aria-expanded="false"]');
+    if (btn) act(() => btn.click());
+  };
   // ThreadPage reads the thread id from the router, so window switches are driven through the
   // router itself: another thread window is just another route, like in the real app.
   const App = () => {
@@ -384,12 +389,20 @@ describe("ThreadPage window re-entry", () => {
     await act(async () => {
       sse.onEvent?.({ event: "run.event", thread_id: "t1", data: toolCall });
     });
-    await until(() => text().includes("echo preserved"), "tool output");
+    await until(() => {
+      const btn = el.querySelector<HTMLButtonElement>('[aria-expanded="false"]');
+      if (btn) act(() => btn.click());
+      return text().includes("echo preserved");
+    }, "tool output");
 
     await go("/other");
     await until(() => text().includes("other window"), "switched away");
     await go("/threads/t1");
-    await until(() => text().includes("echo preserved"), "tool output after return");
+    await until(() => {
+      const btn = el.querySelector<HTMLButtonElement>('[aria-expanded="false"]');
+      if (btn) act(() => btn.click());
+      return text().includes("echo preserved");
+    }, "tool output after return");
     expect(text().split("echo preserved")).toHaveLength(2);
   });
 
@@ -420,7 +433,11 @@ describe("ThreadPage window re-entry", () => {
     await act(async () => {
       sse.onEvent?.({ event: "run.event", thread_id: "t1", data: toolCall });
     });
-    await until(() => text().includes("echo preserved"), "tool output");
+    await until(() => {
+      const btn = el.querySelector<HTMLButtonElement>('[aria-expanded="false"]');
+      if (btn) act(() => btn.click());
+      return text().includes("echo preserved");
+    }, "tool output");
 
     await go("/threads/t2");
     await until(() => text().includes("only in t2"), "second thread history");
