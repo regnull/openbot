@@ -169,15 +169,16 @@ async def update_thread(thread_id: str, body: ThreadUpdate, session: AsyncSessio
 async def delete_thread(thread_id: str, session: AsyncSession = Depends(get_session), services: Services = Depends(get_services)):
     """Soft delete: stop the thread's work, then hide it. Its messages, runs, run events and activity
     stay in the database so a deleted thread can still be investigated."""
-    await get_thread_or_404(session, thread_id)
-    stopped = (await services.actors.close_thread(thread_id) if services.actors
-               else {"cancelled_runs": 0, "cancelled_items": 0, "cancelled_jobs": 0})
-    thread = await session.get(Thread, thread_id)
-    await session.refresh(thread)
+    thread = await get_thread_or_404(session, thread_id)
+    # Hide it first: while its work is being stopped, whatever that work still writes (a cancelled run's
+    # partial reply, a cancel notice) must find the thread deleted and wake nobody.
     thread.deleted_at = utcnow()
     if thread.external_ref:
         # external_ref is unique: free it so the chat it came from (e.g. Telegram) gets a fresh thread.
         thread.external_ref = f"deleted:{thread.id}:{thread.external_ref}"[:200]
+    await session.commit()
+    stopped = (await services.actors.close_thread(thread_id) if services.actors
+               else {"cancelled_runs": 0, "cancelled_items": 0, "cancelled_jobs": 0})
     await activity.record(services, "thread.deleted", session=session, level="warning", thread_id=thread_id,
                           summary=f"thread {thread.title!r} deleted (soft); {stopped['cancelled_runs']} run(s) cancelled",
                           **stopped)

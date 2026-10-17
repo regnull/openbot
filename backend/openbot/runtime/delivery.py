@@ -155,7 +155,10 @@ async def create_thread(services, session: AsyncSession, *, title: str, handles:
 
 async def post_message(services, session: AsyncSession, *, thread_id: str, sender: Actor | None, content: str,
                        to_handles: Iterable[str] = (), hop: int = 0, run_id: str | None = None,
-                       meta: dict | None = None, deliver: bool = True) -> PostResult:
+                       meta: dict | None = None, deliver: bool = True,
+                       mention_text: str | None = None) -> PostResult:
+    """`mention_text`, when given, is the part of `content` whose @mentions address anyone (a run's
+    reply carries earlier reports whose mentions were narration, not hand-offs)."""
     thread = await session.get(Thread, thread_id)
     if thread is None:
         raise LookupError("thread not found")
@@ -174,7 +177,7 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
         raise ValueError(f"unknown handles: {unknown}")
     # deliver=False posts for the record only: nobody is woken, not even the default bot, and the thread
     # is not renamed (that model call would hold up the cancel the post is part of).
-    mentioned = parse_mentions(content) if deliver else []
+    mentioned = parse_mentions(content if mention_text is None else mention_text) if deliver else []
     parts = await _participants(session, thread_id)
     part_ids = [p.actor_id for p in parts]
     thread_bot_ids = [aid for aid in part_ids if aid in by_id and by_id[aid].kind == "bot"]

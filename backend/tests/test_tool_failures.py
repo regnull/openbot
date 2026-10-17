@@ -128,3 +128,25 @@ async def test_an_mcp_call_that_never_answers_times_out():
                  timeout=lambda: 0.05)
     out = await asyncio.wait_for(tool.ainvoke({"x": "1"}), 5)
     assert is_failure(ToolMessage(out, tool_call_id="c")) and "did not answer within 0.05s" in out
+
+
+async def test_a_servers_own_timeout_keeps_its_own_error():
+    async def slow_server(x: str) -> str:
+        raise TimeoutError("upstream read timed out")
+
+    tool = _wrap(StructuredTool.from_function(coroutine=slow_server, name="t", description="t"), "linear__t", 400)
+    out = await tool.ainvoke({"x": "1"})
+    assert out == "error: TimeoutError: upstream read timed out"
+
+
+async def test_a_raised_error_is_capped(settings):
+    async def huge(x: str) -> str:
+        raise RuntimeError("x" * 50_000)
+
+    settings.tool_output_cap = 1000
+    script = [ai(tool_calls=[call("huge", x="1")]), ai("ok")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["huge"])
+    services.registry.register(StructuredTool.from_function(coroutine=huge, name="huge", description="h"))
+    await services.runner.execute(run.id)
+    [result] = [e for e in await events(services, run.id) if e.type == "tool_result"]
+    assert result.payload["content"].startswith("error: RuntimeError") and len(result.payload["content"]) < 1100

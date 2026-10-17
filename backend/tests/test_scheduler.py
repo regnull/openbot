@@ -201,3 +201,16 @@ async def test_self_addressed_reminder_wakes_the_scheduling_bot(services):
             InboxItem.actor_id == eng_id, InboxItem.message_id == message.id
         ))).scalar_one_or_none()
         assert woken is not None
+
+
+@pytest.mark.asyncio
+async def test_a_job_whose_thread_was_deleted_is_cancelled_not_retried(services):
+    from openbot.db.models import Thread
+    job_id = await _job(services)
+    async with services.session_factory() as session:
+        job = await session.get(ScheduledMessage, job_id)
+        (await session.get(Thread, job.thread_id)).deleted_at = utcnow()
+        await session.commit()
+    await Scheduler(services).run_due()
+    job = await _get(services, job_id)
+    assert job.status == "cancelled" and job.attempts == 1

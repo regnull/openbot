@@ -5,7 +5,7 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from langchain.agents import create_agent
@@ -160,7 +160,8 @@ REPORT_MIN_CHARS = 500
 def compose_reply(reports: list[str], final_text: str) -> str:
     """The thread message a run posts. Only the last turn's text used to be posted, so an engineer that
     wrote its full report next to one more tool call, then closed with "report above is complete",
-    handed the other bots a pointer to a report nobody could see. Reports come first, in order."""
+    handed the other bots a pointer to a report nobody could see. Reports come first, in order. Only
+    the final text addresses anyone: the poster parses mentions from it alone (see `mention_text`)."""
     parts = [r for r in reports if r != final_text.strip()]
     if not parts:
         return final_text
@@ -174,6 +175,7 @@ class RunProgress:
     reply: str = ""  # text of the last finished model turn
     streaming: str = ""  # text of the turn still streaming
     tool_calls: int = 0
+    reports: list[str] = field(default_factory=list)  # long text sent alongside tool calls; see compose_reply
 
 
 @dataclass(slots=True)
@@ -342,6 +344,12 @@ class Runner:
                 )
             return run
 
+    async def _reports_so_far(self, run_id: str) -> list[str]:
+        async with self.s.session_factory() as session:
+            rows = (await session.execute(select(RunEvent.payload).where(RunEvent.run_id == run_id, RunEvent.type == "text")
+                                          .order_by(RunEvent.seq))).scalars().all()
+        return [p["content"].strip() for p in rows if p.get("report")]
+
     async def _record(self, run: Run, seq: int, type_: str, payload: dict) -> int:
         async with self.s.session_factory() as session:
             ev = RunEvent(run_id=run.id, seq=seq, type=type_, payload=payload)
@@ -368,7 +376,7 @@ class Runner:
     ) -> None:
         """Keep what a cancelled run had written: the reply still streaming, else the last finished turn.
         Not delivered, so a half-written @mention wakes nobody. Best-effort: the cancel must still land."""
-        text = progress.streaming if progress.streaming.strip() else progress.reply
+        text = compose_reply(progress.reports, progress.streaming if progress.streaming.strip() else progress.reply)
         if not text.strip() and not progress.tool_calls:
             return
         try:
@@ -570,7 +578,7 @@ class Runner:
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
             # Marks "error: ..." tool results as errors and ends a run stuck repeating one failing call.
-            ToolFailureMiddleware(st.max_repeated_tool_failures),
+            ToolFailureMiddleware(st.max_repeated_tool_failures, st.tool_output_cap),
             RunMessagesSummarization(
                 model,
                 trigger=("tokens", st.summary_trigger_tokens),
@@ -634,7 +642,6 @@ class Runner:
     ) -> tuple[str, dict | None, int, dict[str, int | float]]:
         progress = progress if progress is not None else RunProgress()
         final_text, interrupt = "", None
-        reports: list[str] = []   # substantial text a turn sent alongside tool calls; see compose_reply
         usage = empty_usage()
         # Middleware nodes that rewrite state (summarization: RemoveMessage(all) + summary + kept messages)
         # re-emit earlier AI messages in their update. Those are not new model calls: counting them again
@@ -772,10 +779,11 @@ class Runner:
                             )
                         if _text(m):
                             final_text = _text(m)
-                            if m.tool_calls and len(final_text.strip()) >= REPORT_MIN_CHARS:
-                                reports.append(final_text.strip())
-                            seq = await self._record(run, seq, "text", {"content": final_text})
-        return compose_reply(reports, final_text), interrupt, seq, usage
+                            report = bool(m.tool_calls) and len(final_text.strip()) >= REPORT_MIN_CHARS
+                            if report:
+                                progress.reports.append(final_text.strip())
+                            seq = await self._record(run, seq, "text", {"content": final_text, "report": report})
+        return final_text, interrupt, seq, usage
 
     async def execute(self, run_id: str, resume: Command | None = None) -> None:
         async with self.s.session_factory() as session:
@@ -808,6 +816,10 @@ class Runner:
         }
         started = time.monotonic()
         progress, hop = RunProgress(), 0
+        if resume is not None:
+            # A run paused on ask_human resumes in a fresh _stream; reports from before the pause belong
+            # in its reply too.
+            progress.reports = await self._reports_so_far(run.id)
         try:
             system_prompt, inputs, hop = await self._prepare(bot, thread, run)
             workspace_root = thread_workspace_root(
@@ -924,14 +936,16 @@ class Runner:
                     )
                     await self._drop_checkpoint(run.id)
                 return
-            if final_text.strip():
+            reply = compose_reply(progress.reports, final_text)
+            if reply.strip():
                 async with self.s.session_factory() as session:
                     res = await post_message(
                         self.s,
                         session,
                         thread_id=thread.id,
                         sender=bot,
-                        content=final_text,
+                        content=reply,
+                        mention_text=final_text,
                         hop=hop,
                         run_id=run.id,
                     )

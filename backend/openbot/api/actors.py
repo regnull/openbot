@@ -100,6 +100,8 @@ async def message_actor(handle: str, body: ActorMessageCreate, session: AsyncSes
                                      created_by=sender, external_ref=body.external_ref)
     try:
         res = await post_message(services, session, thread_id=thread.id, sender=sender, content=body.content, to_handles=[handle])
+    except LookupError as e:       # deleted between the lookup above and the post
+        raise HTTPException(404, "thread not found") from e
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     parts = await participants_for(session, [thread.id])

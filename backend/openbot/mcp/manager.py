@@ -99,15 +99,18 @@ def _wrap(tool: BaseTool, name: str, cap_chars: int, workspace_root=None,
 
     async def run(**kwargs: Any) -> str:
         kwargs = _drop_unset(kwargs, required)
+        deadline = None
         try:
             # Invoking with a tool call (not a bare dict) yields a ToolMessage, which is the only place
             # the adapter surfaces the server's isError status.
             # A server that never answers held a run (and its worker slot) for 19 minutes; read the
             # limit per call so a Settings change applies without reconnecting.
             limit = float(timeout() or 0)
-            call = tool.ainvoke({"name": tool.name, "args": kwargs, "id": "mcp", "type": "tool_call"})
-            msg = await (asyncio.wait_for(call, limit) if limit > 0 else call)
-        except TimeoutError:
+            async with asyncio.timeout(limit if limit > 0 else None) as deadline:
+                msg = await tool.ainvoke({"name": tool.name, "args": kwargs, "id": "mcp", "type": "tool_call"})
+        except TimeoutError as e:
+            if deadline is None or not deadline.expired():         # the server's or transport's own timeout, not ours
+                return cap(f"error: {type(e).__name__}: {e}", cap_chars, workspace_root=workspace_root)
             return f"error: the MCP server did not answer within {limit:g}s; the call was abandoned"
         except Exception as e:  # noqa: BLE001 - see docstring
             return cap(f"error: {type(e).__name__}: {e}", cap_chars, workspace_root=workspace_root)

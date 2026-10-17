@@ -20,6 +20,7 @@ from openbot.db.models import (
     Message,
     Run,
     ScheduledMessage,
+    Thread,
     ThreadParticipant,
     utcnow,
 )
@@ -239,6 +240,9 @@ class BotActor(_Worker):
         s = self.system.s
         try:
             async with s.session_factory() as session:
+                thread = await session.get(Thread, thread_id)
+                if thread is None or thread.deleted_at is not None:
+                    return          # a deleted thread's holds are never released
                 still_queued = (await session.execute(select(InboxItem.id).where(
                     InboxItem.actor_id == self.actor_id, InboxItem.thread_id == thread_id,
                     InboxItem.kind == "message", InboxItem.status == "queued").limit(1))).first()
@@ -525,9 +529,18 @@ class ActorSystem:
             await session.commit()
         for i in queued:
             await self.s.bus.publish("inbox.updated", i.thread_id, to_json(InboxItemOut, i))
+        cancelled = await self._cancel_and_wait(open_runs)
+        async with self.s.session_factory() as session:
+            for thread_id in sorted({i.thread_id for i in queued}):
+                await publish_waiters(self.s, session, thread_id)
+        await self.s.bus.publish("bots.updated", None, {"id": actor_id, "active": False})
+        return {"cancelled_runs": cancelled, "purged_items": len(queued)}
+
+    async def _cancel_and_wait(self, open_runs: list[Run]) -> int:
+        """Cancel each run; wait (bounded) for the live ones to actually end. Returns how many were cancelled."""
         cancelled, live = 0, []
         for run in open_runs:
-            w = self._workers.get(actor_id)
+            w = self._workers.get(run.actor_id)
             task = w.current_task if isinstance(w, BotActor) and w.current_run_id == run.id else None
             if await self.cancel_run(run.id):
                 cancelled += 1
@@ -535,11 +548,7 @@ class ActorSystem:
                     live.append(task)
         if live:
             await asyncio.wait(live, timeout=10)
-        async with self.s.session_factory() as session:
-            for thread_id in sorted({i.thread_id for i in queued}):
-                await publish_waiters(self.s, session, thread_id)
-        await self.s.bus.publish("bots.updated", None, {"id": actor_id, "active": False})
-        return {"cancelled_runs": cancelled, "purged_items": len(queued)}
+        return cancelled
 
     async def close_thread(self, thread_id: str) -> dict[str, int]:
         """Stop everything going on in a thread that is being deleted: queued mail for anyone is
@@ -563,18 +572,9 @@ class ActorSystem:
             await session.commit()
         for i in queued:
             await self.s.bus.publish("inbox.updated", i.thread_id, to_json(InboxItemOut, i))
-        cancelled, live = 0, []
-        for run in open_runs:
-            w = self._workers.get(run.actor_id)
-            task = w.current_task if isinstance(w, BotActor) and w.current_run_id == run.id else None
-            if await self.cancel_run(run.id):
-                cancelled += 1
-                if task is not None:
-                    live.append(task)
-        if live:
-            await asyncio.wait(live, timeout=10)
-        # A cancelled run posts its partial reply and a "cancelled" notice, which queue fresh items (the
-        # human's notification among them) for a thread that is about to disappear.
+        cancelled = await self._cancel_and_wait(open_runs)
+        # The caller marks the thread deleted first, so what a cancelled run still posts wakes nobody;
+        # this sweep only catches mail queued in the moment between that and the first sweep above.
         async with self.s.session_factory() as session:
             late = (await session.execute(select(InboxItem).where(InboxItem.thread_id == thread_id, InboxItem.status == "queued"))).scalars().all()
             for i in late:
