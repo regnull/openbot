@@ -88,6 +88,26 @@ def test_system_prompt_contents():
     assert "schedule_message" in p and "active for as long as it has a message scheduled" in p
     # Third-party comments/notes must be signed so the handle doesn't tag an unrelated user there.
     assert 'If the system does not support Markdown, sign it as "OpenBot - `@eng`".' in p
+    # The scratchpad instruction is static prompt-cached text: every bot is told to keep task progress
+    # and required task info in its scratchpad, updating it as work proceeds. The pad's live content
+    # is injected separately into the dynamic part (see test_the_scratchpad_goes_in_the_dynamic_prompt_only).
+    assert (
+        "# Task scratchpad\nKeep track of your task progress here" in p
+        and "update it through the `scratchpad` tool as work proceeds" in p
+    )
+
+
+def test_scratchpad_instruction_lives_in_the_stable_template():
+    """The scratchpad how-to is static, so it belongs in the prompt-cached stable template; the
+    pad's live content is appended to the dynamic part at run time, with no new placeholder."""
+    from openbot.runtime import prompt as prompt_module
+
+    stable_text = prompt_module.STABLE_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
+    assert "# Task scratchpad\nKeep track of your task progress here" in stable_text
+    assert "update it through the `scratchpad` tool as work proceeds" in stable_text
+    # The dynamic template carries the live pad content, so it must not pre-state the instruction
+    # (that would duplicate the stable section in every prompt).
+    assert "scratchpad" not in prompt_module.DYNAMIC_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
 
 
 def test_system_prompt_template_uses_only_the_supported_placeholders():
