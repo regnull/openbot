@@ -1,0 +1,250 @@
+"""The scratchpad tool: one per-bot notepad in the database, injected into the system prompt."""
+
+import pytest_asyncio
+from langchain.tools import ToolRuntime
+
+from openbot.db.models import Actor, BotScratchpad, Run, Thread
+from openbot.runtime.delivery import create_thread, human_actor
+from openbot.runtime.prompt import build_system_prompt_parts
+from openbot.tools.builtin.scratchpad import (
+    MAX_SCRATCHPAD_CHARS,
+    load_scratchpad,
+    scratchpad,
+)
+from openbot.tools.context import RunContext
+from tests.factories import bot_actor
+from tests.test_runner import get, make
+
+
+@pytest_asyncio.fixture
+async def _no_actor_runs(services):
+    """Nothing here needs a run; stop the actor system so no background run races the assertions."""
+    await services.actors.stop()
+
+
+def rt(services, bot, thread_id):
+    ctx = RunContext(
+        bot.id, bot.handle, bot.name, thread_id, "run", services.settings.workspace_root, services
+    )
+    return ToolRuntime(
+        context=ctx,
+        store=services.store,
+        state={},
+        tool_call_id="c",
+        config={},
+        stream_writer=lambda *_: None,
+    )
+
+
+async def setup(services):
+    async with services.session_factory() as s:
+        eng, rev = bot_actor("eng"), bot_actor("rev")
+        s.add_all([eng, rev])
+        await s.commit()
+        you = await human_actor(s)
+        t1 = await create_thread(services, s, title="t1", handles=["eng", "rev"], created_by=you)
+        t2 = await create_thread(services, s, title="t2", handles=["eng"], created_by=you)
+        return eng, rev, t1, t2
+
+
+async def saved(services, actor_id):
+    async with services.session_factory() as s:
+        return await load_scratchpad(s, actor_id)
+
+
+async def test_read_reports_an_empty_pad_and_write_replaces(services, _no_actor_runs):
+    eng, _rev, t1, _t2 = await setup(services)
+
+    out = await scratchpad.ainvoke({"action": "read", "runtime": rt(services, eng, t1.id)})
+    assert out == "Scratchpad is empty."
+
+    out = await scratchpad.ainvoke(
+        {
+            "action": "write",
+            "content": "branch: feat/x\nPR 12 open",
+            "runtime": rt(services, eng, t1.id),
+        }
+    )
+    assert out == "Scratchpad replaced (25 characters)."
+    assert await saved(services, eng.id) == "branch: feat/x\nPR 12 open"
+
+    out = await scratchpad.ainvoke(
+        {"action": "write", "content": "fresh", "runtime": rt(services, eng, t1.id)}
+    )
+    assert out == "Scratchpad replaced (5 characters)."
+    assert await saved(services, eng.id) == "fresh"
+
+    out = await scratchpad.ainvoke(
+        {"action": "write", "content": "", "runtime": rt(services, eng, t1.id)}
+    )
+    assert out == "Scratchpad replaced (0 characters)."
+    assert await saved(services, eng.id) == ""
+
+
+async def test_append_joins_without_eating_lines(services, _no_actor_runs):
+    eng, _rev, t1, _t2 = await setup(services)
+    await scratchpad.ainvoke(
+        {"action": "write", "content": "part one", "runtime": rt(services, eng, t1.id)}
+    )
+    out = await scratchpad.ainvoke(
+        {"action": "append", "content": "part two", "runtime": rt(services, eng, t1.id)}
+    )
+    assert out == "Scratchpad appended to (17 characters)."
+    assert await saved(services, eng.id) == "part one\npart two"
+
+    await scratchpad.ainvoke(
+        {"action": "write", "content": "line\n", "runtime": rt(services, eng, t1.id)}
+    )
+    await scratchpad.ainvoke(
+        {"action": "append", "content": "next", "runtime": rt(services, eng, t1.id)}
+    )
+    assert await saved(services, eng.id) == "line\nnext"  # no doubled newline
+
+    await scratchpad.ainvoke(
+        {"action": "append", "content": "", "runtime": rt(services, eng, t1.id)}
+    )
+    assert await saved(services, eng.id) == "line\nnext"
+
+
+async def test_pads_are_per_bot_across_threads(services, _no_actor_runs):
+    """Keyed by bot, not thread: notes made in one conversation show up in another."""
+    eng, rev, t1, t2 = await setup(services)
+    await scratchpad.ainvoke(
+        {"action": "write", "content": "eng notes", "runtime": rt(services, eng, t1.id)}
+    )
+    await scratchpad.ainvoke(
+        {"action": "write", "content": "rev notes", "runtime": rt(services, rev, t1.id)}
+    )
+
+    assert await saved(services, eng.id) == "eng notes"
+    assert await saved(services, rev.id) == "rev notes"
+    assert (
+        await scratchpad.ainvoke({"action": "read", "runtime": rt(services, eng, t2.id)})
+        == "eng notes"
+    )
+    assert (
+        await scratchpad.ainvoke({"action": "read", "runtime": rt(services, rev, t2.id)})
+        == "rev notes"
+    )
+
+
+async def test_pads_survive_new_sessions(services, _no_actor_runs):
+    """The table is keyed by actor only, so a fresh session (as after a restart) sees the same row."""
+    eng, _rev, t1, _t2 = await setup(services)
+    await scratchpad.ainvoke(
+        {"action": "write", "content": "carried over", "runtime": rt(services, eng, t1.id)}
+    )
+    async with services.session_factory() as s:
+        assert await load_scratchpad(s, eng.id) == "carried over"
+
+
+async def test_oversized_writes_are_rejected_with_guidance(services, _no_actor_runs):
+    eng, _rev, t1, _t2 = await setup(services)
+    out = await scratchpad.ainvoke(
+        {
+            "action": "write",
+            "content": "x" * (MAX_SCRATCHPAD_CHARS + 1),
+            "runtime": rt(services, eng, t1.id),
+        }
+    )
+    assert out.startswith("error:")
+    assert "pruned" in out and "action=write" in out
+    assert await saved(services, eng.id) == ""
+
+    await scratchpad.ainvoke(
+        {
+            "action": "write",
+            "content": "a" * MAX_SCRATCHPAD_CHARS,
+            "runtime": rt(services, eng, t1.id),
+        }
+    )
+    out = await scratchpad.ainvoke(
+        {"action": "append", "content": "more", "runtime": rt(services, eng, t1.id)}
+    )
+    assert out.startswith("error:")
+    assert await saved(services, eng.id) == "a" * MAX_SCRATCHPAD_CHARS
+
+    # Exactly at the cap is fine, and an empty append is a no-op that still reports the size.
+    out = await scratchpad.ainvoke(
+        {"action": "append", "content": "", "runtime": rt(services, eng, t1.id)}
+    )
+    assert out == f"Scratchpad appended to ({MAX_SCRATCHPAD_CHARS} characters)."
+
+
+def test_the_scratchpad_goes_in_the_dynamic_prompt_only():
+    bot = bot_actor("eng")
+    bot.id = "e"
+    kw = {
+        "bot": bot,
+        "all_bots": [bot],
+        "participants": ["You"],
+        "memories": [],
+        "workspace_root": "/w",
+        "older_count": 0,
+        "tool_names": ["scratchpad"],
+    }
+    stable, dynamic = build_system_prompt_parts(**kw, scratchpad="step 1 done\nnow: write tests")
+    assert "# Your scratchpad" in dynamic and "now: write tests" in dynamic
+    assert "# Your scratchpad" not in stable
+    empty_dynamic = build_system_prompt_parts(**kw, scratchpad="")[1]
+    assert "# Your scratchpad" in empty_dynamic and "nothing saved yet" in empty_dynamic
+    assert "# Your scratchpad" not in build_system_prompt_parts(**kw)[1]
+
+
+async def test_the_next_run_sees_the_saved_pad(settings):
+    """The pad outlives the run that wrote it: the next run's system prompt carries it."""
+    from tests.fakes import ai, call
+
+    script = [
+        ai(tool_calls=[call("scratchpad", action="write", content="found it in runner.py:624")]),
+        ai("on it"),
+    ]
+    services, eng, t, run = await make(settings, {"eng": script}, tool_names=["scratchpad"])
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "completed"
+
+    async with services.session_factory() as s:
+        bot, thread, again = (
+            await s.get(Actor, eng.id),
+            await s.get(Thread, t.id),
+            await s.get(Run, run.id),
+        )
+    prompt, _inputs, _hop = await services.runner._prepare(bot, thread, again)
+    dynamic = prompt.content[1]["text"]
+    assert "# Your scratchpad" in dynamic and "runner.py:624" in dynamic
+
+
+async def test_a_bot_without_the_tool_still_gets_its_saved_pad_injected(settings):
+    """Injection is per-bot, not gated on the tool list: losing the tool drops the tool, not the notes."""
+    services, eng, t, run = await make(settings, {"eng": []}, tool_names=["run_shell"])
+    async with services.session_factory() as s:
+        s.add(BotScratchpad(actor_id=eng.id, content="kept notes"))
+        await s.commit()
+        bot, thread, again = (
+            await s.get(Actor, eng.id),
+            await s.get(Thread, t.id),
+            await s.get(Run, run.id),
+        )
+    prompt, _inputs, _hop = await services.runner._prepare(bot, thread, again)
+    assert (
+        "# Your scratchpad" in prompt.content[1]["text"]
+        and "kept notes" in prompt.content[1]["text"]
+    )
+
+
+async def test_every_agent_carries_the_tool_even_when_the_profile_omits_it(services, monkeypatch):
+    """Bots whose saved tool list predates the scratchpad (or omits it) still get the tool: the runner
+    always resolves it, because its saved content is injected into every run's system prompt."""
+    from openbot.runtime import runner as runner_mod
+
+    captured = {}
+
+    def fake_create_agent(model, tools, **kwargs):
+        captured["tools"] = tools
+        return object()
+
+    monkeypatch.setattr(runner_mod, "create_agent", fake_create_agent)
+    bot = bot_actor("old", tool_names=[])
+    bot.id = "o1"
+    services.runner._build_agent(bot, "system prompt")
+    assert "scratchpad" in [t.name for t in captured["tools"]]

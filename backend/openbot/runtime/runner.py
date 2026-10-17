@@ -57,6 +57,7 @@ from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.runtime.tool_failures import ToolFailureMiddleware
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.scheduling import SCHEDULING_TOOLS
+from openbot.tools.builtin.scratchpad import load_scratchpad
 from openbot.tools.builtin.todo import load_todos, todo_list_section
 from openbot.tools.builtin.workspace import thread_workspace_root
 from openbot.tools.context import RunContext
@@ -618,6 +619,9 @@ class Runner:
                 if "todo_write" in bot.bot.tool_names
                 else []
             )
+            # The bot's cross-thread working memory, injected at the start of every run. Loaded for
+            # every bot: one indexed lookup, and every bot gets the tool granted.
+            scratchpad = await load_scratchpad(session, bot.id)
         by_id = {a.id: a for a in all_actors}
         by_handle = {a.handle: a for a in all_actors}
         participants = [by_id[p.actor_id].name for p in parts if p.actor_id in by_id]
@@ -679,6 +683,7 @@ class Runner:
             default_bot_handle=default_bot_handle,
             scoped=scoped,
             todos=todos,
+            scratchpad=scratchpad,
         )
         prompt = SystemMessage(
             content=[
@@ -779,6 +784,9 @@ class Runner:
     def _build_agent(self, bot: Actor, system_prompt: str, triggers: tuple[int, int] | None = None):
         p = bot.bot
         tools = [
+            # The scratchpad's saved content is injected into every run's system prompt, so every
+            # agent carries the tool even when a profile or old row omits it from its tool list.
+            *self.s.registry.resolve(["scratchpad"]),
             *self.s.registry.resolve(list(p.tool_names)),
             *CORE_TOOLS,
             *SCHEDULING_TOOLS,

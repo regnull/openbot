@@ -6,6 +6,7 @@ from string import Template
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from openbot.db.models import Actor, Message
+from openbot.tools.builtin.scratchpad import scratchpad_section
 from openbot.tools.builtin.todo import todo_list_section
 
 SYSTEM_PROMPT_FILE = Path(__file__).with_name("system_prompt.md")
@@ -164,6 +165,7 @@ def build_system_prompt(
     default_bot_handle: str | None = None,
     scoped: bool = False,
     todos: list[dict] | None = None,
+    scratchpad: str | None = None,
 ) -> str:
     stable, dynamic = build_system_prompt_parts(
         bot=bot,
@@ -176,6 +178,7 @@ def build_system_prompt(
         default_bot_handle=default_bot_handle,
         scoped=scoped,
         todos=todos,
+        scratchpad=scratchpad,
     )
     return stable + dynamic
 
@@ -192,6 +195,7 @@ def build_system_prompt_parts(
     default_bot_handle: str | None = None,
     scoped: bool = False,
     todos: list[dict] | None = None,
+    scratchpad: str | None = None,
 ) -> tuple[str, str]:
     roster = (
         "\n".join(
@@ -244,6 +248,8 @@ def build_system_prompt_parts(
     }
     stable = _STABLE_SYSTEM_PROMPT_TEMPLATE.substitute(**values)
     dynamic = _DYNAMIC_SYSTEM_PROMPT_TEMPLATE.substitute(**values)
+    if scratchpad is not None:
+        dynamic += f"\n\n{scratchpad_section(scratchpad)}"
     if todos:
         dynamic += f"\n\n{todo_list_section(todos)}"
     repository_instructions = load_repository_instructions(

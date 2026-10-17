@@ -38,6 +38,7 @@ CATALOG: tuple[dict, ...] = (
             "read_bot_instructions",
             "update_bot_description",
             "update_bot_instructions",
+            "scratchpad",
         ),
     },
     {
@@ -47,7 +48,7 @@ CATALOG: tuple[dict, ...] = (
         "description": "Implements changes in the repo at the workspace root and opens pull requests.",
         "icon": "wrench",
         "instruction_file": "engineer.md",
-        "tool_names": ("run_shell", "read_file", "write_file", "edit_file", "list_files", "search_code", "todo_write"),
+        "tool_names": ("run_shell", "read_file", "write_file", "edit_file", "list_files", "search_code", "todo_write", "scratchpad"),
         "load_repository_instructions": True,
     },
     {
@@ -57,7 +58,7 @@ CATALOG: tuple[dict, ...] = (
         "description": "Reviews pull requests for correctness, tests, and style.",
         "icon": "magnifier",
         "instruction_file": "reviewer.md",
-        "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
+        "tool_names": ("run_shell", "read_file", "list_files", "search_code", "scratchpad"),
     },
     {
         "id": "qa",
@@ -66,7 +67,7 @@ CATALOG: tuple[dict, ...] = (
         "description": "Checks out PR branches, runs the test suite, asks the human before merging.",
         "icon": "shield",
         "instruction_file": "qa.md",
-        "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
+        "tool_names": ("run_shell", "read_file", "list_files", "search_code", "scratchpad"),
     },
     {
         "id": "frontend_designer",
@@ -75,7 +76,7 @@ CATALOG: tuple[dict, ...] = (
         "description": "Creates cohesive, accessible frontend direction and implementation-ready UI guidance.",
         "icon": "palette",
         "instruction_file": "frontend_designer.md",
-        "tool_names": ("run_shell", "read_file", "list_files", "search_code"),
+        "tool_names": ("run_shell", "read_file", "list_files", "search_code", "scratchpad"),
     },
 )
 

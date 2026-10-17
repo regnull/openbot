@@ -60,7 +60,7 @@ When the human (@you) asks for something:
 6. Finish with a short status for the human: what was done, PR links, anything blocked.
 Keep messages short and action-oriented. One or two model turns per message is the norm.
 Only write @handle when you want that bot to act now. When merely referring to a bot, use its plain name without @.""",
-        "tool_names": ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"], "approval_tools": [],
+        "tool_names": ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions", "scratchpad"], "approval_tools": [],
     },
     {
         "handle": "engineer", "name": "Engineer",
@@ -90,7 +90,7 @@ PR description conventions:
 CI gate before hand-off:
 - Before mentioning @reviewer or any other bot, run local `ruff check`/lint plus full test suites, push, then
   `gh pr checks <n> --watch` until all checks pass. Never request review on a red CI. CI must go green before QA picks it up.""",
-        "tool_names": ["run_shell", "read_file", "write_file", "edit_file", "list_files", "search_code", "todo_write"], "approval_tools": [],
+        "tool_names": ["run_shell", "read_file", "write_file", "edit_file", "list_files", "search_code", "todo_write", "scratchpad"], "approval_tools": [],
     },
     {
         "handle": "reviewer", "name": "Reviewer",
@@ -118,7 +118,7 @@ Every verdict hands off to exactly one bot. If changes are required, reply with 
 repeats the PR number and names each file and line, and mention @engineer: it will see only your message. Do not also
 mention QA; the engineer will send the fixed PR back to you, and you hand it to QA once it is good. If it is good, say
 so, include the PR number, and mention @qa to test and merge. Be concrete and brief.""",
-        "tool_names": ["run_shell", "read_file", "list_files", "search_code"], "approval_tools": [],
+        "tool_names": ["run_shell", "read_file", "list_files", "search_code", "scratchpad"], "approval_tools": [],
     },
     {
         "handle": "qa", "name": "QA",
@@ -139,7 +139,7 @@ If tests fail, reply with the failure details and mention @engineer. If they pas
 then call ask_human to request permission to merge (include the PR link and test summary). Only after an explicit yes, run
 `gh pr merge <n> --squash --delete-branch`, switch back to the default branch, and report completion, mentioning
 @chief_of_staff if they are in the thread.""",
-        "tool_names": ["run_shell", "read_file", "list_files", "search_code"], "approval_tools": [],
+        "tool_names": ["run_shell", "read_file", "list_files", "search_code", "scratchpad"], "approval_tools": [],
     },
 ]
 
@@ -182,6 +182,35 @@ async def seed_demo_bots(services) -> int:
 
 
 SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon", "load_repository_instructions")
+
+SCRATCHPAD_GRANT_DONE_KEY = "_scratchpad_grant_done"
+
+
+async def grant_scratchpad_to_existing_bots(services) -> None:
+    """One-time grant of the `scratchpad` tool to bots that predate it, run from `start_background`.
+
+    Seed and catalog bots get the tool from their definitions; the API default toolset now includes
+    it for new bots created without an explicit tool list. Existing rows are caught here, once: the
+    `_scratchpad_grant_done` app setting marks the grant done, so bots a human later edits to remove
+    the tool (an explicit choice) are not re-granted on the next restart. Idempotent across concurrent
+    boots by committing the marker inside the same transaction as the updates.
+    """
+    async with services.session_factory() as session:
+        done = await session.get(AppSetting, SCRATCHPAD_GRANT_DONE_KEY)
+        if done is not None:
+            return
+        bots = (await session.execute(select(Actor).where(Actor.kind == "bot"))).scalars().all()
+        granted = 0
+        for bot in bots:
+            tools = bot.bot.tool_names
+            if "scratchpad" not in tools:
+                # Append, don't dedupe or sort: keep the operator's tool order as-is.
+                bot.bot.tool_names = [*tools, "scratchpad"]
+                granted += 1
+        session.add(AppSetting(key=SCRATCHPAD_GRANT_DONE_KEY, value=True, updated_at=utcnow()))
+        await session.commit()
+    if granted:
+        log.info("granted the scratchpad tool to %d existing bots", granted)
 
 
 async def sync_demo_bots(services) -> int:

@@ -183,6 +183,17 @@ class ThreadTodoList(TimestampMixin, Base):
     items: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
 
 
+class BotScratchpad(TimestampMixin, Base):
+    """A bot's persistent scratchpad: one row per bot, independent of threads.
+
+    The tool (openbot/tools/builtin/scratchpad.py) writes it; the prompt assembler injects the
+    saved content into the bot's dynamic system prompt on every run, in every thread. It is the
+    bot's cross-thread working memory — the todo list is per-thread, this is per-bot."""
+    __tablename__ = "bot_scratchpads"
+    actor_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
 class InboxItem(Base):
     __tablename__ = "inbox_items"
     __table_args__ = (Index("ix_inbox_actor_status_created", "actor_id", "status", "created_at"),)

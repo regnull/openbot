@@ -406,6 +406,7 @@ def test_selectable_names():
         "update_bot_description",
         "update_bot_instructions",
         "todo_write",
+        "scratchpad",
     ]
 
 

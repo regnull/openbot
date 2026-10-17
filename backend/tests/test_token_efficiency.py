@@ -283,7 +283,7 @@ def test_seeded_division_of_labour():
 
     default_limit = Settings(_env_file=None).max_model_calls_per_run
     bots = {b["handle"]: b for b in DEMO_BOTS}
-    assert bots["chief_of_staff"]["tool_names"] == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
+    assert bots["chief_of_staff"]["tool_names"] == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions", "scratchpad"]
     assert bots["chief_of_staff"].get("model_settings", {}) == {}
     for collection in (DEMO_BOTS, CATALOG):
         for entry in collection:
@@ -305,7 +305,7 @@ async def test_seed_persists_model_settings(services):
     async with services.session_factory() as s:
         chief = (await s.execute(select(Actor).where(Actor.handle == "chief_of_staff"))).scalar_one()
     assert chief.bot.model_settings == {}
-    assert chief.bot.tool_names == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions"]
+    assert chief.bot.tool_names == ["create_bot", "read_bot_description", "read_bot_instructions", "update_bot_description", "update_bot_instructions", "scratchpad"]
     assert services.runner.model_call_limit(chief) == services.settings.max_model_calls_per_run
 
 
