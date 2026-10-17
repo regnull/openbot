@@ -371,9 +371,12 @@ def test_context_editing_defaults_leave_room_for_a_few_turns_of_reading():
     cycled without writing (2026-09-17). The defaults now allow three or four turns of reading before
     anything is touched, and each clearing reclaims a big chunk so clearings stay rare (cache warm)."""
     from openbot.config import Settings
+    from openbot.runtime.context_limits import derive_trigger_thresholds
     s = Settings(_env_file=None)
-    assert 30000 <= s.context_trigger_tokens <= 60000
-    assert 8000 <= s.context_clear_at_least <= s.context_trigger_tokens // 2
+    assert s.context_trigger_tokens is None, "derived from the model's window unless pinned"
+    _summary, clear = derive_trigger_thresholds(None, summary_trigger=None, clear_trigger=None)
+    assert 30000 <= clear <= 60000, "a model the catalog does not know keeps the old fixed trigger"
+    assert 8000 <= s.context_clear_at_least <= clear // 2
 
 
 async def test_clearing_also_drops_write_file_contents_from_the_transcript(settings):
@@ -438,8 +441,13 @@ def test_middleware_order_is_limit_then_summarize_then_clear(settings):
 def test_summarization_defaults_sit_above_the_clearing_trigger():
     """Summarize well after clearing, and keep two full turns of ~10 reads (11 messages each) verbatim."""
     from openbot.config import Settings
+    from openbot.runtime.context_limits import derive_trigger_thresholds
     s = Settings(_env_file=None)
-    assert s.context_trigger_tokens < s.summary_trigger_tokens <= 80000
+    summary, clear = derive_trigger_thresholds(None, summary_trigger=None, clear_trigger=None)
+    assert clear < summary <= 80000
+    for window, output in ((8_000, None), (128_000, 16_384), (200_000, 64_000), (1_000_000, 32_000)):
+        summary, clear = derive_trigger_thresholds(window, summary_trigger=None, clear_trigger=None, output_limit=output)
+        assert 0 < clear < summary < window, f"derived triggers for a {window}-token window must clear first"
     assert 22 <= s.summary_keep_messages <= 40
 
 
@@ -591,6 +599,90 @@ def test_a_cleared_call_keeps_its_clipped_args_and_a_digest_of_its_outcome(setti
     assert len(fetch.content) < 400
     assert write.content == "ok", "a result smaller than its digest is left alone"
     assert all(m.content == "x" * 2000 for m in history[4:] if isinstance(m, ToolMessage))
+
+
+def _middleware(settings, triggers=None, model=None):
+    from tests.factories import bot_actor
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    model = model or SummarizingScriptedModel(messages=iter([]))
+    return Runner(services).build_middleware(bot_actor("eng"), model, triggers)
+
+
+def _overflow_request(messages):
+    from langchain.agents.middleware import ModelRequest
+    return ModelRequest(model=ScriptedChatModel(messages=iter([])), messages=messages, system_message=None,
+                        tool_choice=None, tools=[], response_format=None, state={"messages": messages}, runtime=None)
+
+
+def _trigger(summarizer) -> int:
+    return next(c["tokens"] for c in summarizer._trigger_clauses if "tokens" in c)
+
+
+async def test_a_context_overflow_compacts_the_failed_request_and_lowers_this_runs_trigger(settings):
+    """The provider refused a call as too long. The retry gets the request with older messages folded into
+    a summary, cut where no tool result loses its call, and this run's trigger drops below what overflowed
+    so the graph summarizes its stored history next turn instead of overflowing on every later call."""
+    from langchain.agents.middleware import SummarizationMiddleware
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from openbot.runtime.retry import ModelRetryMiddleware
+    mw = _middleware(settings, triggers=(500_000, 300_000))
+    summarizer = next(m for m in mw if isinstance(m, SummarizationMiddleware))
+    retry = next(m for m in mw if isinstance(m, ModelRetryMiddleware))
+    assert retry.on_overflow == summarizer.compact_for_overflow, "the retry recovers through this run's summarizer"
+    history = [HumanMessage("task")] + [m for i in range(30) for m in _turn(1, f"t{i}", 3000)]
+    out = await summarizer.compact_for_overflow(_overflow_request(history))
+    assert out is not None
+    first, kept = out.messages[0], out.messages[1:]
+    assert first.additional_kwargs.get("lc_source") == "summarization" and "SUMMARY" in first.content
+    assert kept and not isinstance(kept[0], ToolMessage), "a kept tool result must keep its call"
+    assert kept == history[len(history) - len(kept):]
+    assert _trigger(summarizer) < 500_000
+    assert summarizer._should_summarize(history, summarizer.token_counter(history)), "next turn summarizes the stored history"
+
+
+async def test_a_long_tool_run_is_really_summarized_not_replaced_by_a_stub(settings):
+    """LangChain trims what it summarizes to the newest 4k tokens and then drops everything before the first
+    human message. A run's only human message is the task at the top, so past 4k the slice was empty, the
+    summary model was never called, and the run's history became "Previous conversation was too long to
+    summarize." The summary call must see the task and the newest work, within the run's trigger."""
+    from langchain.agents.middleware import SummarizationMiddleware
+    from langchain_core.messages import HumanMessage
+    summarizer = next(m for m in _middleware(settings, triggers=(10_000, 6_000)) if isinstance(m, SummarizationMiddleware))
+    task = HumanMessage("implement issue 249")
+    history = [task] + [m for i in range(30) for m in _turn(1, f"t{i}", 3000)]
+    trimmed = summarizer._trim_messages_for_summary(history)
+    assert trimmed[0] is task and trimmed[-1] is history[-1]
+    assert summarizer.token_counter(trimmed) <= 10_000 < summarizer.token_counter(history)
+    ScriptedChatModel.seen.clear()
+    summary = await summarizer._acreate_summary(history)
+    assert summary.startswith("SUMMARY"), summary
+    assert "implement issue 249" in str(ScriptedChatModel.seen[-1][-1].content)
+
+
+async def test_a_history_too_short_for_the_keep_count_still_compacts_on_overflow(settings):
+    from langchain.agents.middleware import SummarizationMiddleware
+    from langchain_core.messages import HumanMessage
+    summarizer = next(m for m in _middleware(settings) if isinstance(m, SummarizationMiddleware))
+    history = [HumanMessage("task " + "x" * 9000)] + _turn(1, "a", 9000) + _turn(1, "b", 9000)
+    out = await summarizer.compact_for_overflow(_overflow_request(history))
+    assert out is not None and out.messages[1:] == history[-2:], "keeps only the latest call and its result"
+    assert await summarizer.compact_for_overflow(_overflow_request([HumanMessage("one huge message")])) is None
+
+
+async def test_each_run_gets_its_own_triggers_and_overflow_state(settings):
+    """One Runner serves concurrent runs on different models: the triggers are arguments, not Runner state
+    (the first cut stored them, and the run id and middleware, on the shared Runner), and one run's
+    overflow must not lower another run's trigger."""
+    from langchain.agents.middleware import ContextEditingMiddleware, SummarizationMiddleware
+    from langchain_core.messages import HumanMessage
+    small, large = _middleware(settings, triggers=(6_000, 4_000)), _middleware(settings, triggers=(140_000, 93_000))
+    s_small, s_large = (next(m for m in mw if isinstance(m, SummarizationMiddleware)) for mw in (small, large))
+    clear_small = next(m for m in small if isinstance(m, ContextEditingMiddleware)).edits[0]
+    assert (_trigger(s_small), clear_small.trigger, _trigger(s_large)) == (6_000, 4_000, 140_000)
+    history = [HumanMessage("task")] + [m for i in range(30) for m in _turn(1, f"t{i}", 3000)]
+    assert await s_large.compact_for_overflow(_overflow_request(history)) is not None
+    assert _trigger(s_small) == 6_000
 
 
 def test_run_summaries_keep_established_facts_and_dead_ends(settings):

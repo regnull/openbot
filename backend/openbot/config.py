@@ -76,9 +76,13 @@ class Settings(BaseSettings):
     direct_anthropic: bool = True        # send OpenRouter `anthropic/...` models to Anthropic directly when a key exists
     tool_output_cap: int = 8000          # max chars of any single tool result the model sees (head + tail kept)
     shell_output_cap: int = 4000         # tighter cap for run_shell, so dumping a file through cat/git show loses to read_file ranges
-    context_trigger_tokens: int = 40000  # clear tool results from older turns once a run's messages exceed this
+    # Context triggers: None means "derive from the model's context window" (OpenCode's compaction
+    # formula, see runtime/context_limits.py) for cataloged models, and fall back to the old fixed
+    # defaults (40000/60000) when the window is unknown. An explicit value (env or the runtime
+    # settings UI) pins the trigger for every model — user intent beats derivation.
+    context_trigger_tokens: int | None = None   # clear tool results from older turns once a run's messages exceed this
     context_clear_at_least: int = 10000  # ...and reclaim at least this many tokens per clearing, so clearings are rare
-    summary_trigger_tokens: int = 60000  # summarize older history into one message once a run's messages exceed this
+    summary_trigger_tokens: int | None = None   # summarize older history into one message once a run's messages exceed this
     summary_keep_messages: int = 24      # ...keeping this many recent messages verbatim (two turns of ~10 tool calls)
     max_model_calls_per_run: int = 60    # model turns per run before the agent is stopped (bots can lower it)
     max_repeated_tool_failures: int = 3  # identical failed tool calls (same args, same error) before a run is stopped; 0 = off

@@ -14,13 +14,17 @@ export function groupSettings(rows: AppSetting[]): SettingGroup[] {
 
 export type Parsed = { value: unknown } | { error: string };
 
-/** Form text to the typed value the API expects; the server re-validates types and ranges. */
-export function parseSettingInput(type: AppSetting["type"], raw: string): Parsed {
+/** Form text to the typed value the API expects; the server re-validates types and ranges.
+ * An optional number may be left empty: "" parses to null, meaning "unset" (e.g. the context
+ * triggers fall back to their derived-from-context-window behavior). */
+export function parseSettingInput(type: AppSetting["type"], raw: string, optional = false): Parsed {
   const text = raw.trim();
   switch (type) {
     case "int":
+      if (text === "" && optional) return { value: null };
       return /^-?\d+$/.test(text) ? { value: Number(text) } : { error: "must be a whole number" };
     case "float": {
+      if (text === "" && optional) return { value: null };
       const n = Number(text);
       return text !== "" && Number.isFinite(n) ? { value: n } : { error: "must be a number" };
     }

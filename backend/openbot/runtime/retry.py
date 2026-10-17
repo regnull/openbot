@@ -27,6 +27,18 @@ above) surface as a generic `APIError` without a status code; those are matched 
 message pattern "model stopped before completing" — the limitation is that a *generic* provider
 error without a status code and without a recognizable message is not retried, by design (it
 could be permanent).
+
+Context overflow ("prompt is too long", "context_length_exceeded", ...) is neither transient
+nor hopeless: the same call retried after compacting the conversation succeeds. See
+`openbot/runtime/context_limits.py` for how an overflow is recognized. `ModelRetryMiddleware`
+takes an optional `on_overflow` callback (the runner passes one that summarizes with the run's
+own summarization middleware and hands back a shrunken `ModelRequest`); when a call fails with
+a context overflow and the callback can shrink the request, the call is retried immediately
+with the smaller request — once, so a summarizer that cannot shrink far enough fails fast
+instead of looping. No callback (or one that returns None) leaves today's behavior: the run
+fails with the provider's error. A second overflow after the summarizing retry is terminal:
+one of the two impossible calls (the new one cannot summarize, the summary call itself cannot
+fit) has failed, and retrying only delays the failure.
 """
 
 from __future__ import annotations
@@ -36,12 +48,15 @@ import email.utils
 import logging
 import random
 import time
+from collections.abc import Awaitable, Callable
 
 import anthropic
 import httpx
 import httpx2
 import openai
 from langchain.agents.middleware import AgentMiddleware, ModelRequest
+
+from openbot.runtime.context_limits import is_context_overflow
 
 log = logging.getLogger(__name__)
 
@@ -140,12 +155,25 @@ def _retry_after(err: Exception, cap: float) -> float | None:
 
 
 class ModelRetryMiddleware(AgentMiddleware):
-    """Re-issue a model call that failed with a transient upstream provider error."""
+    """Re-issue a model call that failed with a transient upstream provider error.
 
-    def __init__(self, max_attempts: int, base_delay: float, backoff_cap: float) -> None:
+    With an `on_overflow` callback, a model call that failed with a context-overflow error is
+    instead retried once on the request the callback returns (the runner's summarizer): see the
+    module docstring. A second overflow on the summarized request fails the call — the run ends
+    with the provider's error instead of looping.
+    """
+
+    def __init__(
+        self,
+        max_attempts: int,
+        base_delay: float,
+        backoff_cap: float,
+        on_overflow: Callable[[ModelRequest], Awaitable[ModelRequest | None]] | None = None,
+    ) -> None:
         self.max_attempts = max(1, max_attempts)  # <1 means "no retries": exactly one attempt
         self.base_delay = base_delay
         self.backoff_cap = backoff_cap
+        self.on_overflow = on_overflow
 
     def _delay(self, attempt: int) -> float:
         """Exponential backoff with a cap and full jitter (attempt is 1-based, the delay before it)."""
@@ -158,14 +186,37 @@ class ModelRetryMiddleware(AgentMiddleware):
         return handler(request)
 
     async def awrap_model_call(self, request: ModelRequest, handler):
-        last: Exception | None = None
-        for attempt in range(1, self.max_attempts + 1):
+        """Retry transient failures; on context overflow, summarize once and retry.
+
+        `shrunk` is set once the `on_overflow` summarizer has produced a compacted request. The
+        retry on it happens immediately (no backoff sleep) and does not consume a transient-retry
+        attempt: a run that has been riding out 429s all day still gets its summarizing retry.
+        A second overflow — with `shrunk` already set — is terminal: raise, don't loop.
+        """
+        shrunk: ModelRequest | None = None
+        attempt = 0
+        while True:
+            use = shrunk if shrunk is not None else request
+            attempt += 1
             try:
-                return await handler(request)
+                return await handler(use)
             except Exception as err:
+                if is_context_overflow(err):
+                    if self.on_overflow is None:
+                        raise
+                    if shrunk is not None:
+                        # Already summarized for this call; summarizing again cannot help — the
+                        # summarizer produced this request and it still overflows.
+                        raise
+                    shrunk = await self.on_overflow(request)
+                    if shrunk is None:
+                        raise
+                    log.info("context overflow: summarizing and retrying once")
+                    # Not a transient-retry attempt: do not sleep, do not count it.
+                    attempt -= 1
+                    continue
                 if not is_retryable(err) or attempt >= self.max_attempts:
                     raise
-                last = err
                 server_delay = _retry_after(err, self.backoff_cap)
                 delay = self._delay(attempt) if server_delay is None else server_delay
                 log.warning(
@@ -177,4 +228,3 @@ class ModelRetryMiddleware(AgentMiddleware):
                     delay,
                 )
                 await asyncio.sleep(delay)
-        raise last  # pragma: no cover - the loop always returns or raises

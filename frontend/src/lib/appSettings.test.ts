@@ -27,6 +27,12 @@ describe("parseSettingInput", () => {
     expect(parseSettingInput("int", "1.5")).toEqual({ error: "must be a whole number" });
     expect(parseSettingInput("float", "x")).toEqual({ error: "must be a number" });
   });
+  it("an empty optional number parses to null (unset), a required one does not", () => {
+    expect(parseSettingInput("int", "", true)).toEqual({ value: null });
+    expect(parseSettingInput("float", "  ", true)).toEqual({ value: null });
+    expect(parseSettingInput("int", "", false)).toEqual({ error: "must be a whole number" });
+    expect(parseSettingInput("int", "40", true)).toEqual({ value: 40 });
+  });
 });
 
 describe("formatSettingValue", () => {

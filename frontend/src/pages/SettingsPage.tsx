@@ -193,7 +193,7 @@ function SettingsGroupCard({ group }: { group: SettingGroup }) {
     const errs: Record<string, string> = {};
     for (const item of group.items) {
       if (!(item.key in drafts)) continue;
-      const parsed = parseSettingInput(item.type, drafts[item.key]);
+      const parsed = parseSettingInput(item.type, drafts[item.key], item.optional);
       if ("error" in parsed) errs[item.key] = parsed.error; else updates[item.key] = parsed.value;
     }
     setErrors(errs);
