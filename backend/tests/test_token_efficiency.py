@@ -11,7 +11,7 @@ from sqlalchemy import inspect, select
 
 from openbot.db.models import Actor, Run
 from openbot.db.session import make_engine, run_migrations
-from openbot.runtime.runner import CLEARED_TOOL_RESULT, Runner
+from openbot.runtime.runner import RUN_SUMMARY_PROMPT, Runner
 from openbot.seed import DEMO_BOTS, seed_demo_bots
 from openbot.tools.builtin.files import read_file
 from openbot.tools.builtin.shell import run_shell
@@ -163,6 +163,10 @@ async def test_read_file_error_outputs_honour_small_cap(tmp_path, monkeypatch):
 
 # --- runner: limits, context editing, usage ----------------------------------------------------------
 
+def was_cleared(m) -> bool:
+    return bool(m.response_metadata.get("context_editing", {}).get("cleared"))
+
+
 def _shell_loop(n: int):
     return [ai(tool_calls=[call("run_shell", cid=f"c{i}", command=f"echo step{i}")]) for i in range(n)]
 
@@ -193,10 +197,10 @@ async def test_old_tool_results_are_cleared_once_context_passes_the_trigger(sett
     services, _eng, _t, run = await make(settings, {"eng": _shell_loop(6) + [ai("done")]}, tool_names=["run_shell"])
     await services.runner.execute(run.id)
     final_prompt = ScriptedChatModel.seen[-1]
-    tool_contents = [m.content for m in final_prompt if m.type == "tool"]
-    assert tool_contents, "expected tool messages in the final model call"
-    assert tool_contents[0] == CLEARED_TOOL_RESULT            # the oldest result was replaced
-    assert tool_contents[-1] != CLEARED_TOOL_RESULT           # the most recent ones are kept
+    tool_messages = [m for m in final_prompt if m.type == "tool"]
+    assert tool_messages, "expected tool messages in the final model call"
+    assert was_cleared(tool_messages[0])                          # the oldest result was cleared
+    assert not was_cleared(tool_messages[-1])                     # the most recent ones are kept
     # ...but the run's own event log still has the real output
     real = [e for e in await events(services, run.id) if e.type == "tool_result"]
     assert "step0" in real[0].payload["content"]
@@ -398,7 +402,7 @@ async def test_ask_human_and_memory_results_are_never_cleared(settings):
     await services.runner.execute(run.id)
     final_prompt = ScriptedChatModel.seen[-1]
     mem = next(m for m in final_prompt if m.type == "tool" and m.name == "manage_memory")
-    assert mem.content != CLEARED_TOOL_RESULT
+    assert not was_cleared(mem)
 
 
 # --- summarization: the second tier -------------------------------------------------------------------
@@ -534,7 +538,7 @@ def test_clearing_never_touches_the_last_two_turns_of_tool_results(settings):
     content = {p: [m.content for m in history if isinstance(m, ToolMessage) and m.tool_call_id.startswith(p)] for p in ("old", "mid", "new")}
     assert all(c == "x" * 1200 for c in content["new"]), "the latest turn's results were cleared"
     assert all(c == "x" * 1200 for c in content["mid"]), "the previous turn's results were cleared"
-    assert all(c == CLEARED_TOOL_RESULT for c in content["old"]), "older turns are what clearing is for"
+    assert all(c.startswith("[cleared to save context: ok, 1200 chars") for c in content["old"]), "older turns are what clearing is for"
 
 
 def test_clearing_reclaims_from_older_turns_and_stops_at_clear_at_least(settings):
@@ -545,7 +549,7 @@ def test_clearing_reclaims_from_older_turns_and_stops_at_clear_at_least(settings
     history = [HumanMessage("task")] + [m for i in range(6) for m in _turn(1, f"t{i}", 4000)]
     before = count_tokens_approximately(history)
     edit.apply(history, count_tokens=count_tokens_approximately)
-    cleared = {m.tool_call_id for m in history if isinstance(m, ToolMessage) and m.content == CLEARED_TOOL_RESULT}
+    cleared = {m.tool_call_id for m in history if isinstance(m, ToolMessage) and was_cleared(m)}
     assert before - count_tokens_approximately(history) >= 2500
     assert cleared == {"t00", "t10", "t20"}, "oldest first, and only until enough is reclaimed"
 
@@ -558,6 +562,47 @@ def test_clearing_below_the_trigger_does_nothing(settings):
     history = [HumanMessage("task")] + _turn(3, "a", 1000) + _turn(3, "b", 1000) + _turn(3, "c", 1000)
     edit.apply(history, count_tokens=count_tokens_approximately)
     assert all(m.content == "x" * 1000 for m in history if isinstance(m, ToolMessage))
+
+
+def test_a_cleared_call_keeps_its_clipped_args_and_a_digest_of_its_outcome(settings):
+    """The parent edit set a cleared call's args to `{}` and its result to one fixed placeholder, so the
+    model could not see which URL it had fetched or that it had 404'd: an engineer run hunted the same
+    missing file three times in one run. Clearing must leave what was asked and how it ended."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    settings.context_trigger_tokens, settings.context_clear_at_least = 1000, 0
+    edit = _clearing_edit(settings)
+    url = "https://raw.githubusercontent.com/example/repo/dev/src/session/overflow.ts"
+    body = "y" * 5000
+    history = [
+        HumanMessage("task"),
+        ai(tool_calls=[call("http_request", cid="fetch", url=url),
+                       call("write_file", cid="write", path="big.py", content=body)]),
+        ToolMessage(content="error: HTTP 404 Not Found\n" + "z" * 3000, tool_call_id="fetch", name="http_request", status="error"),
+        ToolMessage(content="ok", tool_call_id="write", name="write_file"),
+    ] + _turn(1, "mid", 2000) + _turn(1, "new", 2000)
+    edit.apply(history, count_tokens=count_tokens_approximately)
+    calls = {c["id"]: c for c in history[1].tool_calls}
+    assert calls["fetch"]["args"] == {"url": url}, "a short argument survives as-is"
+    assert calls["write"]["args"]["path"] == "big.py"
+    assert body not in calls["write"]["args"]["content"] and "[5000 chars]" in calls["write"]["args"]["content"]
+    fetch, write = history[2], history[3]
+    assert fetch.content.startswith("[cleared to save context: error, 3026 chars, began: 'error: HTTP 404 Not Found")
+    assert len(fetch.content) < 400
+    assert write.content == "ok", "a result smaller than its digest is left alone"
+    assert all(m.content == "x" * 2000 for m in history[4:] if isinstance(m, ToolMessage))
+
+
+def test_run_summaries_keep_established_facts_and_dead_ends(settings):
+    from langchain.agents.middleware import SummarizationMiddleware
+
+    from tests.factories import bot_actor
+    assert "## FACTS ESTABLISHED" in RUN_SUMMARY_PROMPT and "## DEAD ENDS" in RUN_SUMMARY_PROMPT
+    assert RUN_SUMMARY_PROMPT.index("## DEAD ENDS") < RUN_SUMMARY_PROMPT.index("## ARTIFACTS")
+    assert "{messages}" in RUN_SUMMARY_PROMPT
+    services = type("S", (), {"settings": settings, "registry": None, "store": None})()
+    mw = Runner(services).build_middleware(bot_actor("eng"), ScriptedChatModel(messages=iter([])))
+    assert next(m for m in mw if isinstance(m, SummarizationMiddleware)).summary_prompt == RUN_SUMMARY_PROMPT
 
 
 # --- summarization must measure the run's messages, not the model's reported prompt size ----------------

@@ -16,6 +16,7 @@ from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
     SummarizationMiddleware,
 )
+from langchain.agents.middleware.summarization import DEFAULT_SUMMARY_PROMPT
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -56,9 +57,8 @@ from openbot.tools.context import RunContext
 log = logging.getLogger(__name__)
 TOOL_RESULT_CAP = 4000
 LOG_PREVIEW_CAP = 500
-CLEARED_TOOL_RESULT = (
-    "[earlier tool result cleared to save context; re-run the tool if you still need it]"
-)
+CLEARED_ARG_CAP = 120  # chars of each argument kept on a cleared tool call
+CLEARED_PREVIEW_CAP = 160  # chars of the result's opening kept in its digest
 USAGE_KEYS = (
     "prompt_tokens",
     "completion_tokens",
@@ -178,6 +178,47 @@ class RunProgress:
     reports: list[str] = field(default_factory=list)  # long text sent alongside tool calls; see compose_reply
 
 
+def _message_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    parts = [p if isinstance(p, str) else p.get("text", "") for p in content or [] if isinstance(p, (str, dict))]
+    return "\n".join(p for p in parts if p)
+
+
+def _clip(value: str, cap: int) -> str:
+    return value if len(value) <= cap else f"{value[:cap]}… [{len(value)} chars]"
+
+
+def cleared_digest(tool_message: ToolMessage, content: str) -> str:
+    """The one line a cleared tool result is replaced with: did it work, how big was it, how did it start."""
+    failed = tool_message.status == "error" or content.lstrip().lower().startswith("error")
+    opening = _clip(" ".join(content.split()), CLEARED_PREVIEW_CAP)
+    return (
+        f"[cleared to save context: {'error' if failed else 'ok'}, {len(content)} chars, began: {opening!r}. "
+        "This call already ran; repeat it only if you need its exact output again]"
+    )
+
+
+def _shorten_tool_call_args(message: AIMessage, tool_call_id: str) -> AIMessage:
+    """`message` with the args of call `tool_call_id` clipped to `CLEARED_ARG_CAP` chars each."""
+
+    def shorten(value):
+        text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+        return value if len(text) <= CLEARED_ARG_CAP else _clip(text, CLEARED_ARG_CAP)
+
+    calls = [
+        {**c, "args": {k: shorten(v) for k, v in (c.get("args") or {}).items()}}
+        if c.get("id") == tool_call_id
+        else c
+        for c in message.tool_calls
+    ]
+    metadata = dict(message.response_metadata or {})
+    entry = dict(metadata.get("context_editing", {}))
+    entry["cleared_tool_inputs"] = sorted({*entry.get("cleared_tool_inputs", []), tool_call_id})
+    metadata["context_editing"] = entry
+    return message.model_copy(update={"tool_calls": calls, "response_metadata": metadata})
+
+
 @dataclass(slots=True)
 class ClearOlderTurnsEdit(ClearToolUsesEdit):
     """`ClearToolUsesEdit` that works in model turns, not in single results.
@@ -186,7 +227,13 @@ class ClearOlderTurnsEdit(ClearToolUsesEdit):
     with `keep=3` seven of the results it asked for one call ago came back as placeholders, it asked
     for them again, and the run cycled without ever writing a file. Here everything the last
     `keep_turns` model turns asked for is protected, however many results that is; older turns are
-    cleared oldest first until `clear_at_least` tokens are reclaimed."""
+    cleared oldest first until `clear_at_least` tokens are reclaimed.
+
+    A cleared call is shortened, not erased. The parent sets its args to `{}` and its result to one
+    fixed placeholder, so the model could no longer tell which URL it had fetched or that the fetch had
+    failed: an engineer run hunted the same missing file three times in 30 minutes. Here the call keeps
+    each argument clipped to `CLEARED_ARG_CAP` chars and the result becomes a one-line digest (status,
+    size, opening words), a few dozen tokens instead of thousands."""
 
     keep_turns: int = 2
 
@@ -223,10 +270,12 @@ class ClearOlderTurnsEdit(ClearToolUsesEdit):
             )
             if tool_call is None or (tool_message.name or tool_call["name"]) in excluded:
                 continue
+            content = _message_text(tool_message.content)
+            digest = cleared_digest(tool_message, content)
             messages[idx] = tool_message.model_copy(
                 update={
                     "artifact": None,
-                    "content": self.placeholder,
+                    "content": digest if len(digest) < len(content) else content,
                     "response_metadata": {
                         **tool_message.response_metadata,
                         "context_editing": {"cleared": True, "strategy": "clear_tool_uses"},
@@ -234,11 +283,32 @@ class ClearOlderTurnsEdit(ClearToolUsesEdit):
                 }
             )
             if self.clear_tool_inputs:
-                messages[messages.index(ai_message)] = self._build_cleared_tool_input_message(
-                    ai_message, tool_message.tool_call_id
-                )
+                ai_index = messages.index(ai_message)
+                messages[ai_index] = _shorten_tool_call_args(ai_message, tool_message.tool_call_id)
             if self.clear_at_least > 0 and tokens - count_tokens(messages) >= self.clear_at_least:
                 break
+
+
+# LangChain's summary prompt, plus two sections a coding run needs to stop rediscovering things: what
+# it has already established, and what it already tried that did not work.
+RUN_SUMMARY_PROMPT = DEFAULT_SUMMARY_PROMPT.replace(
+    "\n## ARTIFACTS\n",
+    """
+## FACTS ESTABLISHED
+
+Concrete findings later steps rely on: where things live (file paths, line ranges, function names, URLs
+that worked), how the code behaves, and answers to questions already settled. Record moved or renamed
+things as "X is not at A; it is at B".
+
+## DEAD ENDS
+
+Every attempt that failed or found nothing: missing files and URLs (with the exact path or URL), commands
+that errored, searches with no hits, approaches rejected. Later steps must not repeat these.
+
+## ARTIFACTS
+""",
+    1,
+)
 
 
 class RunMessagesSummarization(SummarizationMiddleware):
@@ -583,6 +653,7 @@ class Runner:
                 model,
                 trigger=("tokens", st.summary_trigger_tokens),
                 keep=("messages", st.summary_keep_messages),
+                summary_prompt=RUN_SUMMARY_PROMPT,
             ),
             ContextEditingMiddleware(
                 edits=[
@@ -593,7 +664,6 @@ class Runner:
                         clear_at_least=st.context_clear_at_least,
                         clear_tool_inputs=True,
                         exclude_tools=("ask_human", "manage_memory", "todo_write"),
-                        placeholder=CLEARED_TOOL_RESULT,
                     )
                 ]
             ),
