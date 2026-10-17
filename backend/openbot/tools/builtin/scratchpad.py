@@ -2,7 +2,8 @@
 
 The scratchpad is a bot's persistent working memory. It is keyed by bot only — never by thread —
 so notes made in one conversation are right there at the start of every run in any other. The
-prompt assembler (openbot/runtime/prompt.py) wraps the current content in `# Your scratchpad`
+prompt assembler (openbot/runtime/prompt.py) wraps the current content in the `# Your scratchpad`
+section (the live, dynamic one — the stable template's static instruction is `# Task scratchpad`)
 and appends it to the bot's dynamic system prompt on every run, so the bot sees its notes
 without reading anything first.
 """

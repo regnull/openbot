@@ -57,7 +57,12 @@ from openbot.runtime.renaming import finish_renames
 from openbot.runtime.runner import Runner
 from openbot.runtime.scheduler import Scheduler, recover_processing
 from openbot.runtime.secrets import SecretBox, resolve_secret_key
-from openbot.seed import ensure_cron_actor, ensure_human_actor, seed_demo_bots
+from openbot.seed import (
+    ensure_cron_actor,
+    ensure_human_actor,
+    grant_scratchpad_to_existing_bots,
+    seed_demo_bots,
+)
 from openbot.services import Services
 from openbot.tools.registry import build_registry
 
@@ -128,6 +133,7 @@ async def start_background(services: Services) -> None:
         await services.model_catalog.get("openrouter")
     await ensure_human_actor(services)
     await ensure_cron_actor(services)
+    await grant_scratchpad_to_existing_bots(services)
     if services.settings.seed_demo_bots:
         await seed_demo_bots(services)
     if services.mcp is None and services.registry is not None:

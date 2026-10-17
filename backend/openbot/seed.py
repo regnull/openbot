@@ -187,7 +187,8 @@ SCRATCHPAD_GRANT_DONE_KEY = "_scratchpad_grant_done"
 
 
 async def grant_scratchpad_to_existing_bots(services) -> None:
-    """One-time grant of the `scratchpad` tool to bots that predate it, run from `start_background`.
+    """One-time grant of the `scratchpad` tool to bots that predate it, called from `start_background`
+    on every boot.
 
     Seed and catalog bots get the tool from their definitions; the API default toolset now includes
     it for new bots created without an explicit tool list. Existing rows are caught here, once: the

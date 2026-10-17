@@ -248,3 +248,61 @@ async def test_every_agent_carries_the_tool_even_when_the_profile_omits_it(servi
     bot.id = "o1"
     services.runner._build_agent(bot, "system prompt")
     assert "scratchpad" in [t.name for t in captured["tools"]]
+
+
+async def test_boot_grants_the_scratchpad_to_existing_bots(services):
+    """start_background wires the one-time grant: bots whose rows predate the tool gain it at boot,
+    the flag is recorded, and the profile-less system actor (cron) is skipped without a crash."""
+    from openbot.db.models import AppSetting
+    from openbot.main import start_background
+
+    eng, rev, _t1, _t2 = await setup(services)
+    async with services.session_factory() as s:
+        (await s.get(Actor, eng.id)).bot.tool_names = ["run_shell"]
+        (await s.get(Actor, rev.id)).bot.tool_names = ["memory_search"]
+        await s.commit()
+
+    await start_background(services)
+
+    async with services.session_factory() as s:
+        assert (await s.get(Actor, eng.id)).bot.tool_names == ["run_shell", "scratchpad"]
+        assert (await s.get(Actor, rev.id)).bot.tool_names == ["memory_search", "scratchpad"]
+        assert await s.get(AppSetting, "_scratchpad_grant_done") is not None
+
+
+async def test_the_grant_never_runs_twice(services):
+    """The flag makes the grant one-shot: a bot a human later edits to drop the tool is not
+    re-granted on the next boot."""
+    from openbot.seed import grant_scratchpad_to_existing_bots
+
+    eng, _rev, _t1, _t2 = await setup(services)
+    async with services.session_factory() as s:
+        eng.bot.tool_names = ["run_shell"]
+        await s.commit()
+
+    await grant_scratchpad_to_existing_bots(services)
+    async with services.session_factory() as s:
+        (await s.get(Actor, eng.id)).bot.tool_names = ["run_shell"]
+        await s.commit()
+
+    await grant_scratchpad_to_existing_bots(services)
+
+    async with services.session_factory() as s:
+        assert (await s.get(Actor, eng.id)).bot.tool_names == ["run_shell"]
+
+
+async def test_the_grant_skips_actors_without_a_bot_profile(services):
+    """Only kind="bot" rows have profiles; a system actor without one must not crash the grant."""
+    from openbot.db.models import AppSetting
+    from openbot.seed import grant_scratchpad_to_existing_bots
+
+    eng, _rev, _t1, _t2 = await setup(services)
+    async with services.session_factory() as s:
+        s.add(Actor(kind="system", handle="extra", name="Extra"))
+        await s.commit()
+
+    await grant_scratchpad_to_existing_bots(services)
+
+    async with services.session_factory() as s:
+        assert "scratchpad" in (await s.get(Actor, eng.id)).bot.tool_names
+        assert await s.get(AppSetting, "_scratchpad_grant_done") is not None
