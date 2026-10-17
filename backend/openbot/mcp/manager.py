@@ -77,6 +77,14 @@ OPTIONAL_ARGS_NOTE = ("\n\nRequired arguments: {required}. Leave out every other
                       "do not send empty strings or placeholder values for arguments you are not using.")
 
 
+def _only(e: BaseException, kind: type[BaseException]) -> bool:
+    """Whether `e` is a `kind`, or an exception group (nested or not) holding nothing else. A group that
+    also holds a real failure is reported as that failure, not as a clean needs_auth."""
+    if isinstance(e, BaseExceptionGroup):
+        return all(_only(x, kind) for x in e.exceptions)
+    return isinstance(e, kind)
+
+
 def _drop_unset(args: dict[str, Any], required: set[str]) -> dict[str, Any]:
     """Optional arguments sent as "" or null mean "not provided": some models fill every property of a
     schema that way (gpt-5.6-luna padded Linear calls with `"projectId": ""` and the like). A server may
@@ -265,6 +273,12 @@ class McpManager:
             st.status, st.error = "needs_auth", None
         except Exception as e:  # noqa: BLE001 - anything a transport or the OAuth flow raises becomes the server's status
             await self._close(name)
+            if _only(e, AuthorizationRequired):
+                # The transport's task group wraps it, so the clause above never sees it: without this
+                # the server read "error: ExceptionGroup: unhandled errors in a TaskGroup".
+                st.status, st.error = "needs_auth", None
+                log.info("MCP server %s needs authorization; connect it from Settings", name)
+                return st
             msg = f"{type(e).__name__}: {e}"[:500]
             if cfg.oauth and (interactive or await self._safe_no_tokens(name)):
                 st.status, st.error = "needs_auth", None if isinstance(e, asyncio.TimeoutError) else msg
