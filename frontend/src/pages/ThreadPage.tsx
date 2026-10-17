@@ -198,6 +198,7 @@ export default function ThreadPage() {
   const t = detail.data;
   const displayedTitle = state.title ?? t.title;
   const usageData = usage.data;
+  const participantList = t.participants.map((p) => `@${p.handle}`).join(" ") || "No participants yet";
   const costFormatter = (value: number) => value.toFixed(4);
   const handles = [...new Set([
     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
@@ -211,21 +212,15 @@ export default function ThreadPage() {
   return (
     <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-4xl flex-col md:h-[calc(100vh-3rem)]">
       <header className="thread-header sticky top-0 z-10 border-b border-line bg-canvas">
-        <div className="thread-header-main flex min-w-0 items-start gap-2">
-          <Link to="/threads" aria-label="Back to threads" title="Back to threads" className="thread-header-back inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-ui border border-transparent text-muted hover:border-line hover:bg-sunken hover:text-fg">
+        <div className="thread-header-main flex min-w-0 items-center gap-1.5">
+          <Link to="/threads" aria-label="Back to threads" title="Back to threads" className="thread-header-back inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-ui text-muted hover:bg-sunken hover:text-fg">
             <ChevronLeftIcon className="h-4 w-4" />
           </Link>
-          <div className="min-w-0 flex-1 pt-0.5">
-            <p className="thread-header-kicker">Active thread</p>
-            <h1 className="thread-header-title text-[16px] font-semibold tracking-[-0.01em]" aria-label={displayedTitle || "Untitled thread"} title={displayedTitle || "Untitled thread"}>{displayedTitle || "Untitled thread"}</h1>
-            <div className="thread-header-context flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] leading-4 text-muted">
-              <span className="min-w-0 break-words">{t.participants.map((p) => `@${p.handle}`).join(" ") || "No participants yet"}</span>
-              <span className="min-w-0 break-words"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
-            </div>
-          </div>
-          <div className="thread-header-controls flex shrink-0 items-center gap-1.5">
-            <label className="hidden items-center gap-1.5 text-[11px] text-muted sm:flex">default
-              {defaultSelect("h-8 px-1.5")}
+          <h1 className="thread-header-title min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]" aria-label={displayedTitle || "Untitled thread"} title={displayedTitle || "Untitled thread"}>{displayedTitle || "Untitled thread"}</h1>
+          <div className="thread-header-controls flex shrink-0 items-center gap-1">
+            <label className="thread-header-default hidden sm:flex">
+              <span>default</span>
+              {defaultSelect("h-7 px-1.5")}
             </label>
             <div className="relative" ref={menuRef}>
               <IconButton ref={menuButtonRef} aria-label="Thread actions" aria-controls="thread-actions-menu" aria-expanded={menuVisible} aria-haspopup="menu" onClick={() => { setMenuThreadId(id); setMenuOpen((open) => !open); }}>
@@ -240,8 +235,11 @@ export default function ThreadPage() {
             </div>
           </div>
         </div>
-        <div className="thread-header-footer">
-          <span className="thread-header-metrics-label">Usage</span>
+        <div className="thread-header-meta">
+          <span className="thread-header-context">
+            <span className="thread-header-participants" title={participantList}>{participantList}</span>
+            <span className="thread-header-cwd" title={t.working_directory ?? "."}><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
+          </span>
           <span className="thread-header-counters" role="group" aria-label="Thread usage">
             <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
             <ThreadOdometer label="tokens in" indicator={<ArrowRightIcon className="h-3 w-3" />} indicatorLabel="Tokens in" value={usageData?.prompt_tokens} unit="tok" loading={usage.isLoading} />
