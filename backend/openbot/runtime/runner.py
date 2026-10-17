@@ -153,6 +153,20 @@ def _text(m) -> str:
     return t() if callable(t) else ""
 
 
+# Text this long that a turn sends alongside tool calls is a report, not narration ("Let me check X").
+REPORT_MIN_CHARS = 500
+
+
+def compose_reply(reports: list[str], final_text: str) -> str:
+    """The thread message a run posts. Only the last turn's text used to be posted, so an engineer that
+    wrote its full report next to one more tool call, then closed with "report above is complete",
+    handed the other bots a pointer to a report nobody could see. Reports come first, in order."""
+    parts = [r for r in reports if r != final_text.strip()]
+    if not parts:
+        return final_text
+    return "\n\n".join([*parts, final_text.strip()]) if final_text.strip() else "\n\n".join(parts)
+
+
 @dataclass(slots=True)
 class RunProgress:
     """What a run has produced so far, kept outside `_stream` so a cancelled run can still post it."""
@@ -281,9 +295,14 @@ class Runner:
         error: str | None = None,
         langsmith_run_id: str | None = None,
         usage: dict[str, int | float] | None = None,
-    ) -> Run:
+    ) -> Run | None:
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
+            if run is None:
+                # Its row went away under a live run (a hard delete of the thread or bot). Updating
+                # nothing beats an AttributeError that turns the run's ending into a crash.
+                log.warning("run %s no longer exists; status %s not recorded", run_id, status)
+                return None
             run.status, run.interrupt = status, interrupt
             if error is not None:
                 run.error = error
@@ -615,6 +634,7 @@ class Runner:
     ) -> tuple[str, dict | None, int, dict[str, int | float]]:
         progress = progress if progress is not None else RunProgress()
         final_text, interrupt = "", None
+        reports: list[str] = []   # substantial text a turn sent alongside tool calls; see compose_reply
         usage = empty_usage()
         # Middleware nodes that rewrite state (summarization: RemoveMessage(all) + summary + kept messages)
         # re-emit earlier AI messages in their update. Those are not new model calls: counting them again
@@ -752,8 +772,10 @@ class Runner:
                             )
                         if _text(m):
                             final_text = _text(m)
+                            if m.tool_calls and len(final_text.strip()) >= REPORT_MIN_CHARS:
+                                reports.append(final_text.strip())
                             seq = await self._record(run, seq, "text", {"content": final_text})
-        return final_text, interrupt, seq, usage
+        return compose_reply(reports, final_text), interrupt, seq, usage
 
     async def execute(self, run_id: str, resume: Command | None = None) -> None:
         async with self.s.session_factory() as session:
@@ -762,6 +784,11 @@ class Runner:
                 return
             bot = await session.get(Actor, run.actor_id)
             thread = await session.get(Thread, run.thread_id)
+        if thread is None or thread.deleted_at is not None:
+            # Picked up in the window between the thread's delete closing its work and this run starting.
+            await self._set_status(run.id, "cancelled", error="thread was deleted")
+            await self._drop_checkpoint(run.id)
+            return
         await self._set_status(run.id, "running")
         seq = await self._next_seq(run.id)
         if resume is not None:
@@ -882,7 +909,7 @@ class Runner:
                 )
                 run = await self._set_status(
                     run.id, "waiting_human", interrupt=interrupt, langsmith_run_id=ls_id
-                )
+                ) or run
                 delivered = await deliver_question(self.s, run, interrupt)
                 if not delivered:
                     # deliver_question only addresses human/external participants. A thread with none

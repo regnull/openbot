@@ -188,8 +188,9 @@ async def test_thread_detail_includes_saved_lists(client, services):
     assert d["todos"] == [{"actor_id": eng.id, "handle": "eng", "todos": PLAN}]
 
     assert (await client.delete(f"/api/v1/threads/{t['id']}")).status_code == 204
-    async with services.session_factory() as s:
-        assert (await s.execute(select(ThreadTodoList))).scalars().all() == []
+    assert (await client.get(f"/api/v1/threads/{t['id']}")).status_code == 404
+    async with services.session_factory() as s:     # a soft delete keeps the list for investigation
+        assert len((await s.execute(select(ThreadTodoList))).scalars().all()) == 1
 
 
 async def test_migration_creates_the_todo_list_table(tmp_path):

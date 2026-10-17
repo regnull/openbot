@@ -33,7 +33,7 @@ PREVIEW_CAP = 300
 EVENTS = frozenset({
     "system.started",
     "recovery.run_failed", "recovery.items_requeued",
-    "thread.created",
+    "thread.created", "thread.closing", "thread.deleted",
     "message.posted", "message.hop_limit", "message.handoff_held",
     "inbox.enqueued", "inbox.picked", "inbox.settled", "inbox.acked", "inbox.purged", "inbox.hold_released",
     "question.delivered",

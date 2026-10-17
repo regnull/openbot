@@ -448,3 +448,18 @@ async def test_reflection_still_gets_the_transcript_before_the_checkpoint_goes(s
     await services.runner.execute(run.id)
     assert scheduled == [2] or (scheduled and scheduled[0] >= 2)
     assert await _checkpoint(services, run.id) is None
+
+
+async def test_a_report_sent_alongside_a_tool_call_reaches_the_thread(settings):
+    from openbot.runtime.runner import REPORT_MIN_CHARS
+    report = "## Frontend report\n" + "finding. " * (REPORT_MIN_CHARS // 9 + 1)
+    script = [
+        ai("Let me look.", tool_calls=[call("read_file", cid="c1", path="a.txt")]),
+        ai(report, tool_calls=[call("read_file", cid="c2", path="b.txt")]),
+        ai("The report above is complete."),
+    ]
+    services, _eng, t, run = await make(settings, {"eng": script}, tool_names=["read_file"])
+    await services.runner.execute(run.id)
+    last = (await messages(services, t.id))[-1].content
+    assert last.startswith("## Frontend report") and last.endswith("The report above is complete.")
+    assert "Let me look." not in last                     # short narration is still left out

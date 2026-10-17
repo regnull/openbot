@@ -159,6 +159,13 @@ async def post_message(services, session: AsyncSession, *, thread_id: str, sende
     thread = await session.get(Thread, thread_id)
     if thread is None:
         raise LookupError("thread not found")
+    if thread.deleted_at is not None:
+        # A deleted thread takes no new mail from people. What a run that was stopping as the thread was
+        # deleted still writes (its partial reply, the "cancelled" notice) is kept for the record, but
+        # wakes nobody.
+        if sender is not None and sender.kind != "bot":
+            raise LookupError("thread not found")
+        deliver = False
     by_handle = await _actors_by_handle(session)
     by_id = {a.id: a for a in by_handle.values()}
     to_handles = list(to_handles)

@@ -44,7 +44,7 @@ class Out(BaseModel):
 
 async def _validate_target(session, thread_id: str, handles: list[str]) -> None:
     thread = await session.get(Thread, thread_id)
-    if thread is None:
+    if thread is None or thread.deleted_at is not None:
         raise HTTPException(404, "thread not found")
     actors = {a.handle: a for a in (await session.execute(select(Actor))).scalars()}
     unknown = [h for h in handles if h not in actors or actors[h].kind != "bot" or not actors[h].enabled]

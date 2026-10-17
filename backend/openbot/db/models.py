@@ -128,6 +128,9 @@ class Thread(TimestampMixin, Base):
     hop_limit_notified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     auto_renamed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_message_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    # Deleting a thread only sets this: the thread, its messages, runs and activity stay in the database
+    # for investigation, but the API and the bots treat it as gone.
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
 class ThreadParticipant(Base):

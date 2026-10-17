@@ -102,3 +102,29 @@ async def test_mcp_server_errors_reach_the_model_as_error_results():
     tool = _wrap(StructuredTool.from_function(coroutine=bad, name="t", description="t", handle_tool_error=True), "linear__t", 400)
     out = await tool.ainvoke({"x": "1"})
     assert is_failure(ToolMessage(out, tool_call_id="c"))
+
+
+async def test_a_tool_that_raises_is_an_error_result_not_a_failed_run(settings):
+    async def boom(x: str) -> str:
+        raise ValueError("You cannot provide a MEMORY ID when creating a MEMORY.")
+
+    script = [ai(tool_calls=[call("boom", x="1")]), ai("recovered")]
+    services, _eng, t, run = await make(settings, {"eng": script}, tool_names=["boom"])
+    services.registry.register(StructuredTool.from_function(coroutine=boom, name="boom", description="b"))
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "completed"
+    [result] = [e for e in await events(services, run.id) if e.type == "tool_result"]
+    assert result.payload["status"] == "error" and "ValueError: You cannot provide a MEMORY ID" in result.payload["content"]
+    assert (await messages(services, t.id))[-1].content == "recovered"
+
+
+async def test_an_mcp_call_that_never_answers_times_out():
+    import asyncio
+
+    async def hang(x: str) -> str:
+        await asyncio.sleep(3600)
+
+    tool = _wrap(StructuredTool.from_function(coroutine=hang, name="t", description="t"), "linear__t", 400,
+                 timeout=lambda: 0.05)
+    out = await asyncio.wait_for(tool.ainvoke({"x": "1"}), 5)
+    assert is_failure(ToolMessage(out, tool_call_id="c")) and "did not answer within 0.05s" in out
