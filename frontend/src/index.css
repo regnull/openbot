@@ -199,10 +199,10 @@
 .thread-odometer:last-child { padding-right: 0; }
 .thread-odometer-label { display: inline-flex; align-items: center; color: var(--faint); font-size: 10px; letter-spacing: 0.04em; line-height: 1; }
 .thread-odometer-value { display: inline-flex; align-items: center; color: var(--fg); font-variant-numeric: tabular-nums; line-height: 1.2; }
-.thread-odometer-digit { display: inline-block; overflow: hidden; }
+.thread-odometer-digit { display: inline-block; overflow: hidden; transition: color 600ms ease; }
 .thread-odometer-digit-face { display: block; }
 .thread-odometer-digit--rolling .thread-odometer-digit-face { animation: odometer-wheel-turn 360ms cubic-bezier(0.22, 0.8, 0.35, 1) both; }
-.thread-odometer-digit--rolling { color: var(--accent-strong); transition: color 600ms ease; }
+.thread-odometer-digit--rolling { color: var(--accent-strong); }
 .thread-odometer-separator { color: var(--muted); }
 .thread-odometer-unit { margin-left: 0.25rem; color: var(--faint); }
 .thread-odometer-loading { color: var(--faint); }

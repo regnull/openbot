@@ -198,6 +198,7 @@ export default function ThreadPage() {
   const t = detail.data;
   const displayedTitle = state.title ?? t.title;
   const usageData = usage.data;
+  const participantList = t.participants.map((p) => `@${p.handle}`).join(" ") || "No participants yet";
   const costFormatter = (value: number) => value.toFixed(4);
   const handles = [...new Set([
     ...t.participants.filter((p) => p.kind === "bot").map((p) => p.handle),
@@ -236,8 +237,8 @@ export default function ThreadPage() {
         </div>
         <div className="thread-header-meta">
           <span className="thread-header-context">
-            <span className="thread-header-participants">{t.participants.map((p) => `@${p.handle}`).join(" ") || "No participants yet"}</span>
-            <span className="thread-header-cwd"><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
+            <span className="thread-header-participants" title={participantList}>{participantList}</span>
+            <span className="thread-header-cwd" title={t.working_directory ?? "."}><span className="text-faint">cwd </span>{t.working_directory ?? "."}</span>
           </span>
           <span className="thread-header-counters" role="group" aria-label="Thread usage">
             <ThreadOdometer label="calls" value={usageData?.model_calls} loading={usage.isLoading} />
