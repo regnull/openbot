@@ -79,11 +79,11 @@ TUNABLES: dict[str, Tunable] = {
     "shell_output_cap": Tunable("Context", "Shell output cap (chars)",
         "Tighter cap for run_shell, so dumping a file through the shell loses to read_file with a line range.", 500),
     "context_trigger_tokens": Tunable("Context", "Clear old tool results above (tokens)",
-        "Once a run's messages pass this, tool results from turns before the last two, and their call arguments, are replaced by a placeholder. The system prompt and tool schemas are not counted.", 1000),
+        "Once a run's messages pass this, tool results from turns before the last two, and their call arguments, are replaced by a placeholder. The system prompt and tool schemas are not counted. Leave empty to derive it from the model's context window (falls back to 40000 when unknown).", 1000),
     "context_clear_at_least": Tunable("Context", "Reclaim at least (tokens)",
         "Each clearing frees at least this much, so clearings are rare and the provider's prompt cache stays warm.", 0),
     "summary_trigger_tokens": Tunable("Context", "Summarize history above (tokens)",
-        "Once a run's messages pass this, older history is folded into one summary message by the bot's own model. The system prompt and tool schemas are not counted.", 1000),
+        "Once a run's messages pass this, older history is folded into one summary message by the bot's own model. The system prompt and tool schemas are not counted. Leave empty to derive it from the model's context window (falls back to 60000 when unknown).", 1000),
     "summary_keep_messages": Tunable("Context", "Summary keeps last (messages)",
         "How many recent messages summarization leaves verbatim. A turn of ten tool calls is eleven messages; keep at least two turns.", 2),
     # --- Memory ----------------------------------------------------------------------------------------------
@@ -151,8 +151,15 @@ def coerce(key: str, value: Any) -> Any:
         value = [p.strip() for p in value.split(",") if p.strip()]
     if kind == "bool" and not isinstance(value, bool):
         raise ValueError(f"{key} must be true or false")
-    if kind in ("int", "float") and isinstance(value, bool | str):
-        raise ValueError(f"{key} must be a number")
+    if kind in ("int", "float"):
+        if isinstance(value, bool) or (isinstance(value, str) and value.strip() == ""):
+            # An empty optional number means "unset" (derive); a required one stays "" and fails validation.
+            value = None if _optional(key) else ""
+        elif isinstance(value, str):
+            try:
+                value = float(value)
+            except ValueError:
+                raise ValueError(f"{key} must be a number") from None
     if kind in ("str", "secret"):
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{key} must be text")
@@ -301,7 +308,8 @@ async def describe(services) -> list[dict[str, Any]]:
     for key, t in TUNABLES.items():
         value, default = getattr(services.settings, key), defaults.get(key)
         row = {"key": key, "group": t.group, "label": t.label, "description": t.description, "type": field_type(key),
-               "overridden": key in overrides, "secret": t.secret, "is_set": value not in (None, "")}
+               "overridden": key in overrides, "secret": t.secret, "is_set": value not in (None, ""),
+               "optional": _optional(key) and not t.secret}
         if t.secret:
             row["value"], row["default"] = (MASK if value else None), (MASK if default else None)
         else:

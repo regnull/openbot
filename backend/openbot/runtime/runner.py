@@ -6,6 +6,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 from langchain.agents import create_agent
@@ -24,6 +25,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.tracers.context import collect_runs
 from langgraph.types import Command
 from sqlalchemy import func, select
@@ -45,6 +47,12 @@ from openbot.runtime.cli_agents import CliAgentError, adapter_for
 from openbot.runtime.cli_agents.run import execute_cli_turn
 from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_message
 from openbot.runtime.prompt import build_history, build_system_prompt_parts
+from openbot.runtime.context_limits import (
+    DEFAULT_CLEAR_FALLBACK,
+    DEFAULT_TRIGGER_FALLBACK,
+    derive_trigger_thresholds,
+    model_context_limits,
+)
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.runtime.tool_failures import ToolFailureMiddleware
@@ -349,6 +357,35 @@ class RunMessagesSummarization(SummarizationMiddleware):
 class Runner:
     def __init__(self, services) -> None:
         self.s = services
+        # Per-run context bookkeeping, set in `execute` before the graph streams: the profile used
+        # to build the agent, its derived (summarize, clear) token thresholds, the graph's middleware
+        # list, and the run's checkpoint thread id — all read by the overflow recovery path
+        # (`_recover_overflow`) and its `force_summarize` helper.
+        self._provider: str = ""
+        self._model_name: str = ""
+        self._trigger_tokens: tuple[int, int] = (
+            DEFAULT_TRIGGER_FALLBACK,
+            DEFAULT_CLEAR_FALLBACK,
+        )
+        self._current_middleware: list = []
+        self._run_id: str = ""
+
+    async def _run_turn_triggers(self, bot: Actor, provider: str, model: str) -> tuple[int, int]:
+        """(summarize, clear) thresholds for this turn's model, honoring the settings' precedence.
+
+        Both trigger settings default to None: derive both thresholds from the model's context
+        window (see `openbot/runtime/context_limits.py`). An explicit runtime value (env or the
+        runtime-settings UI) pins the threshold for every model. A model the catalog has never
+        heard of falls back to the built-in defaults (60k/40k), keeping today's behavior for
+        hand-typed models.
+        """
+        window, output = await model_context_limits(provider, model, self.s.model_catalog)
+        return derive_trigger_thresholds(
+            window,
+            summary_trigger=self.s.settings.summary_trigger_tokens,
+            clear_trigger=self.s.settings.context_trigger_tokens,
+            output_limit=output,
+        )
 
     def _model_price(self, bot: Actor) -> dict[str, float | None] | None:
         catalog = getattr(self.s, "model_catalog", None)
@@ -627,13 +664,21 @@ class Runner:
         """The run's context controls, in the order LangChain expects them to compose.
 
         Two tiers keep a long run's context from growing without bound. Summarization folds older
-        history into one structured message once the context passes `summary_trigger_tokens`, keeping
+        history into one structured message once the context passes the summary trigger, keeping
         the last `summary_keep_messages` verbatim; it preserves decisions and file lists that plain
         clearing would lose. Context editing then clears tool results from turns before the last two,
         and their call arguments (e.g. the full content passed to write_file), once the context passes
-        `context_trigger_tokens`, reclaiming at least `context_clear_at_least` per clearing. Each edit to earlier context costs a
+        the clear trigger, reclaiming at least `context_clear_at_least` per clearing. Each edit to earlier context costs a
         prompt-cache miss from that point, so both fire rarely and in large steps rather than a little
         on every turn. Editing runs after summarization so it respects what was already summarized.
+
+        The two triggers resolve in `execute` — they depend on the model's context window, which
+        only the catalog knows per turn — and arrive as `self._trigger_tokens`. Both
+        settings default to None, meaning "derive from the model's context window"; an explicit
+        value (env or the runtime settings UI) pins the trigger for every model.
+        Unknown windows fall back to the old fixed defaults; see
+        `openbot/runtime/context_limits.py`. On a context-overflow error the retry middleware calls
+        `force_summarize` below and retries the call once on the compacted request.
         """
         st = self.s.settings
         p = bot.bot
@@ -642,7 +687,10 @@ class Runner:
             # completing") so one bad provider turn does not abort the whole run. Before the cache
             # middleware: only the failing attempt pays, and the retried request is cache-warm.
             ModelRetryMiddleware(
-                st.model_retry_max_attempts, st.model_retry_base_delay, st.model_retry_backoff_cap
+                st.model_retry_max_attempts,
+                st.model_retry_base_delay,
+                st.model_retry_backoff_cap,
+                on_overflow=self._recover_overflow,
             ),
             *caching_middleware(model, st),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
@@ -651,14 +699,14 @@ class Runner:
             ToolFailureMiddleware(st.max_repeated_tool_failures, st.tool_output_cap),
             RunMessagesSummarization(
                 model,
-                trigger=("tokens", st.summary_trigger_tokens),
+                trigger=("tokens", self._trigger_tokens[0]),
                 keep=("messages", st.summary_keep_messages),
                 summary_prompt=RUN_SUMMARY_PROMPT,
             ),
             ContextEditingMiddleware(
                 edits=[
                     ClearOlderTurnsEdit(
-                        trigger=st.context_trigger_tokens,
+                        trigger=self._trigger_tokens[1],
                         keep=0,
                         keep_turns=2,
                         clear_at_least=st.context_clear_at_least,
@@ -678,6 +726,76 @@ class Runner:
                 )
             )
         return middleware
+
+    async def force_summarize(self, middleware: list) -> int:
+        """Fold the run's older messages into a summary right now, whatever the trigger says.
+
+        The context-overflow recovery path: the model refused the request because the whole
+        conversation (system prompt + history + tool schemas) did not fit, so waiting for the
+        normal trigger would retry into the same wall. Runs the summarizer's `abefore_model`
+        directly and returns the new token count (>=0: it ran; -1: there was nothing it could
+        summarize — no messages, or a single turn that alone overflows).
+        """
+        summarizer = next(
+            (m for m in middleware if isinstance(m, SummarizationMiddleware)), None
+        )
+        if summarizer is None:
+            return -1
+        state = await self.s.checkpointer.aget_tuple({"configurable": {"thread_id": self._run_id}})
+        if state is None:
+            return -1
+        messages = list(state.checkpoint["channel_values"].get("messages", []))
+        if len(messages) < 2:
+            return -1
+        fake_state = SimpleNamespace(messages=messages)
+        fake_runtime = SimpleNamespace(context=SimpleNamespace(thread_id=self._run_id))
+        try:
+            update = await summarizer.abefore_model(fake_state, fake_runtime)
+        except Exception:
+            log.exception("forced summarization failed")
+            return -1
+        if update is None:
+            return -1
+        await self.s.checkpointer.aput(
+            {"configurable": {"thread_id": self._run_id}},
+            {**state.checkpoint, "channel_values": {**state.checkpoint["channel_values"], "messages": update["messages"]}},
+            {},
+        )
+        return len(update["messages"])
+
+    async def _recover_overflow(self, request: ModelRequest) -> ModelRequest | None:
+        """Context-overflow recovery for the retry middleware: summarize, then shrink the request.
+
+        Called with the original failed request. Returns the request with compacted messages for
+        the one summarizing retry, or None when there is nothing to fold (no summarizer — e.g. the
+        CLI turn path — no thread checkpoint, or a history that is already minimal). The summarizer
+        rewrites the thread's checkpointed messages, and `request.override` makes this call and the
+        graph's next steps use them.
+        """
+        if self.s.checkpointer is None:
+            return None
+        st = self.s.settings
+        window, output = await model_context_limits(
+            self._provider, self._model_name, self.s.model_catalog
+        )
+        summarize_trigger, _clear = derive_trigger_thresholds(
+            window,
+            summary_trigger=st.summary_trigger_tokens,
+            clear_trigger=st.context_trigger_tokens,
+            output_limit=output,
+        )
+        count = await self.force_summarize(self._current_middleware)
+        if count < 0:
+            return None
+        state = await self.s.checkpointer.aget_tuple({"configurable": {"thread_id": self._run_id}})
+        if state is None:
+            return None
+        messages = list(state.checkpoint["channel_values"].get("messages", []))
+        while messages and summarize_trigger > 0 and count_tokens_approximately(messages) > summarize_trigger:
+            dropped = messages.pop(0)
+            if count_tokens_approximately([dropped]) > summarize_trigger:
+                break
+        return request.override(messages=messages)
 
     def _build_agent(self, bot: Actor, system_prompt: str):
         p = bot.bot
@@ -896,6 +1014,8 @@ class Runner:
                 self.s.settings.workspace_root, thread.working_directory
             )
             eff_provider, eff_model = effective_bot_profile(bot.bot, self.s.settings)
+            self._provider, self._model_name = eff_provider, eff_model
+            self._trigger_tokens = await self._run_turn_triggers(bot, eff_provider, eff_model)
             log.info(
                 "run %s started: bot=@%s thread=%s hop=%d resume=%s working_directory=%s tool_root=%s model=%s/%s tools=%s",
                 run.id,
@@ -961,6 +1081,7 @@ class Runner:
                 shell_user=self.s.settings.shell_user,
             )
             agent = self._build_agent(bot, system_prompt)
+            self._run_id, self._current_middleware = run.id, agent.builder.bound_middleware
             # The model-call limit is the real cap; the graph's recursion limit only has to be high enough
             # that the limit middleware ends the run first, and is derived from the graph so adding a
             # middleware hook (each is a node every turn traverses) can never make it the binding limit.

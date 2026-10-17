@@ -38,5 +38,5 @@ export interface McpServerInput { name?: string; url?: string | null; headers?: 
 export interface McpConnectResult { status: string; authorization_url: string | null; }
 export interface McpCatalogEntry { id: string; name: string; description: string; provider: string; source_url: string; transport: string; command: string; args: string[]; url: string; required_credentials: string[]; compatibility: string[]; status: "template" | "deprecated" | "unverified"; status_reason: string; }
 export interface SetupStatus { complete: boolean; chat: { ok: boolean; providers: string[] }; embeddings: { ok: boolean; model: string; reason: string | null }; missing: string[]; }
-export interface AppSetting { key: string; group: string; label: string; description: string; type: "int" | "float" | "bool" | "str" | "list" | "secret"; value: unknown; default: unknown; overridden: boolean; secret: boolean; is_set: boolean; }
+export interface AppSetting { key: string; group: string; label: string; description: string; type: "int" | "float" | "bool" | "str" | "list" | "secret"; value: unknown; default: unknown; overridden: boolean; secret: boolean; is_set: boolean; optional?: boolean; }
 export interface DatabaseLocation { location: string; }

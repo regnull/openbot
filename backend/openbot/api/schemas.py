@@ -551,6 +551,7 @@ class SettingOut(BaseModel):
     overridden: bool
     secret: bool
     is_set: bool
+    optional: bool = False
 
 
 class CatalogModelOut(BaseModel):
