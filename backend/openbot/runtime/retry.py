@@ -200,7 +200,7 @@ class ModelRetryMiddleware(AgentMiddleware):
             attempt += 1
             try:
                 return await handler(use)
-            except Exception as err:  # noqa: BLE001 - classified below
+            except Exception as err:
                 if is_context_overflow(err):
                     if self.on_overflow is None:
                         raise
@@ -228,5 +228,3 @@ class ModelRetryMiddleware(AgentMiddleware):
                     delay,
                 )
                 await asyncio.sleep(delay)
-                if attempt >= self.max_attempts:
-                    raise

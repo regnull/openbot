@@ -51,9 +51,10 @@ SAFETY_MARGIN_TOKENS = 4_000
 # setting is None without a window to derive from.
 FALLBACK_SUMMARY_TRIGGER = 60_000
 FALLBACK_CLEAR_TRIGGER = 40_000
-# Public aliases used by the Runner's state init (the fallbacks for an unresolved window).
-DEFAULT_TRIGGER_FALLBACK = FALLBACK_SUMMARY_TRIGGER
-DEFAULT_CLEAR_FALLBACK = FALLBACK_CLEAR_TRIGGER
+# A derived clear trigger sits at this share of the derived summary trigger, the fallbacks' 40k:60k:
+# cheap clearing of old tool results fires turns before the costlier summary, never on the same turn
+# (one turn tripping both made a bot re-read everything it had just lost, 2026-09-17).
+CLEAR_SHARE = FALLBACK_CLEAR_TRIGGER / FALLBACK_SUMMARY_TRIGGER
 
 OVERFLOW_PATTERNS: tuple[str, ...] = (
     "prompt is too long",  # Anthropic (400)
@@ -92,7 +93,7 @@ async def model_context_limits(
         return None, None
     try:
         result = await get(provider)
-    except Exception:  # noqa: BLE001 - any catalog failure must not break a run
+    except Exception:
         log.debug("model catalog lookup failed for %s/%s", provider, model, exc_info=True)
         return None, None
     for entry in getattr(result, "models", None) or []:
@@ -125,7 +126,8 @@ def derive_trigger_thresholds(
     window and None both fall back to the built-in defaults, which keeps today's behavior for
     hand-typed models. Known window: OpenCode's compaction formula — reserve = max(10% of the
     window, the model's output limit, 16k), capped at half the window so a tiny window keeps room
-    for the conversation at all; usable = window - reserve; trigger = 70% of usable. `window <= 0`
+    for the conversation at all; usable = window - reserve; summary trigger = 70% of usable, and
+    the clear trigger `CLEAR_SHARE` of that, so clearing still fires first. `window <= 0`
     counts as unknown (the catalog reports unknown windows as 0).
     """
     summary = max(1, int(summary_trigger)) if summary_trigger is not None else None
@@ -140,11 +142,13 @@ def derive_trigger_thresholds(
         # A window under 2x the minimum reserve: cap the reserve at half the window, so the
         # conversation keeps at least half of it (OpenCode's 2x RESERVE_MIN gate).
         reserve = min(reserve, window // 2)
-    usable = max(1, window - reserve - SAFETY_MARGIN_TOKENS)
+    # The margin shrinks with a small window: a fixed 4k on top of a halved 8k window left 1 token.
+    margin = min(SAFETY_MARGIN_TOKENS, int(window * RESERVE_SHARE))
+    usable = max(1, window - reserve - margin)
     derived = max(1, int(usable * TRIGGER_SHARE))
     return (
         summary if summary is not None else derived,
-        clear if clear is not None else derived,
+        clear if clear is not None else max(1, int(derived * CLEAR_SHARE)),
     )
 
 

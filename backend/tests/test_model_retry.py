@@ -99,6 +99,48 @@ async def test_generic_upstream_message_pattern_is_retried_but_unknown_is_not():
     assert calls["n"] == 1
 
 
+OVERFLOW = ProviderError(400, "prompt is too long: 212000 tokens > 200000 maximum")
+
+
+async def test_context_overflow_retries_once_on_the_compacted_request():
+    seen, compacted = [], request()
+
+    async def on_overflow(_failed):
+        return compacted
+
+    async def handler(req):
+        seen.append(req)
+        if len(seen) == 1:
+            raise OVERFLOW
+        return "ok"
+
+    assert await mw(on_overflow=on_overflow).awrap_model_call(request(), handler) == "ok"
+    assert seen[1] is compacted
+
+
+async def test_a_second_overflow_or_nothing_to_compact_fails_the_call():
+    async def compacts(_failed):
+        return request()
+
+    async def nothing(_failed):
+        return None
+
+    for on_overflow, calls in ((compacts, 2), (nothing, 1), (None, 1)):
+        state = {"n": 0, "outcomes": [OVERFLOW, OVERFLOW, "never"]}
+        with pytest.raises(ProviderError, match="prompt is too long"):
+            await run(mw(on_overflow=on_overflow), state)
+        assert state["n"] == calls, on_overflow
+
+
+async def test_the_overflow_retry_does_not_use_up_transient_attempts():
+    async def on_overflow(_failed):
+        return request()
+
+    calls = {"n": 0, "outcomes": [ProviderError(502), OVERFLOW, ProviderError(502), "ok"]}
+    assert await run(mw(max_attempts=3, on_overflow=on_overflow), calls) == "ok"
+    assert calls["n"] == 4
+
+
 def test_is_retryable_classification():
     for status in (408, 409, 425, 429, 500, 502, 503, 529):
         assert is_retryable(ProviderError(status)), status
