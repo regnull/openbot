@@ -9,7 +9,9 @@ URL from, and a future the public callback endpoint resolves.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs, urlparse
@@ -25,6 +27,8 @@ from openbot.runtime.secrets import load_or_create_key
 log = logging.getLogger(__name__)
 
 CALLBACK_PATH = "/api/v1/mcp/oauth/callback"   # on the public router: the browser arrives without an API key
+# Refresh this long before the stored expiry, so a request in flight does not reach the server just after it.
+EXPIRY_MARGIN = 60.0
 
 
 class AuthorizationRequired(RuntimeError):
@@ -75,10 +79,35 @@ class DbTokenStorage:
             return None
         return row
 
+    def _dec_tokens(self, blob: str | None) -> tuple[OAuthToken | None, float | None]:
+        """The tokens and the absolute time their access token expires (stored beside them as
+        `expires_at`; `OAuthToken` itself only has the relative `expires_in`)."""
+        if not blob:
+            return None, None
+        try:
+            raw = json.loads(self._fernet.decrypt(blob.encode()))
+            expires_at = raw.pop("expires_at", None)
+            return OAuthToken.model_validate(raw), expires_at
+        except (InvalidToken, ValueError) as e:
+            log.warning("MCP credentials for %s cannot be read (%s); treating as absent", self.server, type(e).__name__)
+            return None, None
+
     async def get_tokens(self) -> OAuthToken | None:
         async with self._sf() as s:
             row = await self._current_row(s)
-            return self._dec(row.tokens if row else None, OAuthToken)
+            return self._dec_tokens(row.tokens if row else None)[0]
+
+    async def token_expiry(self) -> float | None:
+        """When the stored access token expires (Unix time), None if the server gave no lifetime. Rows
+        written before `expires_at` was stored count from their last update."""
+        async with self._sf() as s:
+            row = await self._current_row(s)
+            if row is None:
+                return None
+            tokens, expires_at = self._dec_tokens(row.tokens)
+        if tokens is None or expires_at is not None or tokens.expires_in is None:
+            return expires_at
+        return row.updated_at.timestamp() + int(tokens.expires_in)
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         async with self._sf() as s:
@@ -86,10 +115,14 @@ class DbTokenStorage:
             if tokens.refresh_token is None:
                 # RFC 6749 allows a refresh response to omit refresh_token. Keep the
                 # existing grant so a later restart can refresh the new access token.
-                previous = self._dec(row.tokens, OAuthToken)
+                previous = self._dec_tokens(row.tokens)[0]
                 if previous and previous.refresh_token:
                     tokens = tokens.model_copy(update={"refresh_token": previous.refresh_token})
-            row.tokens, row.resource_url, row.updated_at = self._enc(tokens), self.url or row.resource_url, utcnow()
+            raw = tokens.model_dump(mode="json", exclude_none=True)
+            if tokens.expires_in is not None:
+                raw["expires_at"] = time.time() + int(tokens.expires_in)
+            blob = self._fernet.encrypt(json.dumps(raw).encode()).decode()
+            row.tokens, row.resource_url, row.updated_at = blob, self.url or row.resource_url, utcnow()
             await s.commit()
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
@@ -198,6 +231,28 @@ class PendingFlows:
             self._by_state.pop(flow.state, None)
 
 
+class StoredExpiryOAuthProvider(OAuthClientProvider):
+    """`OAuthClientProvider` that remembers when stored tokens expire.
+
+    The SDK loads stored tokens without their expiry, so after a restart an expired access token
+    looks valid; the server answers 401, and the SDK answers a 401 with a full browser authorization
+    rather than the refresh token it holds. Off the Settings page that is AuthorizationRequired, so
+    Linear (24h access tokens) dropped to needs_auth every day with a working refresh token stored.
+    Restoring the expiry lets the SDK's own check refresh before the token goes stale."""
+
+    async def _initialize(self) -> None:
+        await super()._initialize()
+        tokens = self.context.current_tokens
+        if tokens is None:
+            return
+        storage = self.context.storage
+        expiry = await storage.token_expiry() if isinstance(storage, DbTokenStorage) else None
+        if expiry is not None:
+            self.context.token_expiry_time = max(expiry - EXPIRY_MARGIN, 1.0)   # 0 would read as "no expiry"
+        elif tokens.refresh_token:
+            self.context.token_expiry_time = 1.0      # lifetime unknown: refresh once rather than risk a 401
+
+
 def build_oauth_provider(server_url: str, public_url: str, storage: DbTokenStorage, flows: PendingFlows,
                          server: str, allow: Callable[[], bool] | None = None, timeout: float = 300.0) -> OAuthClientProvider:
     redirect, callback = flows.handlers(server, allow=allow)
@@ -208,7 +263,7 @@ def build_oauth_provider(server_url: str, public_url: str, storage: DbTokenStora
         response_types=["code"],
         token_endpoint_auth_method="none",
     )
-    return OAuthClientProvider(server_url=server_url, client_metadata=metadata, storage=storage,
+    return StoredExpiryOAuthProvider(server_url=server_url, client_metadata=metadata, storage=storage,
                                redirect_handler=redirect, callback_handler=callback, timeout=timeout)
 
 
@@ -217,6 +272,7 @@ __all__ = [
     "AuthorizationRequired",
     "DbTokenStorage",
     "PendingFlows",
+    "StoredExpiryOAuthProvider",
     "build_oauth_provider",
     "load_or_create_key",
 ]
