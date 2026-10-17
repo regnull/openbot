@@ -64,6 +64,9 @@ TUNABLES: dict[str, Tunable] = {
     "max_repeated_tool_failures": Tunable("Run limits", "Repeated tool failures",
         "Times one tool call may fail with the same arguments and the same error before the run is stopped "
         "with that error as the reply. 0 turns the stop off.", 0),
+    "mcp_tool_timeout": Tunable("Run limits", "MCP tool timeout (seconds)",
+        "Longest one MCP tool call may take; a call that runs longer returns an error to the bot instead of "
+        "holding the run. 0 turns the limit off.", 0),
     "max_bot_hops": Tunable("Run limits", "Bot-to-bot hop limit",
         "Consecutive bot-to-bot hand-offs allowed before the thread pauses for a human message.", 1),
     # --- Context ---------------------------------------------------------------------------------------------

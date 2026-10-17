@@ -18,11 +18,15 @@ every call as fine and the activity log never recorded a failed tool at warning 
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, hook_config
 from langchain_core.messages import AIMessage, ToolMessage
+from langgraph.errors import GraphBubbleUp
+
+log = logging.getLogger("openbot.tool_failures")
 
 REPEAT_NOTE = ("\n\n[This exact call already failed with this same error. Do not retry it unchanged: "
                "change the arguments, use another tool, or report the failure.]")
@@ -86,12 +90,25 @@ def _consecutive_calls(messages: list) -> tuple[tuple[str, str] | None, int]:
     return latest, count
 
 
+def _raised(request, e: Exception, cap_chars: int) -> ToolMessage:
+    """A tool that raises (langmem's manage_memory rejects `create` with an id via ValueError) is a bad
+    call the model can fix, not a reason to fail the whole run. Interrupts (ask_human, approvals) are
+    GraphBubbleUp and pass through untouched."""
+    tc = request.tool_call
+    log.warning("tool %s raised %s: %s", tc["name"], type(e).__name__, e)
+    # Capped like any tool output: an exception can carry a whole response body, and the transcript
+    # resends it on every later model call.
+    return ToolMessage(content=_clip(f"error: {type(e).__name__}: {e}", cap_chars), tool_call_id=tc["id"], name=tc["name"],
+                       status="error")
+
+
 class ToolFailureMiddleware(AgentMiddleware):
     """Marks "error: ..." tool results as errors and ends a run stuck repeating one failing call."""
 
-    def __init__(self, max_repeats: int) -> None:
+    def __init__(self, max_repeats: int, cap_chars: int = 8000) -> None:
         super().__init__()
         self.max_repeats = max_repeats   # 0 turns the stop off; failures are still marked
+        self.cap_chars = cap_chars       # longest error text a raising tool returns to the model
 
     def _mark(self, request, result):
         if not isinstance(result, ToolMessage):
@@ -109,10 +126,22 @@ class ToolFailureMiddleware(AgentMiddleware):
         return result
 
     def wrap_tool_call(self, request, handler):
-        return self._mark(request, handler(request))
+        try:
+            result = handler(request)
+        except GraphBubbleUp:
+            raise
+        except Exception as e:  # noqa: BLE001 - see _raised
+            result = _raised(request, e, self.cap_chars)
+        return self._mark(request, result)
 
     async def awrap_tool_call(self, request, handler):
-        return self._mark(request, await handler(request))
+        try:
+            result = await handler(request)
+        except GraphBubbleUp:
+            raise
+        except Exception as e:  # noqa: BLE001 - see _raised
+            result = _raised(request, e, self.cap_chars)
+        return self._mark(request, result)
 
     def _check(self, state) -> dict[str, Any] | None:
         if self.max_repeats <= 0:

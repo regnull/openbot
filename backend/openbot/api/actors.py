@@ -91,7 +91,7 @@ async def message_actor(handle: str, body: ActorMessageCreate, session: AsyncSes
     thread = None
     if body.thread_id:
         thread = await session.get(Thread, body.thread_id)
-        if thread is None:
+        if thread is None or thread.deleted_at is not None:
             raise HTTPException(404, "thread not found")
     elif body.external_ref:
         thread = (await session.execute(select(Thread).where(Thread.external_ref == body.external_ref))).scalar_one_or_none()
@@ -100,6 +100,8 @@ async def message_actor(handle: str, body: ActorMessageCreate, session: AsyncSes
                                      created_by=sender, external_ref=body.external_ref)
     try:
         res = await post_message(services, session, thread_id=thread.id, sender=sender, content=body.content, to_handles=[handle])
+    except LookupError as e:       # deleted between the lookup above and the post
+        raise HTTPException(404, "thread not found") from e
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     parts = await participants_for(session, [thread.id])

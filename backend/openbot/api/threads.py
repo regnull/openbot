@@ -25,7 +25,9 @@ from openbot.db.models import (
     Thread,
     ThreadParticipant,
     ThreadTodoList,
+    utcnow,
 )
+from openbot.runtime import activity
 from openbot.runtime.delivery import (
     DEFAULT_BOT_HANDLE,
     ack_items,
@@ -73,14 +75,14 @@ async def thread_out(session: AsyncSession, thread: Thread, parts: list[Particip
 
 async def get_thread_or_404(session: AsyncSession, thread_id: str) -> Thread:
     thread = await session.get(Thread, thread_id)
-    if not thread:
+    if not thread or thread.deleted_at is not None:
         raise HTTPException(404, "thread not found")
     return thread
 
 
 @router.get("", response_model=list[ThreadOut])
 async def list_threads(session: AsyncSession = Depends(get_session)):
-    threads = (await session.execute(select(Thread).where(Thread.kind == "chat").order_by(Thread.updated_at.desc()))).scalars().all()
+    threads = (await session.execute(select(Thread).where(Thread.kind == "chat", Thread.deleted_at.is_(None)).order_by(Thread.updated_at.desc()))).scalars().all()
     ids = [t.id for t in threads]
     parts = await participants_for(session, ids)
     default_handles = await default_bot_handles_for(session, ids)
@@ -164,13 +166,22 @@ async def update_thread(thread_id: str, body: ThreadUpdate, session: AsyncSessio
 
 
 @router.delete("/{thread_id}", status_code=204)
-async def delete_thread(thread_id: str, session: AsyncSession = Depends(get_session)):
+async def delete_thread(thread_id: str, session: AsyncSession = Depends(get_session), services: Services = Depends(get_services)):
+    """Soft delete: stop the thread's work, then hide it. Its messages, runs, run events and activity
+    stay in the database so a deleted thread can still be investigated."""
     thread = await get_thread_or_404(session, thread_id)
-    for model in (InboxItem, Run, Message, ThreadParticipant, ThreadTodoList):
-        for row in (await session.execute(select(model).where(model.thread_id == thread_id))).scalars():
-            await session.delete(row)
-    await session.flush()  # remove children before the parent, or the DB cascade beats the ORM to them
-    await session.delete(thread)
+    # Hide it first: while its work is being stopped, whatever that work still writes (a cancelled run's
+    # partial reply, a cancel notice) must find the thread deleted and wake nobody.
+    thread.deleted_at = utcnow()
+    if thread.external_ref:
+        # external_ref is unique: free it so the chat it came from (e.g. Telegram) gets a fresh thread.
+        thread.external_ref = f"deleted:{thread.id}:{thread.external_ref}"[:200]
+    await session.commit()
+    stopped = (await services.actors.close_thread(thread_id) if services.actors
+               else {"cancelled_runs": 0, "cancelled_items": 0, "cancelled_jobs": 0})
+    await activity.record(services, "thread.deleted", session=session, level="warning", thread_id=thread_id,
+                          summary=f"thread {thread.title!r} deleted (soft); {stopped['cancelled_runs']} run(s) cancelled",
+                          **stopped)
     await session.commit()
 
 

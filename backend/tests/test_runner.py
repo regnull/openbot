@@ -3,7 +3,7 @@ import sys
 from langgraph.types import Command
 from sqlalchemy import select
 
-from openbot.db.models import InboxItem, Message, Run, RunEvent
+from openbot.db.models import Actor, InboxItem, Message, Run, RunEvent
 from openbot.runtime.delivery import create_thread, human_actor, post_message
 from openbot.runtime.runner import Runner, normalize_interrupt
 from tests.conftest import build_test_services
@@ -448,3 +448,42 @@ async def test_reflection_still_gets_the_transcript_before_the_checkpoint_goes(s
     await services.runner.execute(run.id)
     assert scheduled == [2] or (scheduled and scheduled[0] >= 2)
     assert await _checkpoint(services, run.id) is None
+
+
+async def test_a_report_sent_alongside_a_tool_call_reaches_the_thread(settings):
+    from openbot.runtime.runner import REPORT_MIN_CHARS
+    report = "## Frontend report\n" + "finding. " * (REPORT_MIN_CHARS // 9 + 1)
+    script = [
+        ai("Let me look.", tool_calls=[call("read_file", cid="c1", path="a.txt")]),
+        ai(report, tool_calls=[call("read_file", cid="c2", path="b.txt")]),
+        ai("The report above is complete."),
+    ]
+    services, _eng, t, run = await make(settings, {"eng": script}, tool_names=["read_file"])
+    await services.runner.execute(run.id)
+    last = (await messages(services, t.id))[-1].content
+    assert last.startswith("## Frontend report") and last.endswith("The report above is complete.")
+    assert "Let me look." not in last                     # short narration is still left out
+
+
+async def test_mentions_inside_an_earlier_report_wake_nobody(settings):
+    from openbot.runtime.runner import REPORT_MIN_CHARS
+    report = "Status: I'll ask @rev once tests pass. " + "detail. " * (REPORT_MIN_CHARS // 8 + 1)
+    script = [ai(report, tool_calls=[call("read_file", cid="c1", path="a.txt")]), ai("done")]
+    services, _eng, t, run = await make(settings, {"eng": script}, tool_names=["read_file"])
+    await services.runner.execute(run.id)
+    last = (await messages(services, t.id))[-1]
+    assert "@rev" in last.content and last.mentions == []
+    async with services.session_factory() as s:
+        rev = (await s.execute(select(Actor).where(Actor.handle == "rev"))).scalar_one()
+        assert (await s.execute(select(InboxItem).where(InboxItem.actor_id == rev.id))).scalars().all() == []
+
+
+async def test_a_report_written_before_ask_human_survives_the_resume(settings):
+    from openbot.runtime.runner import REPORT_MIN_CHARS
+    report = "## Findings\n" + "finding. " * (REPORT_MIN_CHARS // 9 + 1)
+    script = [ai(report, tool_calls=[call("ask_human", question="Ship it?")]), ai("Shipping, per the report above.")]
+    services, _eng, t, run = await make(settings, {"eng": script})
+    await services.runner.execute(run.id)
+    await services.runner.execute(run.id, resume=Command(resume="yes"))
+    last = (await messages(services, t.id))[-1].content
+    assert last.startswith("## Findings") and last.endswith("Shipping, per the report above.")

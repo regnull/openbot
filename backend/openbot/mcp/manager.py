@@ -84,9 +84,11 @@ def _drop_unset(args: dict[str, Any], required: set[str]) -> dict[str, Any]:
     return {k: v for k, v in args.items() if k in required or (v is not None and v != "")}
 
 
-def _wrap(tool: BaseTool, name: str, cap_chars: int, workspace_root=None) -> BaseTool:
+def _wrap(tool: BaseTool, name: str, cap_chars: int, workspace_root=None,
+          timeout: Callable[[], float] = lambda: 0) -> BaseTool:
     """The registered face of an MCP tool: same schema, capped text output, and every failure (the
-    server's isError, a dead transport, a lapsed authorization) returned as an "error: ..." result
+    server's isError, a dead transport, a lapsed authorization, a call still running after `timeout()`
+    seconds) returned as an "error: ..." result
     the model can react to, instead of an exception that fails the whole run. Optional arguments left
     blank are dropped, and a description for a tool with optional arguments says which ones are required."""
     schema = tool.args_schema if isinstance(tool.args_schema, dict) else {}
@@ -97,10 +99,19 @@ def _wrap(tool: BaseTool, name: str, cap_chars: int, workspace_root=None) -> Bas
 
     async def run(**kwargs: Any) -> str:
         kwargs = _drop_unset(kwargs, required)
+        deadline = None
         try:
             # Invoking with a tool call (not a bare dict) yields a ToolMessage, which is the only place
             # the adapter surfaces the server's isError status.
-            msg = await tool.ainvoke({"name": tool.name, "args": kwargs, "id": "mcp", "type": "tool_call"})
+            # A server that never answers held a run (and its worker slot) for 19 minutes; read the
+            # limit per call so a Settings change applies without reconnecting.
+            limit = float(timeout() or 0)
+            async with asyncio.timeout(limit if limit > 0 else None) as deadline:
+                msg = await tool.ainvoke({"name": tool.name, "args": kwargs, "id": "mcp", "type": "tool_call"})
+        except TimeoutError as e:
+            if deadline is None or not deadline.expired():         # the server's or transport's own timeout, not ours
+                return cap(f"error: {type(e).__name__}: {e}", cap_chars, workspace_root=workspace_root)
+            return f"error: the MCP server did not answer within {limit:g}s; the call was abandoned"
         except Exception as e:  # noqa: BLE001 - see docstring
             return cap(f"error: {type(e).__name__}: {e}", cap_chars, workspace_root=workspace_root)
         text = _flatten(msg.content if isinstance(msg, ToolMessage) else msg)
@@ -313,7 +324,8 @@ class McpManager:
         names = []
         for t in raw_tools:
             full = tool_name(name, t.name)
-            self._registry.register(_wrap(t, full, int(self._settings.tool_output_cap), getattr(self._settings, "workspace_root", None)), source=source)
+            self._registry.register(_wrap(t, full, int(self._settings.tool_output_cap), getattr(self._settings, "workspace_root", None),
+                                          timeout=lambda: getattr(self._settings, "mcp_tool_timeout", 0)), source=source)
             names.append(full)
         st = self._status[name]
         st.tools, st.status, st.error = sorted(names), "connected", None

@@ -88,6 +88,11 @@ class Scheduler:
                 job.last_error = None
                 await session.commit()
                 await self._publish(job)
+            except LookupError as exc:
+                # The thread was deleted while this job was firing; retrying can only fail again.
+                job.status, job.last_error = "cancelled", str(exc)
+                await session.commit()
+                await self._publish(job)
             except Exception as exc:  # noqa: BLE001 - delivery providers may raise arbitrary errors
                 job.last_error = str(exc)
                 job.status = "pending" if job.attempts < 3 else "failed"

@@ -10,7 +10,8 @@ from openbot.tools.context import RunContext
 
 
 async def _validate_recipients(session, thread_id: str, handles: list[str]) -> str | None:
-    if await session.get(Thread, thread_id) is None:
+    thread = await session.get(Thread, thread_id)
+    if thread is None or thread.deleted_at is not None:
         return "target thread does not exist"
     actors = {a.handle: a for a in (await session.execute(select(Actor))).scalars()}
     unknown = [h for h in handles if h not in actors or actors[h].kind != "bot" or not actors[h].enabled]

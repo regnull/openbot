@@ -102,3 +102,51 @@ async def test_mcp_server_errors_reach_the_model_as_error_results():
     tool = _wrap(StructuredTool.from_function(coroutine=bad, name="t", description="t", handle_tool_error=True), "linear__t", 400)
     out = await tool.ainvoke({"x": "1"})
     assert is_failure(ToolMessage(out, tool_call_id="c"))
+
+
+async def test_a_tool_that_raises_is_an_error_result_not_a_failed_run(settings):
+    async def boom(x: str) -> str:
+        raise ValueError("You cannot provide a MEMORY ID when creating a MEMORY.")
+
+    script = [ai(tool_calls=[call("boom", x="1")]), ai("recovered")]
+    services, _eng, t, run = await make(settings, {"eng": script}, tool_names=["boom"])
+    services.registry.register(StructuredTool.from_function(coroutine=boom, name="boom", description="b"))
+    await services.runner.execute(run.id)
+    assert (await get(services, Run, run.id)).status == "completed"
+    [result] = [e for e in await events(services, run.id) if e.type == "tool_result"]
+    assert result.payload["status"] == "error" and "ValueError: You cannot provide a MEMORY ID" in result.payload["content"]
+    assert (await messages(services, t.id))[-1].content == "recovered"
+
+
+async def test_an_mcp_call_that_never_answers_times_out():
+    import asyncio
+
+    async def hang(x: str) -> str:
+        await asyncio.sleep(3600)
+
+    tool = _wrap(StructuredTool.from_function(coroutine=hang, name="t", description="t"), "linear__t", 400,
+                 timeout=lambda: 0.05)
+    out = await asyncio.wait_for(tool.ainvoke({"x": "1"}), 5)
+    assert is_failure(ToolMessage(out, tool_call_id="c")) and "did not answer within 0.05s" in out
+
+
+async def test_a_servers_own_timeout_keeps_its_own_error():
+    async def slow_server(x: str) -> str:
+        raise TimeoutError("upstream read timed out")
+
+    tool = _wrap(StructuredTool.from_function(coroutine=slow_server, name="t", description="t"), "linear__t", 400)
+    out = await tool.ainvoke({"x": "1"})
+    assert out == "error: TimeoutError: upstream read timed out"
+
+
+async def test_a_raised_error_is_capped(settings):
+    async def huge(x: str) -> str:
+        raise RuntimeError("x" * 50_000)
+
+    settings.tool_output_cap = 1000
+    script = [ai(tool_calls=[call("huge", x="1")]), ai("ok")]
+    services, _eng, _t, run = await make(settings, {"eng": script}, tool_names=["huge"])
+    services.registry.register(StructuredTool.from_function(coroutine=huge, name="huge", description="h"))
+    await services.runner.execute(run.id)
+    [result] = [e for e in await events(services, run.id) if e.type == "tool_result"]
+    assert result.payload["content"].startswith("error: RuntimeError") and len(result.payload["content"]) < 1100
