@@ -615,6 +615,25 @@ async def test_search_code_uses_rg_when_available(tmp_path, monkeypatch):
     assert "src/a.py:1: needle = 1" in out
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake rg is a POSIX shell script")
+async def test_search_code_falls_back_when_rg_on_path_is_not_ripgrep(tmp_path, monkeypatch):
+    """A pyenv shim named `rg` for a Python version that is not installed exits 1, rg's "no matches",
+    with only an error on stderr. search_code took that as no matches for every pattern, so bots fell
+    back to grep and sed through run_shell. Output without ripgrep's closing summary record means the
+    search did not run, and the Python walk takes over."""
+    from openbot.tools.builtin.search import search_code
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("needle = 1\n")
+    shim = tmp_path / "bin" / "rg"
+    shim.parent.mkdir()
+    shim.write_text("#!/bin/sh\necho \"pyenv: version '3.13' is not installed\" >&2\nexit 1\n")
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{shim.parent}{os.pathsep}{os.environ.get('PATH', '')}")
+    out = await search_code.ainvoke({"pattern": "needle", "runtime": rt(tmp_path)})
+    assert "src/a.py:1: needle = 1" in out
+
+
 async def test_find_files_handles_root_level_skip_dir_names(tmp_path):
     """A file named .git is fine; only directories named .git are skipped."""
     from openbot.tools.builtin.search import find_files

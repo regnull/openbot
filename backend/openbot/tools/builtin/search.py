@@ -35,6 +35,15 @@ def _iter_files(root: Path, glob: str | None):
         yield p
 
 
+def _ran_ripgrep(stdout: str) -> bool:
+    """Whether `rg --json` output came from ripgrep, which always ends it with a `summary` record."""
+    last = stdout.rstrip().rpartition("\n")[2]
+    try:
+        return json.loads(last).get("type") == "summary"
+    except (json.JSONDecodeError, AttributeError):
+        return False
+
+
 async def _search_code_rg(
     rg: str,
     pattern: str,
@@ -72,12 +81,10 @@ async def _search_code_rg(
         # Fall back to Python implementation
         return None
 
-    if result.returncode == 2:
-        # rg error — fall back to Python
+    if result.returncode not in (0, 1) or not _ran_ripgrep(result.stdout):
+        # rg error, or the `rg` on PATH is not ripgrep: a pyenv shim for a version that is not installed
+        # exits 1 (rg's "no matches") with nothing on stdout, and every search came back "(no matches)".
         return None
-
-    if not result.stdout.strip():
-        return "(no matches)"
 
     # Parse JSONL output from rg; count actual match lines (not context lines)
     match_count = 0
