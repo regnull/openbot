@@ -77,11 +77,12 @@ OPTIONAL_ARGS_NOTE = ("\n\nRequired arguments: {required}. Leave out every other
                       "do not send empty strings or placeholder values for arguments you are not using.")
 
 
-def _wraps(e: BaseException, kind: type[BaseException]) -> bool:
-    """Whether `e` is, or an exception group anywhere inside it holds, a `kind`."""
-    if isinstance(e, kind):
-        return True
-    return isinstance(e, BaseExceptionGroup) and any(_wraps(x, kind) for x in e.exceptions)
+def _only(e: BaseException, kind: type[BaseException]) -> bool:
+    """Whether `e` is a `kind`, or an exception group (nested or not) holding nothing else. A group that
+    also holds a real failure is reported as that failure, not as a clean needs_auth."""
+    if isinstance(e, BaseExceptionGroup):
+        return all(_only(x, kind) for x in e.exceptions)
+    return isinstance(e, kind)
 
 
 def _drop_unset(args: dict[str, Any], required: set[str]) -> dict[str, Any]:
@@ -272,7 +273,7 @@ class McpManager:
             st.status, st.error = "needs_auth", None
         except Exception as e:  # noqa: BLE001 - anything a transport or the OAuth flow raises becomes the server's status
             await self._close(name)
-            if _wraps(e, AuthorizationRequired):
+            if _only(e, AuthorizationRequired):
                 # The transport's task group wraps it, so the clause above never sees it: without this
                 # the server read "error: ExceptionGroup: unhandled errors in a TaskGroup".
                 st.status, st.error = "needs_auth", None
