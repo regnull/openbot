@@ -79,7 +79,8 @@ async def fetch_endpoint_slugs(model: str) -> dict[str, str]:
     """{display name (lowercased): slug} for `model`'s OpenRouter endpoints. The slug is the first
     segment of the endpoint tag ("deepinfra/fp4" -> "deepinfra"), which routes to any of that
     upstream's endpoints."""
-    async with httpx.AsyncClient(timeout=10) as client:
+    # Short: a reply waits on this the first time a model's upstream is seen (and every few hours).
+    async with httpx.AsyncClient(timeout=5) as client:
         response = await client.get(ENDPOINTS_URL.format(model=model))
         response.raise_for_status()
     slugs = {}
@@ -97,16 +98,20 @@ class UpstreamPins:
         self._fetch = fetch
         self._pins: dict[tuple[str, str], str] = {}
         self._slugs: dict[str, tuple[float, dict[str, str]]] = {}
-        self._lock = asyncio.Lock()
+        # One lock per model: a slow fetch for one model must not hold up the others' runs.
+        self._locks: dict[str, asyncio.Lock] = {}
 
     def pinned(self, bot_id: str, model: str) -> str | None:
         return self._pins.get((bot_id, model))
 
     async def slug_for(self, model: str, name: str) -> str:
-        async with self._lock:
-            fetched_at, slugs = self._slugs.get(model, (0.0, {}))
+        async with self._locks.setdefault(model, asyncio.Lock()):
+            cached = self._slugs.get(model)
+            slugs = cached[1] if cached else {}
             ttl = ENDPOINTS_TTL if slugs else ENDPOINTS_RETRY
-            if time.monotonic() - fetched_at > ttl:
+            # Never fetched is its own case: monotonic time starts near zero at boot, so a default
+            # "fetched at 0" looked fresh for the first ten minutes of a machine's uptime.
+            if cached is None or time.monotonic() - cached[0] > ttl:
                 try:
                     slugs = await self._fetch(model)
                 except Exception as e:  # noqa: BLE001 - a guessed slug is a fine fallback

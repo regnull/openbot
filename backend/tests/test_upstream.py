@@ -50,7 +50,9 @@ def test_openrouter_bots_get_the_recording_model(settings):
     assert isinstance(provider_chat_model("openrouter", "z-ai/glm-5.3-flash", settings, None), OpenRouterChatOpenAI)
 
 
-async def test_names_map_to_slugs_from_the_endpoint_list_with_a_guess_as_fallback():
+async def test_names_map_to_slugs_from_the_endpoint_list_with_a_guess_as_fallback(monkeypatch):
+    # A machine minutes after boot: monotonic time is small, which once made "never fetched" look fresh.
+    monkeypatch.setattr("openbot.runtime.upstream.time.monotonic", lambda: 5.0)
     fetches = []
 
     async def fetch(m):
