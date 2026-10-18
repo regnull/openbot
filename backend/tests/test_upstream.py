@@ -128,13 +128,13 @@ async def test_an_upstream_that_keeps_missing_warm_calls_is_skipped_and_unpinned
     pins = UpstreamPins(_fetch)
     await pins.record("bot1", "glm", "Z.AI")
     await pins.record("bot2", "glm", "Z.AI")
-    pins.observe_cache("glm", "z-ai", 20_000, 0)
-    pins.observe_cache("glm", "z-ai", 20_000, 0)
-    pins.observe_cache("glm", "z-ai", 20_000, 15_000)  # a hit resets the streak
-    pins.observe_cache("glm", "z-ai", 20_000, 700)
-    pins.observe_cache("glm", "z-ai", 20_000, 0)
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 0)
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 0)
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 15_000)  # a hit resets the streak
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 700)
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 0)
     assert pins.ignored("glm") == [] and pins.pinned("bot1", "glm") == "z-ai"
-    pins.observe_cache("glm", "z-ai", 20_000, 0)
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 0)
     assert pins.ignored("glm") == ["z-ai"]
     assert pins.pinned("bot1", "glm") is None and pins.pinned("bot2", "glm") is None
     assert pins.ignored("other-model") == []  # skips are per model
@@ -142,14 +142,19 @@ async def test_an_upstream_that_keeps_missing_warm_calls_is_skipped_and_unpinned
     assert pins.ignored("glm") == []  # and lapse, so the upstream gets another chance
 
 
-def test_the_skip_list_is_capped_so_routing_never_runs_out(monkeypatch):
+async def test_the_skip_list_is_capped_so_routing_never_runs_out(monkeypatch):
     clock = [1000.0]
     monkeypatch.setattr("openbot.runtime.upstream.time.monotonic", lambda: clock[0])
-    pins = UpstreamPins(_fetch)
+
+    async def many(m):
+        return {f"host {i}": f"host{i}" for i in range(20)}
+
+    pins = UpstreamPins(many)
+    await pins.slug_for("glm", "host 0")  # loads the endpoint list
     for i in range(12):
         clock[0] += 1
         for _ in range(3):
-            pins.observe_cache("glm", f"host{i}", 20_000, 0)
+            pins.observe_cache("bot1", "glm", f"host{i}", 20_000, 0)
     skipped = pins.ignored("glm")
     assert len(skipped) == 10 and "host0" not in skipped and "host11" in skipped
 
@@ -188,3 +193,75 @@ async def test_calls_that_switched_upstream_are_cold_and_not_judged(settings):
     for _ in range(8):
         await mw.awrap_model_call(_request(model()), handler)
     assert pins.ignored("z-ai/glm-5.3-flash") == []
+
+
+async def test_the_last_upstream_left_is_never_skipped():
+    """An ignore list naming every upstream would fail every call to the model with "no endpoints"."""
+
+    async def two(m):
+        return {"z.ai": "z-ai", "deepinfra": "deepinfra"}
+
+    pins = UpstreamPins(two)
+    await pins.slug_for("glm", "Z.AI")
+    for slug in ("z-ai", "deepinfra"):
+        for _ in range(3):
+            pins.observe_cache("bot1", "glm", slug, 20_000, 0)
+    assert pins.ignored("glm") == ["z-ai"]  # deepinfra is all that is left, so it stays
+
+    async def offline(m):
+        raise OSError("down")
+
+    blind = UpstreamPins(offline)
+    await blind.slug_for("glm", "Z.AI")
+    for _ in range(3):
+        blind.observe_cache("bot1", "glm", "z-ai", 20_000, 0)
+    assert blind.ignored("glm") == []  # without the endpoint list it cannot tell, so it skips nothing
+
+
+async def test_warm_calls_are_judged_on_what_could_have_been_cached(settings):
+    """A big tool result makes the next prompt much longer; only the previous call's part of it can be
+    cached, so 8k cached of a 38k prompt that followed an 8k one is a full hit, not a miss."""
+    settings.openrouter_provider_order = []
+    pins = UpstreamPins(_fetch)
+    mw = StickyUpstreamMiddleware(pins, "bot1", "z-ai/glm-5.3-flash", settings)
+    # Each warm call has under 25% of its whole prompt cached, but all of the previous call's.
+    calls = iter([(8_000, 0), (38_000, 8_000), (160_000, 38_000), (700_000, 160_000)])
+
+    async def handler(request):
+        prompt, cached = next(calls)
+        return AIMessage("ok", response_metadata={UPSTREAM_KEY: ["Z.AI"]}, usage_metadata=_usage(prompt, cached))
+
+    for _ in range(4):
+        await mw.awrap_model_call(_request(model()), handler)
+    assert pins.ignored("z-ai/glm-5.3-flash") == []
+
+
+async def test_miss_streaks_are_per_bot():
+    pins = UpstreamPins(_fetch)
+    await pins.slug_for("glm", "Z.AI")
+    for bot in ("bot1", "bot2", "bot3"):  # one ordinary miss each does not add up to a skip
+        pins.observe_cache(bot, "glm", "z-ai", 20_000, 0)
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 0)
+    pins.observe_cache("bot2", "glm", "z-ai", 20_000, 15_000)  # bot2's hit does not clear bot1's streak
+    pins.observe_cache("bot1", "glm", "z-ai", 20_000, 0)
+    assert pins.ignored("glm") == ["z-ai"]
+
+
+async def test_a_pin_to_a_skipped_upstream_is_not_sent(settings):
+    """A call in flight when its upstream was skipped re-pins the bot to it; the request must not then
+    name the same upstream in both order and ignore."""
+    settings.openrouter_provider_order = []
+    pins = UpstreamPins(_fetch)
+    await pins.slug_for("z-ai/glm-5.3-flash", "Z.AI")
+    for _ in range(3):
+        pins.observe_cache("bot2", "z-ai/glm-5.3-flash", "z-ai", 20_000, 0)
+    await pins.record("bot1", "z-ai/glm-5.3-flash", "Z.AI")
+    mw = StickyUpstreamMiddleware(pins, "bot1", "z-ai/glm-5.3-flash", settings)
+    sent = []
+
+    async def handler(request):
+        sent.append(request.model_settings["extra_body"]["provider"])
+        return AIMessage("ok")
+
+    await mw.awrap_model_call(_request(model()), handler)
+    assert sent == [{"ignore": ["z-ai"]}]

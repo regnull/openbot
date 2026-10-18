@@ -112,7 +112,7 @@ class UpstreamPins:
         self._slugs: dict[str, tuple[float, dict[str, str]]] = {}
         # One lock per model: a slow fetch for one model must not hold up the others' runs.
         self._locks: dict[str, asyncio.Lock] = {}
-        self._misses: dict[tuple[str, str], int] = {}  # (model, slug) -> consecutive warm misses
+        self._misses: dict[tuple[str, str, str], int] = {}  # (bot, model, slug) -> consecutive warm misses
         self._ignored: dict[str, dict[str, float]] = {}  # model -> {slug: skipped until (monotonic)}
 
     def pinned(self, bot_id: str, model: str) -> str | None:
@@ -134,6 +134,14 @@ class UpstreamPins:
                 self._slugs[model] = (time.monotonic(), slugs)
         return slugs.get(name.lower()) or guess_slug(name)
 
+    def _others_remain(self, model: str, slug: str) -> bool:
+        """Whether skipping `slug` still leaves `model` an upstream to route to. Unknown when the
+        endpoint list could not be fetched; then nothing is skipped, since an ignore list covering
+        every upstream would fail every call to the model with "no endpoints"."""
+        cached = self._slugs.get(model)
+        known = set(cached[1].values()) if cached else set()
+        return bool(known - set(self.ignored(model)) - {slug})
+
     def ignored(self, model: str) -> list[str]:
         """Upstreams currently skipped for `model`, expired skips dropped."""
         entries = self._ignored.get(model, {})
@@ -142,17 +150,24 @@ class UpstreamPins:
             del entries[slug]
         return sorted(entries)
 
-    def observe_cache(self, model: str, slug: str, prompt_tokens: int, cached_tokens: int) -> None:
-        """Judge one warm call: a hit clears the upstream's miss streak; MISS_LIMIT misses in a row
-        skip it for this model and unpin every bot pinned to it."""
-        key = (model, slug)
-        if prompt_tokens <= 0 or cached_tokens >= CACHE_HIT_SHARE * prompt_tokens:
+    def observe_cache(self, bot_id: str, model: str, slug: str, cacheable_tokens: int, cached_tokens: int) -> None:
+        """Judge one warm call by one bot. `cacheable_tokens` is what the upstream could have had
+        cached: the part of this prompt the previous call already sent, not the whole prompt (a 30k
+        tool result can only be cached from the call after it). A hit clears the bot's miss streak;
+        MISS_LIMIT misses in a row skip the upstream for this model and unpin every bot pinned to it.
+        Streaks are per bot, so one bot's hit does not hide another's misses, nor do ordinary misses
+        from several bots add up to a skip."""
+        key = (bot_id, model, slug)
+        if cacheable_tokens <= 0 or cached_tokens >= CACHE_HIT_SHARE * cacheable_tokens:
             self._misses.pop(key, None)
             return
         self._misses[key] = self._misses.get(key, 0) + 1
         if self._misses[key] < MISS_LIMIT:
             return
         del self._misses[key]
+        if not self._others_remain(model, slug):
+            log.info("OpenRouter upstream %s barely caches %s, but it is the last one left: keeping it", slug, model)
+            return
         entries = self._ignored.setdefault(model, {})
         entries[slug] = time.monotonic() + IGNORE_TTL
         while len(entries) > MAX_IGNORED:
@@ -191,6 +206,7 @@ class StickyUpstreamMiddleware(AgentMiddleware):
         self.pins, self.bot_id, self.model, self.settings = pins, bot_id, model, settings
         # One middleware per run: the upstream of this run's previous call, to tell warm calls apart.
         self._last_slug: str | None = None
+        self._last_prompt = 0  # input tokens of that call: the most a warm call can have cached
 
     def _explicit(self) -> bool:
         return bool(getattr(self.settings, "openrouter_provider_order", None))
@@ -200,6 +216,9 @@ class StickyUpstreamMiddleware(AgentMiddleware):
             return request
         slug = self.pins.pinned(self.bot_id, self.model)
         ignored = self.pins.ignored(self.model)
+        if slug in ignored:
+            # A call still in flight when its upstream was skipped re-pinned the bot to it.
+            slug = None
         provider: dict[str, Any] = {}
         if slug is not None:
             provider.update(order=[slug], allow_fallbacks=True)
@@ -228,8 +247,9 @@ class StickyUpstreamMiddleware(AgentMiddleware):
         if name and not self._explicit():
             slug = await self.pins.record(self.bot_id, self.model, name)
             usage = getattr(reply, "usage_metadata", None) or {}
+            prompt = int(usage.get("input_tokens") or 0)
             if slug == self._last_slug and usage:
                 cached = int((usage.get("input_token_details") or {}).get("cache_read") or 0)
-                self.pins.observe_cache(self.model, slug, int(usage.get("input_tokens") or 0), cached)
-            self._last_slug = slug
+                self.pins.observe_cache(self.bot_id, self.model, slug, min(prompt, self._last_prompt), cached)
+            self._last_slug, self._last_prompt = slug, prompt
         return response
