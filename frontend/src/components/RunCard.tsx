@@ -2,11 +2,20 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Api } from "../api/client";
 import { usageLabel } from "../lib/usageLabel";
-import type { Run, RunEvent } from "../api/types";
+import type { BotScratchpad, Run, RunEvent } from "../api/types";
 import { Badge, Button, ErrorText, type BadgeTone } from "./ui";
 import { ChevronDownIcon, ChevronRightIcon, ExternalIcon } from "./icons";
 
 const ACTIVE = ["queued", "running", "waiting_human"];
+
+/** A scratchpad as returned by the API: the pad text plus when it was last written. */
+type ScratchpadEntry = Pick<BotScratchpad, "content" | "updated_at">;
+/**
+ * Per-session cache of scratchpads by actor id. Opening the pad always re-fetches the latest
+ * write, but the cached copy shows instantly on repeat opens (and stays readable if a refetch
+ * fails), so a pad you just looked at doesn't flash blank while loading.
+ */
+const scratchpadCache = new Map<string, ScratchpadEntry>();
 
 const tone = (s: string): BadgeTone => (s === "completed" ? "green" : s === "failed" || s === "cancelled" ? "red" : s === "waiting_human" ? "amber" : "blue");
 
@@ -14,13 +23,32 @@ const tone = (s: string): BadgeTone => (s === "completed" ? "green" : s === "fai
  * The run log under a bot's message: what it said while working and every tool it called, as a
  * transcript. Tool calls read like shell lines — `$ name(args)` with the result folded beneath.
  */
-export default function RunCard({ run, events, streaming }: { run: Run; events: RunEvent[]; streaming?: string }) {
+export default function RunCard({ run, events, streaming, botName }: { run: Run; events: RunEvent[]; streaming?: string; botName?: string | null }) {
   // Always collapsed by default regardless of run status; the user clicks to expand.
   const active = ACTIVE.includes(run.status);
   const [open, setOpen] = useState(false);
   const toggle = () => setOpen((o) => !o);
   // Nothing to invalidate: the cancel lands as a `run.updated` over SSE like any other status change.
   const cancel = useMutation({ mutationFn: () => Api.cancelRun(run.id) });
+  // The bot's persistent scratchpad: fetched lazily on first open, re-fetched on every open so it
+  // reflects the latest write; seeded from the session cache so repeat opens don't flash blank.
+  const [padOpen, setPadOpen] = useState(false);
+  const [pad, setPad] = useState<ScratchpadEntry | null>(() => scratchpadCache.get(run.actor_id) ?? null);
+  const [padError, setPadError] = useState<unknown>(null);
+  const loadScratchpad = useMutation({
+    mutationFn: () => Api.getBotScratchpad(run.actor_id),
+    onSuccess: (s) => {
+      const entry = { content: s.content, updated_at: s.updated_at };
+      scratchpadCache.set(run.actor_id, entry);
+      setPad(entry);
+      setPadError(null);
+    },
+    onError: (e) => setPadError(e),
+  });
+  const toggleScratchpad = () => {
+    setPadOpen((o) => !o);
+    if (!padOpen) loadScratchpad.mutate(); // every open re-fetches; closing is free
+  };
   // Events arrive sorted by seq; group contiguous text events and build a chronological list of content blocks.
   const results = new Map<unknown, RunEvent>(events.filter((e) => e.type === "tool_result").map((e) => [e.payload.tool_call_id, e] as const));
   const toolCalls = events.filter((e) => e.type === "tool_call").length;
@@ -63,6 +91,9 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
         {run.langsmith_run_id && (
           <a className="inline-flex shrink-0 items-center gap-1 text-muted hover:text-fg" target="_blank" rel="noreferrer" href={`https://smith.langchain.com/o/-/projects/p/-/r/${run.langsmith_run_id}`}>LangSmith <ExternalIcon className="h-3 w-3" /></a>
         )}
+        <Button variant="secondary" size="sm" onClick={toggleScratchpad}>
+          {padOpen ? "Hide scratchpad" : "Show scratchpad"}
+        </Button>
         {active && (
           <Button variant="secondary" size="sm" onClick={() => cancel.mutate()} disabled={cancel.isPending}>
             {cancel.isPending ? "Cancelling…" : "Cancel"}
@@ -70,6 +101,22 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
         )}
       </div>
       {cancel.error && <div className="px-2 pb-1"><ErrorText error={cancel.error} /></div>}
+      {padOpen && (
+        <div className="space-y-1 border-t border-line p-2">
+          <p className="px-1.5 text-faint">
+            {botName ? `${botName}'s scratchpad` : "Scratchpad"}
+            {pad?.updated_at ? <span> · updated {new Date(pad.updated_at).toLocaleString()}</span> : null}
+          </p>
+          {padError ? <ErrorText error={padError} /> : null}
+          {pad ? (
+            pad.content.trim()
+              ? <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-ui border border-line bg-canvas p-2 text-[11px] leading-relaxed text-muted scrollbar-subtle">{pad.content}</pre>
+              : <p className="px-1.5 text-faint">Scratchpad is empty.</p>
+          ) : (
+            !padError && <p className="px-1.5 text-faint">Loading…</p>
+          )}
+        </div>
+      )}
       {open && (
         <div className="space-y-1 border-t border-line p-2">
           {body.length > 0 ? body : null}

@@ -18,6 +18,7 @@ from openbot.api.schemas import (
     MemoryOut,
     MessageOut,
     PurgeOut,
+    ScratchpadOut,
     bot_out,
 )
 from openbot.api.tool_validation import known_tool
@@ -26,6 +27,7 @@ from openbot.db.models import (
     OPEN_RUN_STATUSES,
     Actor,
     BotProfile,
+    BotScratchpad,
     InboxItem,
     Message,
     Run,
@@ -235,6 +237,18 @@ async def post_to_bot_inbox(bot_id: str, body: DirectPost, session: AsyncSession
     res = await post_message(services, session, thread_id=thread.id, sender=you, content=content, to_handles=[bot.handle])
     item = next(i for i in res.items if i.actor_id == bot.id)
     return (await _bot_inbox_rows(session, bot, [item]))[0]
+
+
+# --- scratchpad ---------------------------------------------------------------------------------------------
+
+@router.get("/{bot_id}/scratchpad", response_model=ScratchpadOut)
+async def bot_scratchpad(bot_id: str, session: AsyncSession = Depends(get_session)):
+    """The bot's persistent scratchpad — its cross-thread working memory, written by the scratchpad
+    tool and injected into every run's system prompt. Empty content (not a 404) when the bot has
+    never written one."""
+    await _get_bot_or_404(session, bot_id)
+    pad = await session.get(BotScratchpad, bot_id)
+    return ScratchpadOut(content=pad.content if pad else "", updated_at=pad.updated_at if pad else None)
 
 
 @router.post("/{bot_id}/purge", response_model=PurgeOut)

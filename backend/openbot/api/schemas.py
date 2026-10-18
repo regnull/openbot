@@ -401,6 +401,13 @@ class MemoryOut(BaseModel):
     updated_at: datetime | None
 
 
+class ScratchpadOut(BaseModel):
+    """A bot's persistent scratchpad (GET /bots/{id}/scratchpad): its cross-thread working memory,
+    written by the scratchpad tool and injected into every run's system prompt."""
+    content: str
+    updated_at: datetime | None
+
+
 class ResumeBody(BaseModel):
     answer: str | None = None
     decisions: list[Literal["approve", "reject"]] | None = None

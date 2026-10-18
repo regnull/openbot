@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, BotCatalogEntry, DirectoryListing, McpCatalogEntry, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, InboxItem, Message, ModelsOut, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo, DatabaseLocation } from "./types";
+import type { Actor, AppSetting, Bot, BotCatalogEntry, DirectoryListing, McpCatalogEntry, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, BotScratchpad, InboxItem, Message, ModelsOut, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, Thread, ThreadDetail, ThreadUsage, ToolInfo, DatabaseLocation } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface ScheduledMessage { id: string; thread_id: string; content: string; due_at: string; status: string; attempts: number; last_error?: string | null; result_message_id?: string | null; to_handles: string[]; }
@@ -41,6 +41,7 @@ export const Api = {
   listBotCatalog: () => api<BotCatalogEntry[]>("/bots/catalog"),
   installBotCatalogEntry: ({ id, handle }: { id: string; handle?: string }) => api<Bot>(`/bots/catalog/${id}/install`, { method: "POST", json: handle ? { handle } : {} }),
   getBot: (id: string) => api<Bot>(`/bots/${id}`),
+  getBotScratchpad: (id: string) => api<BotScratchpad>(`/bots/${id}/scratchpad`),
   createBot: (b: BotInput) => api<Bot>("/bots", { method: "POST", json: b }),
   updateBot: (id: string, b: Partial<BotInput>) => api<Bot>(`/bots/${id}`, { method: "PATCH", json: b }),
   deleteBot: (id: string) => api<void>(`/bots/${id}`, { method: "DELETE" }),

@@ -25,6 +25,8 @@ export interface ThreadUsage { model_calls: number; prompt_tokens: number; compl
 export interface InboxItem { id: string; actor_id: string; thread_id: string; kind: "message" | "question" | "resume"; message_id: string | null; run_id: string | null; payload: Record<string, any>; status: string; attempts: number; last_error: string | null; created_at: string; processed_at: string | null; message: Message | null; }
 export interface BotInboxItem extends InboxItem { thread_kind: "chat" | "direct"; run_status: string | null; reply: Message | null; }
 export interface BotMemory { key: string; content: string; created_at: string | null; updated_at: string | null; }
+/** A bot's persistent scratchpad (its cross-thread working memory), from GET /bots/{id}/scratchpad. */
+export interface BotScratchpad { content: string; updated_at: string | null; }
 /** What POST /bots/{id}/purge did. */
 export interface PurgeResult { cancelled_runs: number; purged_items: number; }
 export interface ToolInfo { name: string; description: string; source: string; args_schema: Record<string, unknown>; }
