@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     prompt_caching: bool = True          # add Anthropic cache breakpoints to every model call
     include_llm_call_details: bool = Field(default=True, validation_alias="OPENBOT_INCLUDE_LLM_CALL_DETAILS")  # expose per-call token details in activity events; launchers opt out explicitly
     direct_anthropic: bool = True        # send OpenRouter `anthropic/...` models to Anthropic directly when a key exists
+    defer_mcp_tools: bool = True         # send MCP tool definitions only after a bot loads them (runtime/tool_loading.py)
     tool_output_cap: int = 8000          # max chars of any single tool result the model sees (head + tail kept)
     shell_output_cap: int = 4000         # tighter cap for run_shell, so dumping a file through cat/git show loses to read_file ranges
     # Context triggers: None means "derive from the model's context window" (OpenCode's compaction

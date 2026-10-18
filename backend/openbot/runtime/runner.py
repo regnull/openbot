@@ -55,6 +55,13 @@ from openbot.runtime.prompt import build_history, build_system_prompt_parts
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.runtime.tool_failures import ToolFailureMiddleware
+from openbot.runtime.tool_loading import LOAD_TOOLS, DeferredToolsMiddleware
+from openbot.runtime.upstream import (
+    OpenRouterChatOpenAI,
+    StickyUpstreamMiddleware,
+    UpstreamPins,
+    upstream_of,
+)
 from openbot.skills import enabled_skills
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.scheduling import SCHEDULING_TOOLS
@@ -414,6 +421,8 @@ class RunMessagesSummarization(SummarizationMiddleware):
 class Runner:
     def __init__(self, services) -> None:
         self.s = services
+        # Each bot's last OpenRouter upstream, so its next call lands on the same warm prompt cache.
+        self.upstream_pins = UpstreamPins()
 
     async def _run_turn_triggers(
         self, provider: str, model: str, system_prompt: SystemMessage | None = None
@@ -682,6 +691,7 @@ class Runner:
             if "load_skill" in bot.bot.tool_names
             else []
         )
+        deferred = set(self.deferred_tool_names(bot))
         stable_prompt, dynamic_prompt = build_system_prompt_parts(
             bot=bot,
             all_bots=list(all_actors),
@@ -691,12 +701,17 @@ class Runner:
             older_count=older,
             # Only tools that will actually be bound: an MCP server that is down
             # must not be advertised, or the model calls a tool it does not have.
-            tool_names=[n for n in bot.bot.tool_names if self.s.registry.has(n)],
+            # Tools loaded on demand are listed in their own section instead (runtime/tool_loading.py).
+            tool_names=[
+                *(n for n in bot.bot.tool_names if self.s.registry.has(n) and n not in deferred),
+                *([LOAD_TOOLS] if deferred else []),
+            ],
             default_bot_handle=default_bot_handle,
             scoped=scoped,
             todos=todos,
             scratchpad=scratchpad,
             skills=skills,
+            deferred_tools=[n for n in bot.bot.tool_names if n in deferred],
         )
         prompt = SystemMessage(
             content=[
@@ -765,6 +780,13 @@ class Runner:
                 on_overflow=summarizer.compact_for_overflow,
             ),
             *caching_middleware(model, st),
+            # Keeps the bot on the OpenRouter upstream that served its last call (each upstream has its
+            # own prompt cache), unless openrouter_provider_order says otherwise.
+            *(
+                [StickyUpstreamMiddleware(self.upstream_pins, bot.id, model.model_name, st)]
+                if isinstance(model, OpenRouterChatOpenAI)
+                else []
+            ),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
             # Marks "error: ..." tool results as errors and ends a run stuck repeating one failing call.
@@ -792,7 +814,30 @@ class Runner:
                     description_prefix="Tool execution requires approval",
                 )
             )
+        deferred_names = self.deferred_tool_names(bot)
+        if deferred_names:
+            middleware.append(DeferredToolsMiddleware(self.s.registry.resolve(deferred_names)))
         return middleware
+
+    def deferred_tool_names(self, bot: Actor) -> list[str]:
+        """The bot's MCP tools, which are bound but sent to the model only once it loads them
+        (runtime/tool_loading.py). None when deferral is off, or for a CLI-agent bot, which never
+        goes through create_agent."""
+        if (
+            self.s.registry is None
+            or not getattr(self.s.settings, "defer_mcp_tools", True)
+            or adapter_for(bot.bot.provider) is not None
+        ):
+            return []
+        # Approval-gated tools stay loaded: the human-in-the-loop check runs before the deferred
+        # middleware's refusal, so a call to one never loaded would be approved, refused, and need
+        # approving again on the retry.
+        gated = set(bot.bot.approval_tools or ())
+        return [
+            n
+            for n in bot.bot.tool_names
+            if n not in gated and (self.s.registry.source(n) or "").startswith("mcp:")
+        ]
 
     def _build_agent(self, bot: Actor, system_prompt: str, triggers: tuple[int, int] | None = None):
         p = bot.bot
@@ -921,12 +966,13 @@ class Runner:
                         inc = add_usage(usage, m, price)
                         if inc is not None:
                             log.info(
-                                "run %s model call %d: prompt=%d (cache_read=%d) completion=%d",
+                                "run %s model call %d: prompt=%d (cache_read=%d) completion=%d upstream=%s",
                                 run.id,
                                 usage["model_calls"],
                                 inc["prompt_tokens"],
                                 inc["cache_read_tokens"],
                                 inc["completion_tokens"],
+                                upstream_of(m) or "-",
                             )
                             # Persist each provider-reported turn before processing its tools. This keeps
                             # live run/thread/bot totals current and makes a tool round visible immediately.

@@ -52,8 +52,11 @@ SAFETY_MARGIN_TOKENS = 4_000
 OUTPUT_TOKEN_MAX = 32_000
 # Ceiling on a derived summary trigger. Every call re-sends the whole context, so a 1M window
 # summarizing at ~700k made each call slow and costly; past this a summary is cheaper than
-# carrying the history. An explicit `summary_trigger_tokens` override may still go higher.
-MAX_DERIVED_SUMMARY_TRIGGER = 200_000
+# carrying the history. At 200k (2026-10-17) a 1M-window bot cleared nothing until ~133k of
+# messages and its calls passed 170k tokens; 100k keeps clearing near 67k, above the ~47k that
+# made bots re-read what had just been cleared. An explicit `summary_trigger_tokens` override
+# may still go higher.
+MAX_DERIVED_SUMMARY_TRIGGER = 100_000
 
 # Built-in fallbacks (the old fixed defaults), used when the window is unknown or a trigger
 # setting is None without a window to derive from.

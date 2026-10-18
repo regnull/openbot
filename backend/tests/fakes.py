@@ -12,8 +12,10 @@ class ScriptedChatModel(BaseChatModel):
 
     messages: Any
     seen: ClassVar[list[list[BaseMessage]]] = []
+    bound: ClassVar[list[list[str]]] = []  # tool names offered on each model call, in order
 
     def bind_tools(self, tools, **kwargs):
+        ScriptedChatModel.bound.append([t["name"] if isinstance(t, dict) else t.name for t in tools])
         return self
 
     @property

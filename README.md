@@ -466,6 +466,12 @@ Tools appear in the registry as `server__tool` (`Linear__create_issue`) with sou
 In the bot editor, MCP tools are grouped by server: grant a whole server with one checkbox, or expand
 it and pick individual tools. `approval_tools` and `TOOL_OUTPUT_CAP` apply to them like any other tool.
 
+MCP tools load on demand (`defer_mcp_tools`, on by default). A server can bring dozens of tools with
+long schemas (Linear's 76 come to ~30k tokens), and every model call re-sends every tool definition it
+is offered. So a bot's system prompt lists its MCP tools by name only, and the bot calls `load_tools`
+(by exact name, or by keyword `query`) to add the ones a task needs; they stay loaded for the rest of the
+run. A call to a tool that was never loaded does not run, but loads it so the retry has its schema.
+
 Whatever you authorize is shared by every bot given that tool: a bot calling Linear acts as you.
 Use `approval_tools` for anything that writes.
 
@@ -634,12 +640,13 @@ name, if set, is the default the page shows and the value a reset returns to.
 | Embeddings | `embedding_model`, `embedding_dims` | `provider:model` for semantic memory search (`openrouter:openai/text-embedding-3-small`/1536 using the OpenRouter key, `openai:text-embedding-3-small`/1536, `ollama:nomic-embed-text`/768). Empty turns semantic search off. Applies immediately: the memory store is reopened. |
 | Run limits | `max_model_calls_per_run` (60), `max_repeated_tool_failures` (3), `max_bot_hops` (20) | Model turns per run before the agent stops with a notice (a bot can lower it in `model_settings.max_model_calls`; the seeded Chief of Staff uses 6); how many times one tool call may fail with the same arguments and error before the run stops with that error as the reply (0 = off); bot-to-bot mention chain limit per thread. `model_settings` also accepts `reasoning_effort` (set from the Effort select for models that declare levels), `temperature`, `max_tokens`. |
 | Context | `tool_output_cap` (8000), `shell_output_cap` (4000) | Longest single tool result the model sees; shorter cap for `run_shell` so dumping files through the shell loses to `read_file` ranges. |
+| Context | `defer_mcp_tools` (true) | Leave MCP tool definitions out of model calls until the bot loads them with `load_tools`; the system prompt lists their names. |
 | Context | `context_trigger_tokens` (40000), `context_clear_at_least` (10000) | Once a run's messages pass the trigger, tool results from turns before the last two, and their call arguments, become a placeholder, oldest first; each clearing reclaims at least the second value so clearings are rare and the prompt cache stays warm. What the last two model turns fetched is never cleared. |
 | Context | `summary_trigger_tokens` (60000), `summary_keep_messages` (24) | Older history folds into one structured summary by the bot's own model once the run's messages pass the trigger. Measured on the messages alone: the system prompt and tool schemas are not counted. |
 | Context | `history_token_budget` (24000), `history_max_messages` (80) | Thread history included in a run's prompt. |
 | Memory | `memory_reflection_delay` (30) | Seconds to debounce background memory reflection after a run. |
 | Model routing | `bot_model` | OpenRouter model for bots on `auto`, `openrouter` bots with no model, and cloud bots whose provider has no key (default `openai/gpt-4o-mini`). |
-| Model routing | `openrouter_provider_order` | Preferred OpenRouter upstream slugs (e.g. `z-ai`); each upstream has its own prompt cache. |
+| Model routing | `openrouter_provider_order` | Preferred OpenRouter upstream slugs (e.g. `z-ai`); each upstream has its own prompt cache. Empty (the default): each bot is pinned to the upstream that served its last call, with fallbacks on, so its cache stays warm and the pin follows when that upstream fails. |
 | Model routing | `prompt_caching` (true), `direct_anthropic` (true) | Anthropic cache breakpoints on every call; send OpenRouter `anthropic/...` models straight to Anthropic when a key exists so caching covers tool results. |
 | Model retries | `model_retry_max_attempts` (3), `model_retry_base_delay` (2.0), `model_retry_backoff_cap` (60.0) | Retries a model call that failed with a transient upstream provider error (rate limit, 5xx, timeout, "model stopped before completing"); 0 or 1 attempts disables retries. Delays double from the base with jitter up to the cap. Auth/permission/invalid-request errors fail immediately. |
 | Model retries | `model_call_timeout` (120) | Seconds one model call may take, including gaps between streamed chunks, before it fails as a transient error and is retried. The provider SDKs' own silent retries are off, so a dead upstream costs at most `model_retry_max_attempts` × this. 0 means no limit. |
