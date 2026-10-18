@@ -46,6 +46,14 @@ RESERVE_SHARE = 0.1
 # Tokens held back from a derived trigger, after the output reserve, as a safety margin for the
 # catalog's count being optimistic and the local token estimate being rough.
 SAFETY_MARGIN_TOKENS = 4_000
+# Most of a reply the reserve holds room for (OpenCode OUTPUT_TOKEN_MAX). Catalogs report some
+# models' output limit as nearly the whole window (GLM-5.3-Flash: 943,717 of 1,048,576), and
+# reserving all of it summarized a 1M-token model at ~70k (2026-10-17). A bot's reply never needs more.
+OUTPUT_TOKEN_MAX = 32_000
+# Ceiling on a derived summary trigger. Every call re-sends the whole context, so a 1M window
+# summarizing at ~700k made each call slow and costly; past this a summary is cheaper than
+# carrying the history. An explicit `summary_trigger_tokens` override may still go higher.
+MAX_DERIVED_SUMMARY_TRIGGER = 200_000
 
 # Built-in fallbacks (the old fixed defaults), used when the window is unknown or a trigger
 # setting is None without a window to derive from.
@@ -125,9 +133,10 @@ def derive_trigger_thresholds(
     "derive from the window", a number means "explicit override — user intent wins". Unknown
     window and None both fall back to the built-in defaults, which keeps today's behavior for
     hand-typed models. Known window: OpenCode's compaction formula — reserve = max(10% of the
-    window, the model's output limit, 16k), capped at half the window so a tiny window keeps room
-    for the conversation at all; usable = window - reserve; summary trigger = 70% of usable, and
-    the clear trigger `CLEAR_SHARE` of that, so clearing still fires first. `window <= 0`
+    window, the model's output limit up to `OUTPUT_TOKEN_MAX`, 16k), capped at half the window so a
+    tiny window keeps room for the conversation at all; usable = window - reserve; summary trigger =
+    70% of usable, no higher than `MAX_DERIVED_SUMMARY_TRIGGER`, and the clear trigger
+    `CLEAR_SHARE` of that, so clearing still fires first. `window <= 0`
     counts as unknown (the catalog reports unknown windows as 0).
     """
     summary = max(1, int(summary_trigger)) if summary_trigger is not None else None
@@ -137,7 +146,7 @@ def derive_trigger_thresholds(
             summary if summary is not None else FALLBACK_SUMMARY_TRIGGER,
             clear if clear is not None else FALLBACK_CLEAR_TRIGGER,
         )
-    reserve = max(RESERVE_MIN, output_limit or 0)
+    reserve = max(RESERVE_MIN, min(output_limit or 0, OUTPUT_TOKEN_MAX))
     if RESERVE_SHARE * window <= RESERVE_MIN:
         # A window under 2x the minimum reserve: cap the reserve at half the window, so the
         # conversation keeps at least half of it (OpenCode's 2x RESERVE_MIN gate).
@@ -145,7 +154,7 @@ def derive_trigger_thresholds(
     # The margin shrinks with a small window: a fixed 4k on top of a halved 8k window left 1 token.
     margin = min(SAFETY_MARGIN_TOKENS, int(window * RESERVE_SHARE))
     usable = max(1, window - reserve - margin)
-    derived = max(1, int(usable * TRIGGER_SHARE))
+    derived = max(1, min(int(usable * TRIGGER_SHARE), MAX_DERIVED_SUMMARY_TRIGGER))
     return (
         summary if summary is not None else derived,
         clear if clear is not None else max(1, int(derived * CLEAR_SHARE)),
