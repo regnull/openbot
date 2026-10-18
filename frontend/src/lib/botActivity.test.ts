@@ -5,7 +5,7 @@ import { activeBotIds, botActivityLabel, botActivityQueryKeys, refreshBotActivit
 const bot = (id: string, active: boolean): Bot => ({
   id, handle: id, name: id, description: "", icon: "robot", enabled: true, active,
   instructions: "", provider: "openai", model: "gpt", model_settings: {}, tool_names: [],
-  approval_tools: [], memory_enabled: true, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+  approval_tools: [], skill_names: [], memory_enabled: true, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
 });
 
 describe("bot activity helpers", () => {

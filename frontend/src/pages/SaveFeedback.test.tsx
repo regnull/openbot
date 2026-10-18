@@ -16,7 +16,7 @@ let root: Root;
 let el: HTMLDivElement;
 let qc: QueryClient;
 const row: AppSetting = { key: "limit", group: "Run limits", label: "Limit", description: "", type: "int", value: 10, default: 5, overridden: true, secret: false, is_set: true };
-const bot: Bot = { id: "b1", name: "Bot", handle: "bot", description: "", icon: "bot", instructions: "", provider: "auto", model: "", model_settings: {}, tool_names: [], approval_tools: [], memory_enabled: true, enabled: true, active: false, created_at: "", updated_at: "" };
+const bot: Bot = { id: "b1", name: "Bot", handle: "bot", description: "", icon: "bot", instructions: "", provider: "auto", model: "", model_settings: {}, tool_names: [], approval_tools: [], skill_names: [], memory_enabled: true, enabled: true, active: false, created_at: "", updated_at: "" };
 const notice = () => el.querySelector('[role="status"]')!.textContent;
 const button = (text: string, parent: ParentNode = el) => [...parent.querySelectorAll("button")].find((b) => b.textContent === text)!;
 const click = async (b: HTMLButtonElement) => { await act(async () => b.click()); };

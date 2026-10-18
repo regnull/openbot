@@ -13,7 +13,7 @@ vi.mock("../api/client", () => ({ Api: fake.api }));
 
 const bot: Bot = {
   id: "b1", handle: "eng", name: "Engineer", description: "", icon: "robot", enabled: true, active: true, instructions: "",
-  provider: "auto", model: "", model_settings: {}, tool_names: [], approval_tools: [], memory_enabled: true, created_at: "", updated_at: "",
+  provider: "auto", model: "", model_settings: {}, tool_names: [], approval_tools: [], skill_names: [], memory_enabled: true, created_at: "", updated_at: "",
 };
 
 describe("BotPage cancel & purge", () => {
