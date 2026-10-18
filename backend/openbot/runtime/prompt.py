@@ -6,6 +6,7 @@ from string import Template
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from openbot.db.models import Actor, Message
+from openbot.skills import SkillInfo, skills_section
 from openbot.tools.builtin.scratchpad import scratchpad_section
 from openbot.tools.builtin.todo import todo_list_section
 
@@ -166,6 +167,7 @@ def build_system_prompt(
     scoped: bool = False,
     todos: list[dict] | None = None,
     scratchpad: str | None = None,
+    skills: list[SkillInfo] | None = None,
 ) -> str:
     stable, dynamic = build_system_prompt_parts(
         bot=bot,
@@ -179,6 +181,7 @@ def build_system_prompt(
         scoped=scoped,
         todos=todos,
         scratchpad=scratchpad,
+        skills=skills,
     )
     return stable + dynamic
 
@@ -196,6 +199,7 @@ def build_system_prompt_parts(
     scoped: bool = False,
     todos: list[dict] | None = None,
     scratchpad: str | None = None,
+    skills: list[SkillInfo] | None = None,
 ) -> tuple[str, str]:
     roster = (
         "\n".join(
@@ -252,6 +256,8 @@ def build_system_prompt_parts(
         dynamic += f"\n\n{scratchpad_section(scratchpad)}"
     if todos:
         dynamic += f"\n\n{todo_list_section(todos)}"
+    if skills:
+        dynamic += f"\n\n{skills_section(skills)}"
     repository_instructions = load_repository_instructions(
         workspace_root, enabled=bot.bot.load_repository_instructions, start_directory=workspace_root
     )

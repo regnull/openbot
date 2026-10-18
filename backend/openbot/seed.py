@@ -181,7 +181,7 @@ async def seed_demo_bots(services) -> int:
     return len(DEMO_BOTS)
 
 
-SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon", "load_repository_instructions")
+SYNCED_FIELDS = ("instructions", "tool_names", "approval_tools", "model_settings", "icon", "load_repository_instructions", "skill_names")
 
 SCRATCHPAD_GRANT_DONE_KEY = "_scratchpad_grant_done"
 
@@ -212,7 +212,6 @@ async def grant_scratchpad_to_existing_bots(services) -> None:
         await session.commit()
     if granted:
         log.info("granted the scratchpad tool to %d existing bots", granted)
-
 
 async def sync_demo_bots(services) -> int:
     """Rewrite the demo bots' instructions, tools, approval tools and model settings from DEMO_BOTS.

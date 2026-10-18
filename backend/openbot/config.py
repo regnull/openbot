@@ -146,6 +146,14 @@ class Settings(BaseSettings):
             self.secret_key_file = root / ".openbot" / "secret.key"
         return self
 
+    @property
+    def state_dir(self) -> Path | None:
+        """OpenBot's own state directory: skills shipped with the app live in `<root>/.openbot/skills`,
+        where workspace tools refuse to go but skill loading deliberately reads."""
+        if self.root_directory is None:
+            return None
+        return Path(self.root_directory) / ".openbot"
+
     @model_validator(mode="after")
     def _default_log_file(self):
         """Without an explicit LOG_FILE, log beside the database (after the root-directory defaults, which

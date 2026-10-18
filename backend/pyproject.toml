@@ -27,6 +27,7 @@ dependencies = [
   "langchain-mcp-adapters>=0.3.2",
   "cryptography>=50.0.1",
   "httpx2>=2.12",
+  "pyyaml>=6.0",
 ]
 
 [dependency-groups]

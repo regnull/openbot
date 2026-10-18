@@ -20,7 +20,7 @@ from openbot.api.schemas import (
     PurgeOut,
     bot_out,
 )
-from openbot.api.tool_validation import known_tool
+from openbot.api.tool_validation import known_skill_names, known_tool
 from openbot.db.models import (
     ACTIVE_RUN_STATUSES,
     OPEN_RUN_STATUSES,
@@ -48,7 +48,8 @@ async def _usage_for(session: AsyncSession, actor_id: str) -> dict[str, int | fl
     return dict(zip(USAGE_FIELDS, row, strict=True))
 
 
-def _validate_tools(services: Services, tool_names: list[str], approval_tools: list[str]) -> None:
+def _validate_tools(services: Services, tool_names: list[str], approval_tools: list[str],
+                    skill_names: list[str] | None = None) -> None:
     if tool_names:
         unknown = [t for t in tool_names if not known_tool(services, t)]
         if unknown:
@@ -56,6 +57,11 @@ def _validate_tools(services: Services, tool_names: list[str], approval_tools: l
     extra = [t for t in approval_tools if t not in tool_names]
     if extra:
         raise HTTPException(422, f"approval_tools must be a subset of tool_names: {extra}")
+    if skill_names:
+        known = known_skill_names(services)
+        unknown = [s for s in skill_names if s.lower() not in known]
+        if unknown:
+            raise HTTPException(422, f"unknown skills: {unknown}")
 
 
 def _validate_model(provider: str, model: str, model_settings: dict | None = None) -> None:
@@ -90,7 +96,7 @@ async def list_bots(session: AsyncSession = Depends(get_session)):
 @router.post("", response_model=BotOut, status_code=201)
 async def create_bot(body: BotCreate, session: AsyncSession = Depends(get_session),
                      services: Services = Depends(get_services)):
-    _validate_tools(services, body.tool_names, body.approval_tools)
+    _validate_tools(services, body.tool_names, body.approval_tools, body.skill_names)
     _validate_model(body.provider, body.model, body.model_settings)
     if await handle_taken(session, body.handle):
         raise HTTPException(409, "handle already exists")
@@ -134,8 +140,9 @@ async def install_catalog_entry(entry_id: str, body: BotCatalogInstall | None = 
     data = {"handle": handle, "name": item.name, "description": item.description, "icon": item.icon,
             "instructions": instructions, "provider": "auto", "model": "", "model_settings": item.model_settings,
             "tool_names": list(item.tool_names), "approval_tools": list(item.approval_tools),
+            "skill_names": list(item.skill_names),
             "memory_enabled": True, "load_repository_instructions": item.load_repository_instructions, "enabled": True}
-    _validate_tools(services, data["tool_names"], data["approval_tools"])
+    _validate_tools(services, data["tool_names"], data["approval_tools"], data["skill_names"])
     actor = Actor(kind="bot", **{k: data.pop(k) for k in ACTOR_FIELDS}, bot=BotProfile(**data))
     session.add(actor)
     try:
@@ -160,7 +167,8 @@ async def update_bot(bot_id: str, body: BotUpdate, session: AsyncSession = Depen
                      services: Services = Depends(get_services)):
     actor = await _get_bot_or_404(session, bot_id)
     data = body.model_dump(exclude_unset=True)
-    _validate_tools(services, data.get("tool_names", actor.bot.tool_names), data.get("approval_tools", actor.bot.approval_tools))
+    _validate_tools(services, data.get("tool_names", actor.bot.tool_names), data.get("approval_tools", actor.bot.approval_tools),
+                    data.get("skill_names", actor.bot.skill_names))
     _validate_model(data.get("provider", actor.bot.provider), data.get("model", actor.bot.model),
                     data.get("model_settings", actor.bot.model_settings))
     if "handle" in data and data["handle"] != actor.handle and await handle_taken(session, data["handle"]):

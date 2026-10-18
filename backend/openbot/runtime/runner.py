@@ -55,6 +55,7 @@ from openbot.runtime.prompt import build_history, build_system_prompt_parts
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.runtime.tool_failures import ToolFailureMiddleware
+from openbot.skills import enabled_skills
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.scheduling import SCHEDULING_TOOLS
 from openbot.tools.builtin.scratchpad import load_scratchpad
@@ -674,6 +675,13 @@ class Runner:
             else []
         )
         workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
+        # Skills the bot has enabled: only ids/names/descriptions go into the prompt;
+        # the load_skill tool fetches the body on demand.
+        skills = (
+            enabled_skills(bot.bot, workspace_root, self.s.settings)
+            if "load_skill" in bot.bot.tool_names
+            else []
+        )
         stable_prompt, dynamic_prompt = build_system_prompt_parts(
             bot=bot,
             all_bots=list(all_actors),
@@ -688,6 +696,7 @@ class Runner:
             scoped=scoped,
             todos=todos,
             scratchpad=scratchpad,
+            skills=skills,
         )
         prompt = SystemMessage(
             content=[
