@@ -42,7 +42,7 @@ describe("MessageList busy indicator", () => {
     const { container, cleanup } = render(s);
     try {
       expect(container.textContent).toContain("Engineer");
-      expect(container.textContent).toContain("busy, waiting");
+      expect(container.textContent).toContain("waiting");
       expect(container.querySelector("[role='status']")).toBeTruthy();
       expect(container.querySelector(".bot-busy-dot")).toBeTruthy();
     } finally { cleanup(); }
@@ -53,7 +53,7 @@ describe("MessageList busy indicator", () => {
     s = reduceThreadEvent(s, { event: "run.updated", thread_id: "t", data: mkRun("r1", "queued") });
     const { container, cleanup } = render(s);
     try {
-      expect(container.textContent).toContain("busy, waiting");
+      expect(container.textContent).toContain("waiting");
       expect(container.querySelector("[role='status']")).toBeTruthy();
     } finally { cleanup(); }
   });

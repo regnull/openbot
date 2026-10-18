@@ -31,7 +31,7 @@ const Toggle = ({ checked, onChange, children }: { checked: boolean; onChange: (
 );
 
 const empty: BotInput = { handle: "", name: "", description: "", icon: DEFAULT_BOT_ICON, instructions: "", provider: "auto", model: "", model_settings: {},
-  tool_names: [], approval_tools: [], memory_enabled: true, enabled: true };
+  tool_names: [], approval_tools: [], skill_names: [], memory_enabled: true, enabled: true };
 
 export default function BotEditorPage() {
   const { id } = useParams();
@@ -40,6 +40,7 @@ export default function BotEditorPage() {
   const isNew = !id;
   const bot = useQuery({ queryKey: ["bot", id], queryFn: () => Api.getBot(id!), enabled: !isNew });
   const tools = useQuery({ queryKey: ["tools"], queryFn: Api.listTools });
+  const skills = useQuery({ queryKey: ["skills"], queryFn: Api.listSkills });
   const providers = useQuery({ queryKey: ["providers"], queryFn: Api.getProviders });
   const [form, setForm] = useState<BotInput>(empty);
   // Load the form from each new bot response while rendering, so switching bots never shows a
@@ -72,6 +73,7 @@ export default function BotEditorPage() {
     return { ...f, tool_names, approval_tools };
   });
   const toggleApproval = (name: string) => set("approval_tools", form.approval_tools.includes(name) ? form.approval_tools.filter((t) => t !== name) : [...form.approval_tools, name]);
+  const toggleSkill = (id: string) => set("skill_names", form.skill_names.includes(id) ? form.skill_names.filter((s) => s !== id) : [...form.skill_names, id]);
 
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const iconPickerRef = useRef<HTMLDivElement>(null);
@@ -246,6 +248,24 @@ export default function BotEditorPage() {
               {unavailable.map((n) => <ToolRow key={n} name={n} label={n} description="not available right now" on approval={form.approval_tools.includes(n)} onToggle={() => toggleTool(n)} onToggleApproval={() => toggleApproval(n)} />)}
             </div>
           </>
+        )}
+      </Card>
+      <Card>
+        <SectionTitle>Skills</SectionTitle>
+        <Hint className="text-xs">Enable skills to give this bot specialized, on-demand instructions. A skill's name and description are added to the prompt; the bot loads the full instructions with load_skill when a task matches.</Hint>
+        {(skills.data?.skills.length ?? 0) === 0 ? (
+          <Hint className="text-xs">No skills found. Drop a SKILL.md (name + description front matter) under skills/ in the workspace, e.g. skills/git-rebase/SKILL.md.</Hint>
+        ) : (
+          <div className="divide-y divide-line">
+            {skills.data!.skills.map((s) => (
+              <Toggle key={s.id} checked={form.skill_names.includes(s.id)} onChange={() => toggleSkill(s.id)}>
+                <span className="min-w-0">
+                  <span className="font-medium text-fg">{s.id}</span>
+                  <span className="block text-xs text-muted">{s.description}</span>
+                </span>
+              </Toggle>
+            ))}
+          </div>
         )}
       </Card>
       <ErrorText error={save.error ?? remove.error} />

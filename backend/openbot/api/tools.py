@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from openbot.api.deps import get_services
 from openbot.services import Services
+from openbot.skills import discover_skills
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
@@ -25,4 +26,20 @@ async def list_tools(services: Services = Depends(get_services)):
             for s in reg.specs()
         ],
         "errors": reg.load_errors,
+    }
+
+
+@router.get("/skills")
+async def list_skills(services: Services = Depends(get_services)):
+    """Discovered skills for the bot editor's per-bot skill picker."""
+    settings = services.settings
+    roots = [settings.workspace_root]
+    state_dir = settings.state_dir
+    if state_dir is not None and state_dir.resolve() != settings.workspace_root.resolve():
+        roots.append(state_dir)
+    return {
+        "skills": [
+            {"id": s.id, "name": s.name, "description": s.description, "path": s.path}
+            for s in discover_skills(*roots)
+        ]
     }

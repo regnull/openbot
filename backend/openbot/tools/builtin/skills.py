@@ -18,7 +18,7 @@ from langchain.tools import ToolRuntime, tool
 from sqlalchemy import select
 
 from openbot.db.models import BotProfile
-from openbot.skills import SkillError, discover_skills, parse_skill, parse_skill_md
+from openbot.skills import SkillError, discover_skills, parse_skill_md
 from openbot.tools.builtin.workspace import cap
 from openbot.tools.context import RunContext
 

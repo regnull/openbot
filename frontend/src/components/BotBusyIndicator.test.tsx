@@ -13,14 +13,14 @@ describe("BotBusyIndicator", () => {
     try {
       act(() => root.render(<BotBusyIndicator botName="Engineer" />));
       expect(container.textContent).toContain("Engineer");
-      expect(container.textContent).toContain("busy, waiting");
+      expect(container.textContent).toContain("waiting");
       // Pulsing dot element present
       const dot = container.querySelector(".bot-busy-dot");
       expect(dot).toBeTruthy();
       // Aria attributes for accessibility
       const status = container.querySelector("[role='status']");
       expect(status).toBeTruthy();
-      expect(status?.getAttribute("aria-label")).toBe("Engineer is busy, waiting for response");
+      expect(status?.getAttribute("aria-label")).toBe("Engineer is waiting for response");
       expect(status?.getAttribute("aria-live")).toBe("polite");
     } finally {
       act(() => root.unmount());
@@ -51,7 +51,7 @@ describe("BotBusyIndicator", () => {
     try {
       act(() => root.render(<BotBusyIndicator botName="QA" icon="flask" />));
       expect(container.textContent).toContain("QA");
-      expect(container.textContent).toContain("busy, waiting");
+      expect(container.textContent).toContain("waiting");
     } finally {
       act(() => root.unmount());
       container.remove();

@@ -12,7 +12,7 @@ import BotEditorPage from "./BotEditorPage";
 let root: Root;
 let el: HTMLDivElement;
 let qc: QueryClient;
-const bot = (id: string, name: string): Bot => ({ id, name, handle: id, description: "", icon: "bot", instructions: "", provider: "auto", model: "", model_settings: {}, tool_names: [], approval_tools: [], memory_enabled: true, enabled: true, active: false, created_at: "", updated_at: "" });
+const bot = (id: string, name: string): Bot => ({ id, name, handle: id, description: "", icon: "bot", instructions: "", provider: "auto", model: "", model_settings: {}, tool_names: [], approval_tools: [], skill_names: [], memory_enabled: true, enabled: true, active: false, created_at: "", updated_at: "" });
 const model = (id: string, extra: Partial<CatalogModel> = {}): CatalogModel => ({
   id, name: id, family: "", description: "", reasoning: false, effort_levels: [], image_input: false, context: 200000, output: null,
   cost_input: 1, cost_output: 5, release_date: "2026-01-01", status: null, ...extra,
@@ -54,6 +54,7 @@ beforeEach(() => {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   vi.spyOn(Api, "getProviders").mockResolvedValue({ providers: [], embedding_model: "none", embeddings_configured: false });
   vi.spyOn(Api, "listTools").mockResolvedValue({ tools: [], errors: [] });
+  vi.spyOn(Api, "listSkills").mockResolvedValue({ skills: [] });
   vi.spyOn(Api, "getBot").mockImplementation((id: string) => Promise.resolve(bot(id, `Bot ${id}`)));
   vi.spyOn(Api, "getModels").mockResolvedValue(catalog);
   el = document.createElement("div"); document.body.append(el); root = createRoot(el);
@@ -149,4 +150,20 @@ it("never warns for a bot on its own OpenRouter model", async () => {
   await until(() => nameInput() === "Router" && qc.getQueryData(["providers"]) !== undefined);
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   expect(el.textContent).not.toContain("default OpenRouter model");
+});
+
+it("lists discovered skills and saves the enabled ones", async () => {
+  vi.spyOn(Api, "listSkills").mockResolvedValue({
+    skills: [{ id: "py", name: "Git Rebasing", description: "Clean up commit history.", path: "skills/py/SKILL.md" }],
+  });
+  const update = vi.spyOn(Api, "updateBot").mockImplementation(async (id, b) => ({ ...bot(id, "Eng"), ...b } as Bot));
+  await show("/edit/b1");
+  await until(() => el.textContent!.includes("py"));
+  // The checkbox mirrors the backend's skill_names field, not the display name.
+  const box = el.querySelectorAll<HTMLInputElement>(".divide-y input[type=checkbox]")[0];
+  await act(async () => { box.click(); });
+  await until(() => box.checked);
+  await submit();
+  await until(() => update.mock.calls.length > 0);
+  expect(update.mock.calls[0][1].skill_names).toEqual(["py"]);
 });

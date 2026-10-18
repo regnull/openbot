@@ -21,6 +21,7 @@ class BotCatalogEntry(BaseModel):
     tool_names: tuple[str, ...] = ()
     approval_tools: tuple[str, ...] = ()
     model_settings: dict = {}
+    skill_names: tuple[str, ...] = ()
     load_repository_instructions: bool = False
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from openbot.skills import discover_skills
 from openbot.services import Services
+from openbot.skills import discover_skills
 
 
 def known_tool(services: Services, name: str) -> bool:

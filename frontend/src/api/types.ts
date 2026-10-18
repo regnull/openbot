@@ -1,7 +1,7 @@
 export type ActorKind = "bot" | "human" | "external" | "system";
 export interface Actor { id: string; kind: ActorKind; handle: string; name: string; description: string; enabled: boolean; webhook_url: string | null; created_at: string; updated_at: string; }
 export interface BotCatalogEntry { id: string; handle: string; name: string; description: string; icon: string; instruction_file: string; tool_names: string[]; approval_tools: string[]; model_settings: Record<string, unknown>; }
-export interface Bot { id: string; handle: string; name: string; description: string; icon: string; enabled: boolean; active: boolean; instructions: string; provider: string; model: string; model_settings: Record<string, unknown>; tool_names: string[]; approval_tools: string[]; memory_enabled: boolean; model_calls?: number; prompt_tokens?: number; completion_tokens?: number; cache_read_tokens?: number; cache_write_tokens?: number; reasoning_tokens?: number; cost_usd?: number; created_at: string; updated_at: string; }
+export interface Bot { id: string; handle: string; name: string; description: string; icon: string; enabled: boolean; active: boolean; instructions: string; provider: string; model: string; model_settings: Record<string, unknown>; tool_names: string[]; approval_tools: string[]; skill_names: string[]; memory_enabled: boolean; model_calls?: number; prompt_tokens?: number; completion_tokens?: number; cache_read_tokens?: number; cache_write_tokens?: number; reasoning_tokens?: number; cost_usd?: number; created_at: string; updated_at: string; }
 export type BotInput = Omit<Bot, "id" | "created_at" | "updated_at" | "active">;
 export interface Participant { actor_id: string; kind: ActorKind; handle: string; name: string; }
 export interface Thread { id: string; title: string; kind: "chat" | "direct"; created_by_actor_id: string | null; default_bot_actor_id: string | null; default_bot_handle: string | null; working_directory: string | null; external_ref: string | null; created_at: string; updated_at: string; last_message_at: string | null; participants: Participant[]; active?: boolean; }
@@ -28,6 +28,7 @@ export interface BotMemory { key: string; content: string; created_at: string | 
 /** What POST /bots/{id}/purge did. */
 export interface PurgeResult { cancelled_runs: number; purged_items: number; }
 export interface ToolInfo { name: string; description: string; source: string; args_schema: Record<string, unknown>; }
+export interface SkillInfo { id: string; name: string; description: string; path: string; }
 export interface ProviderInfo { id: string; configured: boolean; models: string[]; default_model: string; }
 export interface ProvidersOut { providers: ProviderInfo[]; embedding_model: string; embeddings_configured: boolean; }
 export interface CatalogModel { id: string; name: string; family: string; description: string; reasoning: boolean; effort_levels: string[]; image_input: boolean; context: number | null; output: number | null; cost_input: number | null; cost_output: number | null; cost_cache_read?: number | null; cost_cache_write?: number | null; cost_tiers?: Record<string, unknown>[]; release_date: string; status: string | null; task_ranks?: Record<string, number>; }

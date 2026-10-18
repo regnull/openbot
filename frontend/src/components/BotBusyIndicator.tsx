@@ -58,14 +58,14 @@ const BotBusyIndicator = forwardRef<BotBusyIndicatorHandle, Props & { onTransiti
 
     if (hidden) return null;
 
-    const label = status === "timed_out" ? "Timed out" : "busy, waiting\u2026";
+    const label = status === "timed_out" ? "Timed out" : "waiting\u2026";
 
     return (
       <div
         className={`bot-busy-indicator message-sheet message-assistant flex items-center gap-3 ${exiting ? "bot-busy-exit" : ""}`}
         role="status"
         aria-live="polite"
-        aria-label={`${botName} is ${status === "timed_out" ? "timed out" : "busy, waiting for response"}`}
+        aria-label={`${botName} is ${status === "timed_out" ? "timed out" : "waiting for response"}`}
       >
         <Avatar name={botName} kind="bot" icon={icon} />
         <div className="min-w-0 flex-1">
