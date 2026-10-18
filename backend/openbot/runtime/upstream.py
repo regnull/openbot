@@ -7,6 +7,13 @@ explicit `openrouter_provider_order` fixes that by hand. Without one, this modul
 automatically: it reads which upstream answered each call and pins the bot's next call to it, with
 fallbacks on, so when that upstream fails OpenRouter answers elsewhere and the pin follows.
 
+Staying on one upstream only helps if it caches. OpenRouter's default routing favors the cheapest
+upstreams, and on 2026-10-18 bots pinned that way (OpenInference, Venice, PrimeIntellect) got ~2% of
+their prompt tokens cached. So the pins also learn: an upstream that keeps serving warm calls (same
+upstream as the run's previous call, so the prompt's start should be cached) with little cached is
+skipped for that model for a few hours, via OpenRouter's `provider.ignore`, and bots pinned to it
+move on until they land on one that caches.
+
 OpenRouter reports the upstream by display name ("Z.AI") but routes by slug ("z-ai"); the model's
 public endpoint list maps one to the other.
 """
@@ -31,6 +38,10 @@ UPSTREAM_KEY = "openrouter_provider"
 ENDPOINTS_URL = "https://openrouter.ai/api/v1/models/{model}/endpoints"
 ENDPOINTS_TTL = 6 * 3600  # upstreams come and go; a stale map only costs a fallback slug
 ENDPOINTS_RETRY = 600  # after a failed fetch, guess slugs for this long before asking again
+CACHE_HIT_SHARE = 0.25  # a warm call with less than this share of its prompt cached is a miss
+MISS_LIMIT = 3  # consecutive warm misses before an upstream is skipped (one summarization rewrite is fine)
+IGNORE_TTL = 6 * 3600  # how long a non-caching upstream is skipped before it gets another chance
+MAX_IGNORED = 10  # per model; the oldest skip lapses first, so routing never runs out of upstreams
 
 
 def upstream_of(message: BaseMessage) -> str | None:
@@ -92,7 +103,8 @@ async def fetch_endpoint_slugs(model: str) -> dict[str, str]:
 
 
 class UpstreamPins:
-    """Per-(bot, model) pinned upstream slug, plus the cached name-to-slug map per model."""
+    """Per-(bot, model) pinned upstream slug, the cached name-to-slug map per model, and per model the
+    upstreams skipped for not caching."""
 
     def __init__(self, fetch: Callable[[str], Awaitable[dict[str, str]]] = fetch_endpoint_slugs) -> None:
         self._fetch = fetch
@@ -100,6 +112,8 @@ class UpstreamPins:
         self._slugs: dict[str, tuple[float, dict[str, str]]] = {}
         # One lock per model: a slow fetch for one model must not hold up the others' runs.
         self._locks: dict[str, asyncio.Lock] = {}
+        self._misses: dict[tuple[str, str], int] = {}  # (model, slug) -> consecutive warm misses
+        self._ignored: dict[str, dict[str, float]] = {}  # model -> {slug: skipped until (monotonic)}
 
     def pinned(self, bot_id: str, model: str) -> str | None:
         return self._pins.get((bot_id, model))
@@ -119,6 +133,36 @@ class UpstreamPins:
                     slugs = {}
                 self._slugs[model] = (time.monotonic(), slugs)
         return slugs.get(name.lower()) or guess_slug(name)
+
+    def ignored(self, model: str) -> list[str]:
+        """Upstreams currently skipped for `model`, expired skips dropped."""
+        entries = self._ignored.get(model, {})
+        now = time.monotonic()
+        for slug in [s for s, until in entries.items() if until <= now]:
+            del entries[slug]
+        return sorted(entries)
+
+    def observe_cache(self, model: str, slug: str, prompt_tokens: int, cached_tokens: int) -> None:
+        """Judge one warm call: a hit clears the upstream's miss streak; MISS_LIMIT misses in a row
+        skip it for this model and unpin every bot pinned to it."""
+        key = (model, slug)
+        if prompt_tokens <= 0 or cached_tokens >= CACHE_HIT_SHARE * prompt_tokens:
+            self._misses.pop(key, None)
+            return
+        self._misses[key] = self._misses.get(key, 0) + 1
+        if self._misses[key] < MISS_LIMIT:
+            return
+        del self._misses[key]
+        entries = self._ignored.setdefault(model, {})
+        entries[slug] = time.monotonic() + IGNORE_TTL
+        while len(entries) > MAX_IGNORED:
+            del entries[min(entries, key=entries.__getitem__)]
+        for pin_key in [k for k, v in self._pins.items() if k[1] == model and v == slug]:
+            del self._pins[pin_key]
+        log.info(
+            "OpenRouter upstream %s barely caches %s (%d warm misses in a row): skipping it for %dh",
+            slug, model, MISS_LIMIT, IGNORE_TTL // 3600,
+        )
 
     async def record(self, bot_id: str, model: str, name: str) -> str:
         slug = await self.slug_for(model, name)
@@ -145,20 +189,30 @@ class StickyUpstreamMiddleware(AgentMiddleware):
     def __init__(self, pins: UpstreamPins, bot_id: str, model: str, settings) -> None:
         super().__init__()
         self.pins, self.bot_id, self.model, self.settings = pins, bot_id, model, settings
+        # One middleware per run: the upstream of this run's previous call, to tell warm calls apart.
+        self._last_slug: str | None = None
 
     def _explicit(self) -> bool:
         return bool(getattr(self.settings, "openrouter_provider_order", None))
 
     def _pinned(self, request: ModelRequest) -> ModelRequest:
-        slug = None if self._explicit() else self.pins.pinned(self.bot_id, self.model)
-        if slug is None:
+        if self._explicit():
+            return request
+        slug = self.pins.pinned(self.bot_id, self.model)
+        ignored = self.pins.ignored(self.model)
+        provider: dict[str, Any] = {}
+        if slug is not None:
+            provider.update(order=[slug], allow_fallbacks=True)
+        if ignored:
+            provider["ignore"] = ignored
+        if not provider:
             return request
         # bind(extra_body=...) replaces the model's own extra_body wholesale, so carry over what it
         # already sends (e.g. the web-search plugin).
         extra = {
             **(getattr(request.model, "extra_body", None) or {}),
             **(request.model_settings.get("extra_body") or {}),
-            "provider": {"order": [slug], "allow_fallbacks": True},
+            "provider": provider,
         }
         return request.override(model_settings={**request.model_settings, "extra_body": extra})
 
@@ -172,5 +226,10 @@ class StickyUpstreamMiddleware(AgentMiddleware):
         reply = _reply(response)
         name = upstream_of(reply) if reply is not None else None
         if name and not self._explicit():
-            await self.pins.record(self.bot_id, self.model, name)
+            slug = await self.pins.record(self.bot_id, self.model, name)
+            usage = getattr(reply, "usage_metadata", None) or {}
+            if slug == self._last_slug and usage:
+                cached = int((usage.get("input_token_details") or {}).get("cache_read") or 0)
+                self.pins.observe_cache(self.model, slug, int(usage.get("input_tokens") or 0), cached)
+            self._last_slug = slug
         return response
