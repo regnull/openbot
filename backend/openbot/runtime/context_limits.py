@@ -126,6 +126,7 @@ def derive_trigger_thresholds(
     summary_trigger: int | None,
     clear_trigger: int | None,
     output_limit: int | None = None,
+    fixed_tokens: int = 0,
 ) -> tuple[int, int]:
     """Summarize/clear thresholds for a model with context window `window` (None = unknown).
 
@@ -138,6 +139,10 @@ def derive_trigger_thresholds(
     70% of usable, no higher than `MAX_DERIVED_SUMMARY_TRIGGER`, and the clear trigger
     `CLEAR_SHARE` of that, so clearing still fires first. `window <= 0`
     counts as unknown (the catalog reports unknown windows as 0).
+
+    `fixed_tokens` is what every call sends besides the run's messages (the system prompt). The
+    triggers count only messages, so it comes out of the usable window: a ~50k system prompt
+    under a 200k window otherwise left a summary trigger plus a full reply past the window.
     """
     summary = max(1, int(summary_trigger)) if summary_trigger is not None else None
     clear = max(1, int(clear_trigger)) if clear_trigger is not None else None
@@ -153,7 +158,7 @@ def derive_trigger_thresholds(
         reserve = min(reserve, window // 2)
     # The margin shrinks with a small window: a fixed 4k on top of a halved 8k window left 1 token.
     margin = min(SAFETY_MARGIN_TOKENS, int(window * RESERVE_SHARE))
-    usable = max(1, window - reserve - margin)
+    usable = max(1, window - reserve - margin - max(0, fixed_tokens))
     derived = max(1, min(int(usable * TRIGGER_SHARE), MAX_DERIVED_SUMMARY_TRIGGER))
     return (
         summary if summary is not None else derived,

@@ -779,3 +779,19 @@ async def test_stream_counts_a_reply_once_even_when_a_middleware_node_re_emits_i
     assert usage["model_calls"] == 2 and usage["prompt_tokens"] == 220
     kinds = [e.type for e in await events(services, run.id)]
     assert kinds.count("tool_call") == 1 and kinds.count("text") == 2
+
+
+def test_system_prompt_comes_out_of_the_derived_window():
+    """The triggers count only the run's messages; the system prompt rides on every call. Under a 200k
+    window a ~50k system prompt plus a full reply pushed the summary trigger past the window."""
+    from openbot.runtime.context_limits import derive_trigger_thresholds
+    bare, _ = derive_trigger_thresholds(200_000, summary_trigger=None, clear_trigger=None, output_limit=64_000)
+    with_prompt, clear = derive_trigger_thresholds(
+        200_000, summary_trigger=None, clear_trigger=None, output_limit=64_000, fixed_tokens=50_000
+    )
+    assert with_prompt == int((200_000 - 32_000 - 4_000 - 50_000) * 0.7) < bare
+    assert with_prompt + 50_000 + 32_000 < 200_000 and clear < with_prompt
+    # Explicit settings are user intent and ignore the deduction.
+    assert derive_trigger_thresholds(
+        200_000, summary_trigger=90_000, clear_trigger=60_000, fixed_tokens=50_000
+    ) == (90_000, 60_000)

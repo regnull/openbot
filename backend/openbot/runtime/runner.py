@@ -25,7 +25,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_core.messages.utils import trim_messages
+from langchain_core.messages.utils import count_tokens_approximately, trim_messages
 from langchain_core.tracers.context import collect_runs
 from langgraph.types import Command
 from sqlalchemy import func, select
@@ -414,14 +414,17 @@ class Runner:
     def __init__(self, services) -> None:
         self.s = services
 
-    async def _run_turn_triggers(self, provider: str, model: str) -> tuple[int, int]:
+    async def _run_turn_triggers(
+        self, provider: str, model: str, system_prompt: SystemMessage | None = None
+    ) -> tuple[int, int]:
         """(summarize, clear) thresholds for this turn's model, honoring the settings' precedence.
 
         Both trigger settings default to None: derive both thresholds from the model's context
         window (see `openbot/runtime/context_limits.py`). An explicit runtime value (env or the
         runtime-settings UI) pins the threshold for every model. A model the catalog has never
         heard of falls back to the built-in defaults (60k/40k), keeping today's behavior for
-        hand-typed models.
+        hand-typed models. The system prompt rides along on every call but the triggers count only
+        the run's messages, so its size comes out of the derived window.
         """
         window, output = await model_context_limits(provider, model, getattr(self.s, "model_catalog", None))
         return derive_trigger_thresholds(
@@ -429,6 +432,7 @@ class Runner:
             summary_trigger=self.s.settings.summary_trigger_tokens,
             clear_trigger=self.s.settings.context_trigger_tokens,
             output_limit=output,
+            fixed_tokens=count_tokens_approximately([system_prompt]) if system_prompt is not None else 0,
         )
 
     def _model_price(self, bot: Actor) -> dict[str, float | None] | None:
@@ -1001,7 +1005,7 @@ class Runner:
                 self.s.settings.workspace_root, thread.working_directory
             )
             eff_provider, eff_model = effective_bot_profile(bot.bot, self.s.settings)
-            triggers = await self._run_turn_triggers(eff_provider, eff_model)
+            triggers = await self._run_turn_triggers(eff_provider, eff_model, system_prompt)
             log.info(
                 "run %s started: bot=@%s thread=%s hop=%d resume=%s working_directory=%s tool_root=%s model=%s/%s tools=%s",
                 run.id,
