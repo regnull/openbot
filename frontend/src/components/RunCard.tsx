@@ -1,21 +1,12 @@
-import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { Api } from "../api/client";
 import { usageLabel } from "../lib/usageLabel";
-import type { BotScratchpad, Run, RunEvent } from "../api/types";
-import { Badge, Button, ErrorText, type BadgeTone } from "./ui";
-import { ChevronDownIcon, ChevronRightIcon, ExternalIcon } from "./icons";
+import type { Run, RunEvent } from "../api/types";
+import { Badge, Button, Dialog, ErrorText, IconButton, type BadgeTone } from "./ui";
+import { ChevronDownIcon, ChevronRightIcon, ExternalIcon, NotepadIcon } from "./icons";
 
 const ACTIVE = ["queued", "running", "waiting_human"];
-
-/** A scratchpad as returned by the API: the pad text plus when it was last written. */
-type ScratchpadEntry = Pick<BotScratchpad, "content" | "updated_at">;
-/**
- * Per-session cache of scratchpads by actor id. Opening the pad always re-fetches the latest
- * write, but the cached copy shows instantly on repeat opens (and stays readable if a refetch
- * fails), so a pad you just looked at doesn't flash blank while loading.
- */
-const scratchpadCache = new Map<string, ScratchpadEntry>();
 
 const tone = (s: string): BadgeTone => (s === "completed" ? "green" : s === "failed" || s === "cancelled" ? "red" : s === "waiting_human" ? "amber" : "blue");
 
@@ -30,25 +21,24 @@ export default function RunCard({ run, events, streaming, botName }: { run: Run;
   const toggle = () => setOpen((o) => !o);
   // Nothing to invalidate: the cancel lands as a `run.updated` over SSE like any other status change.
   const cancel = useMutation({ mutationFn: () => Api.cancelRun(run.id) });
-  // The bot's persistent scratchpad: fetched lazily on first open, re-fetched on every open so it
-  // reflects the latest write; seeded from the session cache so repeat opens don't flash blank.
+  // The bot's persistent scratchpad. It is per bot, so every card of the same bot shares one
+  // query; the header shows an icon for it only when there is something saved.
+  const qc = useQueryClient();
+  const pad = useQuery({ queryKey: ["bot-scratchpad", run.actor_id], queryFn: () => Api.getBotScratchpad(run.actor_id), staleTime: 30_000, retry: false });
   const [padOpen, setPadOpen] = useState(false);
-  const [pad, setPad] = useState<ScratchpadEntry | null>(() => scratchpadCache.get(run.actor_id) ?? null);
-  const [padError, setPadError] = useState<unknown>(null);
-  const loadScratchpad = useMutation({
-    mutationFn: () => Api.getBotScratchpad(run.actor_id),
-    onSuccess: (s) => {
-      const entry = { content: s.content, updated_at: s.updated_at };
-      scratchpadCache.set(run.actor_id, entry);
-      setPad(entry);
-      setPadError(null);
-    },
-    onError: (e) => setPadError(e),
-  });
-  const toggleScratchpad = () => {
-    setPadOpen((o) => !o);
-    if (!padOpen) loadScratchpad.mutate(); // every open re-fetches; closing is free
+  const openScratchpad = () => {
+    setPadOpen(true);
+    void pad.refetch(); // show the latest write, not the cached copy
   };
+  // A scratchpad save landing in this run changes the pad: refetch it. Only saves that arrive while
+  // the card is mounted count — a thread full of old runs must not each refetch on mount.
+  const padSaves = events.filter((e) => e.type === "tool_result" && e.payload.name === "scratchpad").length;
+  const seenPadSaves = useRef(padSaves);
+  useEffect(() => {
+    if (padSaves > seenPadSaves.current) qc.invalidateQueries({ queryKey: ["bot-scratchpad", run.actor_id] });
+    seenPadSaves.current = padSaves;
+  }, [padSaves, qc, run.actor_id]);
+  const padText = pad.data?.content ?? "";
   // Events arrive sorted by seq; group contiguous text events and build a chronological list of content blocks.
   const results = new Map<unknown, RunEvent>(events.filter((e) => e.type === "tool_result").map((e) => [e.payload.tool_call_id, e] as const));
   const toolCalls = events.filter((e) => e.type === "tool_call").length;
@@ -91,9 +81,11 @@ export default function RunCard({ run, events, streaming, botName }: { run: Run;
         {run.langsmith_run_id && (
           <a className="inline-flex shrink-0 items-center gap-1 text-muted hover:text-fg" target="_blank" rel="noreferrer" href={`https://smith.langchain.com/o/-/projects/p/-/r/${run.langsmith_run_id}`}>LangSmith <ExternalIcon className="h-3 w-3" /></a>
         )}
-        <Button variant="secondary" size="sm" onClick={toggleScratchpad}>
-          {padOpen ? "Hide scratchpad" : "Show scratchpad"}
-        </Button>
+        {padText.trim() && (
+          <IconButton size="sm" className="-mx-1 h-6 w-6" onClick={openScratchpad} aria-label="Show scratchpad" title={botName ? `${botName}'s scratchpad` : "Scratchpad"}>
+            <NotepadIcon className="h-3.5 w-3.5" />
+          </IconButton>
+        )}
         {active && (
           <Button variant="secondary" size="sm" onClick={() => cancel.mutate()} disabled={cancel.isPending}>
             {cancel.isPending ? "Cancelling…" : "Cancel"}
@@ -102,20 +94,13 @@ export default function RunCard({ run, events, streaming, botName }: { run: Run;
       </div>
       {cancel.error && <div className="px-2 pb-1"><ErrorText error={cancel.error} /></div>}
       {padOpen && (
-        <div className="space-y-1 border-t border-line p-2">
-          <p className="px-1.5 text-faint">
-            {botName ? `${botName}'s scratchpad` : "Scratchpad"}
-            {pad?.updated_at ? <span> · updated {new Date(pad.updated_at).toLocaleString()}</span> : null}
-          </p>
-          {padError ? <ErrorText error={padError} /> : null}
-          {pad ? (
-            pad.content.trim()
-              ? <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-ui border border-line bg-canvas p-2 text-[11px] leading-relaxed text-muted scrollbar-subtle">{pad.content}</pre>
-              : <p className="px-1.5 text-faint">Scratchpad is empty.</p>
-          ) : (
-            !padError && <p className="px-1.5 text-faint">Loading…</p>
-          )}
-        </div>
+        <Dialog title={botName ? `${botName}'s scratchpad` : "Scratchpad"} titleId={`scratchpad-${run.id}`} onClose={() => setPadOpen(false)} className="max-w-2xl gap-3">
+          {pad.data?.updated_at && <p className="-mt-2 text-xs text-faint">updated {new Date(pad.data.updated_at).toLocaleString()}</p>}
+          {pad.error && <ErrorText error={pad.error} />}
+          {padText.trim()
+            ? <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-ui border border-line bg-canvas p-3 text-xs leading-relaxed text-fg scrollbar-subtle">{padText}</pre>
+            : !pad.error && <p className="text-xs text-faint">Scratchpad is empty.</p>}
+        </Dialog>
       )}
       {open && (
         <div className="space-y-1 border-t border-line p-2">
