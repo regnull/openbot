@@ -86,7 +86,10 @@ def test_workspace_roots_shadow_the_state_dir(tmp_path):
     state = tmp_path / "state"
     write_skill(state, "deep")  # same id, different content: first root wins
     (skills,) = discover_skills(tmp_path, state)
-    assert skills.id != "Deep Review"
+    # Same id in both roots: exactly one skill survives and it comes from the
+    # workspace root ("Deep Review" here), not the shadowed state-dir copy
+    # ("Git Rebasing").
+    assert skills.name == "Deep Review"
 
 
 def test_discovery_prunes_junk_dirs(tmp_path):

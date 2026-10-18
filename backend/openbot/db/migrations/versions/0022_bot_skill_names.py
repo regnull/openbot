@@ -1,7 +1,7 @@
 """bot skill_names: which skills a bot may load on demand
 
-Revision ID: 0021
-Revises: 0020
+Revision ID: 0022
+Revises: 0021
 """
 
 import sqlalchemy as sa
