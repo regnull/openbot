@@ -805,7 +805,15 @@ class Runner:
             or adapter_for(bot.bot.provider) is not None
         ):
             return []
-        return [n for n in bot.bot.tool_names if (self.s.registry.source(n) or "").startswith("mcp:")]
+        # Approval-gated tools stay loaded: the human-in-the-loop check runs before the deferred
+        # middleware's refusal, so a call to one never loaded would be approved, refused, and need
+        # approving again on the retry.
+        gated = set(bot.bot.approval_tools or ())
+        return [
+            n
+            for n in bot.bot.tool_names
+            if n not in gated and (self.s.registry.source(n) or "").startswith("mcp:")
+        ]
 
     def _build_agent(self, bot: Actor, system_prompt: str, triggers: tuple[int, int] | None = None):
         p = bot.bot

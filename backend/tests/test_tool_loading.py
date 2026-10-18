@@ -131,6 +131,17 @@ async def test_unknown_names_are_reported(settings):
     assert not set(MCP) & set(ScriptedChatModel.bound[1])
 
 
+async def test_approval_gated_tools_are_never_deferred(settings):
+    """Approval runs before the deferred refusal, so a gated tool that had to be loaded would be
+    approved, refused, and approved again on the retry."""
+    services, eng, _t, _ = await make(
+        settings, {"eng": []}, tool_names=MCP, approval_tools=["linear__save_comment"]
+    )
+    for t in DEFERRED.values():
+        services.registry.register(t, source="mcp:linear")
+    assert services.runner.deferred_tool_names(eng) == ["linear__get_issue"]
+
+
 async def test_deferral_can_be_turned_off(settings):
     await _run(settings, [ai("done")], defer_mcp_tools=False)
     assert set(MCP) <= set(ScriptedChatModel.bound[0])
