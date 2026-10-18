@@ -176,6 +176,10 @@ def provider_chat_model(
             kwargs["extra_body"] = {"provider": {"order": list(settings.openrouter_provider_order), "allow_fallbacks": True}}
         if ms.get("web_search"):
             kwargs.setdefault("extra_body", {})["plugins"] = [{"id": "web"}]
+        # Records which upstream answered each call, for sticky routing (runtime/upstream.py).
+        from openbot.runtime.upstream import OpenRouterChatOpenAI
+
+        return OpenRouterChatOpenAI(model=model, api_key=key, request_timeout=timeout, **kwargs)
     return ChatOpenAI(model=model, api_key=key, request_timeout=timeout, **kwargs)
 
 

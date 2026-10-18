@@ -95,7 +95,7 @@ TUNABLES: dict[str, Tunable] = {
     "bot_model": Tunable("Model routing", "Default bot model",
         "OpenRouter model used by every bot on the auto provider (provider/model id)."),
     "openrouter_provider_order": Tunable("Model routing", "Preferred OpenRouter upstreams",
-        "Comma-separated upstream slugs to try first (each has its own prompt cache); others are fallbacks."),
+        "Comma-separated upstream slugs to try first (each has its own prompt cache); others are fallbacks. Leave empty to keep each bot on the upstream that served its last call."),
     "prompt_caching": Tunable("Model routing", "Prompt caching", "Add cache breakpoints to every Anthropic model call."),
     "direct_anthropic": Tunable("Model routing", "Direct Anthropic routing",
         "Send OpenRouter anthropic/... models straight to Anthropic when a key is configured, so caching covers tool results too."),

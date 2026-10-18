@@ -56,6 +56,12 @@ from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.runtime.tool_failures import ToolFailureMiddleware
 from openbot.runtime.tool_loading import LOAD_TOOLS, DeferredToolsMiddleware
+from openbot.runtime.upstream import (
+    OpenRouterChatOpenAI,
+    StickyUpstreamMiddleware,
+    UpstreamPins,
+    upstream_of,
+)
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.scheduling import SCHEDULING_TOOLS
 from openbot.tools.builtin.scratchpad import load_scratchpad
@@ -414,6 +420,8 @@ class RunMessagesSummarization(SummarizationMiddleware):
 class Runner:
     def __init__(self, services) -> None:
         self.s = services
+        # Each bot's last OpenRouter upstream, so its next call lands on the same warm prompt cache.
+        self.upstream_pins = UpstreamPins()
 
     async def _run_turn_triggers(
         self, provider: str, model: str, system_prompt: SystemMessage | None = None
@@ -763,6 +771,13 @@ class Runner:
                 on_overflow=summarizer.compact_for_overflow,
             ),
             *caching_middleware(model, st),
+            # Keeps the bot on the OpenRouter upstream that served its last call (each upstream has its
+            # own prompt cache), unless openrouter_provider_order says otherwise.
+            *(
+                [StickyUpstreamMiddleware(self.upstream_pins, bot.id, model.model_name, st)]
+                if isinstance(model, OpenRouterChatOpenAI)
+                else []
+            ),
             # Stops a run that keeps calling the model instead of answering; "end" posts a notice as the reply.
             ModelCallLimitMiddleware(run_limit=self.model_call_limit(bot), exit_behavior="end"),
             # Marks "error: ..." tool results as errors and ends a run stuck repeating one failing call.
@@ -942,12 +957,13 @@ class Runner:
                         inc = add_usage(usage, m, price)
                         if inc is not None:
                             log.info(
-                                "run %s model call %d: prompt=%d (cache_read=%d) completion=%d",
+                                "run %s model call %d: prompt=%d (cache_read=%d) completion=%d upstream=%s",
                                 run.id,
                                 usage["model_calls"],
                                 inc["prompt_tokens"],
                                 inc["cache_read_tokens"],
                                 inc["completion_tokens"],
+                                upstream_of(m) or "-",
                             )
                             # Persist each provider-reported turn before processing its tools. This keeps
                             # live run/thread/bot totals current and makes a tool round visible immediately.
