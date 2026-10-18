@@ -39,6 +39,11 @@ class ToolRegistry:
     def has(self, name: str) -> bool:
         return name in self._tools
 
+    def source(self, name: str) -> str | None:
+        """Where tool `name` came from ("builtin", "mcp:<server>", a plugin path), or None if unknown."""
+        spec = self._tools.get(name)
+        return spec.source if spec is not None else None
+
     def get(self, name: str) -> BaseTool:
         return self._tools[name].tool
 

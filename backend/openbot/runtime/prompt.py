@@ -6,6 +6,7 @@ from string import Template
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from openbot.db.models import Actor, Message
+from openbot.runtime.tool_loading import deferred_tools_section
 from openbot.tools.builtin.scratchpad import scratchpad_section
 from openbot.tools.builtin.todo import todo_list_section
 
@@ -166,6 +167,7 @@ def build_system_prompt(
     scoped: bool = False,
     todos: list[dict] | None = None,
     scratchpad: str | None = None,
+    deferred_tools: list[str] | None = None,
 ) -> str:
     stable, dynamic = build_system_prompt_parts(
         bot=bot,
@@ -179,6 +181,7 @@ def build_system_prompt(
         scoped=scoped,
         todos=todos,
         scratchpad=scratchpad,
+        deferred_tools=deferred_tools,
     )
     return stable + dynamic
 
@@ -196,6 +199,7 @@ def build_system_prompt_parts(
     scoped: bool = False,
     todos: list[dict] | None = None,
     scratchpad: str | None = None,
+    deferred_tools: list[str] | None = None,
 ) -> tuple[str, str]:
     roster = (
         "\n".join(
@@ -248,6 +252,8 @@ def build_system_prompt_parts(
     }
     stable = _STABLE_SYSTEM_PROMPT_TEMPLATE.substitute(**values)
     dynamic = _DYNAMIC_SYSTEM_PROMPT_TEMPLATE.substitute(**values)
+    if deferred_tools:
+        dynamic += f"\n\n{deferred_tools_section(deferred_tools)}"
     if scratchpad is not None:
         dynamic += f"\n\n{scratchpad_section(scratchpad)}"
     if todos:

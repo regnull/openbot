@@ -55,6 +55,7 @@ from openbot.runtime.prompt import build_history, build_system_prompt_parts
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
 from openbot.runtime.tool_failures import ToolFailureMiddleware
+from openbot.runtime.tool_loading import LOAD_TOOLS, DeferredToolsMiddleware
 from openbot.tools.builtin.core import CORE_TOOLS
 from openbot.tools.builtin.scheduling import SCHEDULING_TOOLS
 from openbot.tools.builtin.scratchpad import load_scratchpad
@@ -674,6 +675,7 @@ class Runner:
             else []
         )
         workspace_root = thread_workspace_root(st.workspace_root, thread.working_directory)
+        deferred = set(self.deferred_tool_names(bot))
         stable_prompt, dynamic_prompt = build_system_prompt_parts(
             bot=bot,
             all_bots=list(all_actors),
@@ -683,11 +685,16 @@ class Runner:
             older_count=older,
             # Only tools that will actually be bound: an MCP server that is down
             # must not be advertised, or the model calls a tool it does not have.
-            tool_names=[n for n in bot.bot.tool_names if self.s.registry.has(n)],
+            # Tools loaded on demand are listed in their own section instead (runtime/tool_loading.py).
+            tool_names=[
+                *(n for n in bot.bot.tool_names if self.s.registry.has(n) and n not in deferred),
+                *([LOAD_TOOLS] if deferred else []),
+            ],
             default_bot_handle=default_bot_handle,
             scoped=scoped,
             todos=todos,
             scratchpad=scratchpad,
+            deferred_tools=[n for n in bot.bot.tool_names if n in deferred],
         )
         prompt = SystemMessage(
             content=[
@@ -783,7 +790,22 @@ class Runner:
                     description_prefix="Tool execution requires approval",
                 )
             )
+        deferred_names = self.deferred_tool_names(bot)
+        if deferred_names:
+            middleware.append(DeferredToolsMiddleware(self.s.registry.resolve(deferred_names)))
         return middleware
+
+    def deferred_tool_names(self, bot: Actor) -> list[str]:
+        """The bot's MCP tools, which are bound but sent to the model only once it loads them
+        (runtime/tool_loading.py). None when deferral is off, or for a CLI-agent bot, which never
+        goes through create_agent."""
+        if (
+            self.s.registry is None
+            or not getattr(self.s.settings, "defer_mcp_tools", True)
+            or adapter_for(bot.bot.provider) is not None
+        ):
+            return []
+        return [n for n in bot.bot.tool_names if (self.s.registry.source(n) or "").startswith("mcp:")]
 
     def _build_agent(self, bot: Actor, system_prompt: str, triggers: tuple[int, int] | None = None):
         p = bot.bot

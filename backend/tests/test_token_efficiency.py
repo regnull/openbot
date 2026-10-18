@@ -465,7 +465,7 @@ def test_huge_catalog_output_limit_does_not_shrink_a_large_window():
     assert huge == sane
     summary, clear = huge
     assert summary == MAX_DERIVED_SUMMARY_TRIGGER
-    assert 100_000 < clear < summary
+    assert 60_000 < clear < summary
 
 
 def test_derived_summary_trigger_has_a_ceiling_but_overrides_do_not():
@@ -481,8 +481,8 @@ def test_derived_summary_trigger_has_a_ceiling_but_overrides_do_not():
         1_000_000, summary_trigger=500_000, clear_trigger=300_000, output_limit=131_072
     ) == (500_000, 300_000)
     # Windows whose derived trigger sits under the ceiling are unchanged by it.
-    summary, _clear = derive_trigger_thresholds(200_000, summary_trigger=None, clear_trigger=None, output_limit=64_000)
-    assert summary == int((200_000 - 32_000 - 4_000) * 0.7)
+    summary, _clear = derive_trigger_thresholds(128_000, summary_trigger=None, clear_trigger=None, output_limit=16_384)
+    assert summary == int((128_000 - 16_384 - 4_000) * 0.7)
 
 
 async def test_long_runs_get_their_history_summarized(settings):

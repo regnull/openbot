@@ -78,6 +78,8 @@ TUNABLES: dict[str, Tunable] = {
         "Longest single tool result the model sees; longer results are shortened and say so.", 500),
     "shell_output_cap": Tunable("Context", "Shell output cap (chars)",
         "Tighter cap for run_shell, so dumping a file through the shell loses to read_file with a line range.", 500),
+    "defer_mcp_tools": Tunable("Context", "Load MCP tools on demand",
+        "Leave MCP tool definitions out of each model call until the bot loads them with load_tools; the system prompt lists their names. Saves the definitions' tokens (tens of thousands for large servers) on every call."),
     "context_trigger_tokens": Tunable("Context", "Clear old tool results above (tokens)",
         "Once a run's messages pass this, tool results from turns before the last two, and their call arguments, are replaced by a placeholder. The system prompt and tool schemas are not counted. Leave empty to derive it from the model's context window (falls back to 40000 when unknown).", 1000),
     "context_clear_at_least": Tunable("Context", "Reclaim at least (tokens)",
