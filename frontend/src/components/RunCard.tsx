@@ -1,10 +1,10 @@
-import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { Api } from "../api/client";
 import { usageLabel } from "../lib/usageLabel";
 import type { Run, RunEvent } from "../api/types";
-import { Badge, Button, ErrorText, type BadgeTone } from "./ui";
-import { ChevronDownIcon, ChevronRightIcon, ExternalIcon } from "./icons";
+import { Badge, Button, Dialog, ErrorText, IconButton, type BadgeTone } from "./ui";
+import { ChevronDownIcon, ChevronRightIcon, ExternalIcon, NotepadIcon } from "./icons";
 
 const ACTIVE = ["queued", "running", "waiting_human"];
 
@@ -14,13 +14,31 @@ const tone = (s: string): BadgeTone => (s === "completed" ? "green" : s === "fai
  * The run log under a bot's message: what it said while working and every tool it called, as a
  * transcript. Tool calls read like shell lines — `$ name(args)` with the result folded beneath.
  */
-export default function RunCard({ run, events, streaming }: { run: Run; events: RunEvent[]; streaming?: string }) {
+export default function RunCard({ run, events, streaming, botName }: { run: Run; events: RunEvent[]; streaming?: string; botName?: string | null }) {
   // Always collapsed by default regardless of run status; the user clicks to expand.
   const active = ACTIVE.includes(run.status);
   const [open, setOpen] = useState(false);
   const toggle = () => setOpen((o) => !o);
   // Nothing to invalidate: the cancel lands as a `run.updated` over SSE like any other status change.
   const cancel = useMutation({ mutationFn: () => Api.cancelRun(run.id) });
+  // The bot's persistent scratchpad. It is per bot, so every card of the same bot shares one
+  // query; the header shows an icon for it only when there is something saved.
+  const qc = useQueryClient();
+  const pad = useQuery({ queryKey: ["bot-scratchpad", run.actor_id], queryFn: () => Api.getBotScratchpad(run.actor_id), staleTime: 30_000, retry: false });
+  const [padOpen, setPadOpen] = useState(false);
+  const openScratchpad = () => {
+    setPadOpen(true);
+    void pad.refetch(); // show the latest write, not the cached copy
+  };
+  // A scratchpad save landing in this run changes the pad: refetch it. Only saves that arrive while
+  // the card is mounted count — a thread full of old runs must not each refetch on mount.
+  const padSaves = events.filter((e) => e.type === "tool_result" && e.payload.name === "scratchpad").length;
+  const seenPadSaves = useRef(padSaves);
+  useEffect(() => {
+    if (padSaves > seenPadSaves.current) qc.invalidateQueries({ queryKey: ["bot-scratchpad", run.actor_id] });
+    seenPadSaves.current = padSaves;
+  }, [padSaves, qc, run.actor_id]);
+  const padText = pad.data?.content ?? "";
   // Events arrive sorted by seq; group contiguous text events and build a chronological list of content blocks.
   const results = new Map<unknown, RunEvent>(events.filter((e) => e.type === "tool_result").map((e) => [e.payload.tool_call_id, e] as const));
   const toolCalls = events.filter((e) => e.type === "tool_call").length;
@@ -63,6 +81,11 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
         {run.langsmith_run_id && (
           <a className="inline-flex shrink-0 items-center gap-1 text-muted hover:text-fg" target="_blank" rel="noreferrer" href={`https://smith.langchain.com/o/-/projects/p/-/r/${run.langsmith_run_id}`}>LangSmith <ExternalIcon className="h-3 w-3" /></a>
         )}
+        {padText.trim() && (
+          <IconButton size="sm" className="-mx-1 h-6 w-6" onClick={openScratchpad} aria-label="Show scratchpad" title={botName ? `${botName}'s scratchpad` : "Scratchpad"}>
+            <NotepadIcon className="h-3.5 w-3.5" />
+          </IconButton>
+        )}
         {active && (
           <Button variant="secondary" size="sm" onClick={() => cancel.mutate()} disabled={cancel.isPending}>
             {cancel.isPending ? "Cancelling…" : "Cancel"}
@@ -70,6 +93,15 @@ export default function RunCard({ run, events, streaming }: { run: Run; events: 
         )}
       </div>
       {cancel.error && <div className="px-2 pb-1"><ErrorText error={cancel.error} /></div>}
+      {padOpen && (
+        <Dialog title={botName ? `${botName}'s scratchpad` : "Scratchpad"} titleId={`scratchpad-${run.id}`} onClose={() => setPadOpen(false)} className="max-w-2xl gap-3">
+          {pad.data?.updated_at && <p className="-mt-2 text-xs text-faint">updated {new Date(pad.data.updated_at).toLocaleString()}</p>}
+          {pad.error && <ErrorText error={pad.error} />}
+          {padText.trim()
+            ? <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-ui border border-line bg-canvas p-3 text-xs leading-relaxed text-fg scrollbar-subtle">{padText}</pre>
+            : !pad.error && <p className="text-xs text-faint">Scratchpad is empty.</p>}
+        </Dialog>
+      )}
       {open && (
         <div className="space-y-1 border-t border-line p-2">
           {body.length > 0 ? body : null}

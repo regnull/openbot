@@ -206,6 +206,24 @@ async def test_list_and_delete_bot_memories(client, services):
     assert (await client.get("/api/v1/bots/nope/memories")).status_code == 404
 
 
+# --- scratchpad ---------------------------------------------------------------------------------------------
+
+async def test_get_bot_scratchpad(client, services):
+    """GET /bots/{id}/scratchpad returns the bot's saved pad; an empty string (not a 404) when the
+    bot has never written one, and a 404 only for an unknown bot."""
+    from openbot.db.models import BotScratchpad
+    bot = (await client.post("/api/v1/bots", json=BOT)).json()
+    r = await client.get(f"/api/v1/bots/{bot['id']}/scratchpad")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"content": "", "updated_at": None}
+    async with services.session_factory() as session:
+        session.add(BotScratchpad(actor_id=bot["id"], content="State\n- step one done\n## Next\n- wire the UI"))
+        await session.commit()
+    pad = (await client.get(f"/api/v1/bots/{bot['id']}/scratchpad")).json()
+    assert pad["content"] == "State\n- step one done\n## Next\n- wire the UI" and pad["updated_at"]
+    assert (await client.get("/api/v1/bots/nope/scratchpad")).status_code == 404
+
+
 # --- purge: cancel the current run and clear the queue ------------------------------------------------------
 
 async def test_purge_cancels_the_waiting_run_and_the_queued_mail(client, services, scripts):

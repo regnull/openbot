@@ -65,20 +65,45 @@ async def test_read_reports_an_empty_pad_and_write_replaces(services, _no_actor_
             "runtime": rt(services, eng, t1.id),
         }
     )
-    assert out == "Scratchpad replaced (25 characters)."
+    assert out.startswith("Scratchpad replaced (25 characters). Saved")
     assert await saved(services, eng.id) == "branch: feat/x\nPR 12 open"
 
     out = await scratchpad.ainvoke(
         {"action": "write", "content": "fresh", "runtime": rt(services, eng, t1.id)}
     )
-    assert out == "Scratchpad replaced (5 characters)."
+    assert out.startswith("Scratchpad replaced (5 characters).")
     assert await saved(services, eng.id) == "fresh"
 
-    out = await scratchpad.ainvoke(
-        {"action": "write", "content": "", "runtime": rt(services, eng, t1.id)}
-    )
-    assert out == "Scratchpad replaced (0 characters)."
+    out = await scratchpad.ainvoke({"action": "clear", "runtime": rt(services, eng, t1.id)})
+    assert out == "Scratchpad cleared."
     assert await saved(services, eng.id) == ""
+    out = await scratchpad.ainvoke({"action": "clear", "runtime": rt(services, eng, t1.id)})
+    assert out == "Scratchpad is already empty."
+
+
+async def test_a_save_without_content_is_refused_not_a_wipe(services, _no_actor_runs):
+    """A model that drops `content` must not erase the pad behind a success message: the run that
+    surfaced this re-sent {"action": "write"} until the repeated-call guard stopped it."""
+    eng, _rev, t1, _t2 = await setup(services)
+    await scratchpad.ainvoke(
+        {"action": "write", "content": "keep me", "runtime": rt(services, eng, t1.id)}
+    )
+    for args in ({"action": "write"}, {"action": "write", "content": ""}, {"action": "append"}):
+        out = await scratchpad.ainvoke({**args, "runtime": rt(services, eng, t1.id)})
+        assert out.startswith("error:") and "unchanged" in out and "action=clear" in out
+        assert await saved(services, eng.id) == "keep me"
+
+
+async def test_an_identical_save_says_so_instead_of_acking_a_change(services, _no_actor_runs):
+    eng, _rev, t1, _t2 = await setup(services)
+    await scratchpad.ainvoke(
+        {"action": "write", "content": "same notes", "runtime": rt(services, eng, t1.id)}
+    )
+    out = await scratchpad.ainvoke(
+        {"action": "write", "content": "same notes", "runtime": rt(services, eng, t1.id)}
+    )
+    assert out.startswith("Scratchpad unchanged") and "do not repeat" in out
+    assert await saved(services, eng.id) == "same notes"
 
 
 async def test_append_joins_without_eating_lines(services, _no_actor_runs):
@@ -89,7 +114,7 @@ async def test_append_joins_without_eating_lines(services, _no_actor_runs):
     out = await scratchpad.ainvoke(
         {"action": "append", "content": "part two", "runtime": rt(services, eng, t1.id)}
     )
-    assert out == "Scratchpad appended to (17 characters)."
+    assert out.startswith("Scratchpad appended to (17 characters).")
     assert await saved(services, eng.id) == "part one\npart two"
 
     await scratchpad.ainvoke(
@@ -99,11 +124,6 @@ async def test_append_joins_without_eating_lines(services, _no_actor_runs):
         {"action": "append", "content": "next", "runtime": rt(services, eng, t1.id)}
     )
     assert await saved(services, eng.id) == "line\nnext"  # no doubled newline
-
-    await scratchpad.ainvoke(
-        {"action": "append", "content": "", "runtime": rt(services, eng, t1.id)}
-    )
-    assert await saved(services, eng.id) == "line\nnext"
 
 
 async def test_pads_are_per_bot_across_threads(services, _no_actor_runs):
@@ -164,12 +184,6 @@ async def test_oversized_writes_are_rejected_with_guidance(services, _no_actor_r
     assert out.startswith("error:")
     assert await saved(services, eng.id) == "a" * MAX_SCRATCHPAD_CHARS
 
-    # Exactly at the cap is fine, and an empty append is a no-op that still reports the size.
-    out = await scratchpad.ainvoke(
-        {"action": "append", "content": "", "runtime": rt(services, eng, t1.id)}
-    )
-    assert out == f"Scratchpad appended to ({MAX_SCRATCHPAD_CHARS} characters)."
-
 
 def test_the_scratchpad_goes_in_the_dynamic_prompt_only():
     bot = bot_actor("eng")
@@ -186,8 +200,11 @@ def test_the_scratchpad_goes_in_the_dynamic_prompt_only():
     stable, dynamic = build_system_prompt_parts(**kw, scratchpad="step 1 done\nnow: write tests")
     assert "# Your scratchpad" in dynamic and "now: write tests" in dynamic
     assert "# Your scratchpad" not in stable
+    # The section is a run-start snapshot; it says so, or a bot re-saves notes it already saved.
+    assert "Snapshot from the start of this run" in dynamic
     empty_dynamic = build_system_prompt_parts(**kw, scratchpad="")[1]
     assert "# Your scratchpad" in empty_dynamic and "nothing saved yet" in empty_dynamic
+    assert "Snapshot from the start of this run" in empty_dynamic
     assert "# Your scratchpad" not in build_system_prompt_parts(**kw)[1]
 
 
