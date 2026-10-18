@@ -143,6 +143,8 @@ async def scratchpad(
                 "shortened version of your notes, dropping completed work and stale details."
             )
         if new == current:
+            if action == "clear":
+                return "Scratchpad is already empty."
             return (
                 f"Scratchpad unchanged: it already holds exactly this ({len(new)} characters). "
                 "Nothing to save; do not repeat this call."

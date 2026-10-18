@@ -77,6 +77,8 @@ async def test_read_reports_an_empty_pad_and_write_replaces(services, _no_actor_
     out = await scratchpad.ainvoke({"action": "clear", "runtime": rt(services, eng, t1.id)})
     assert out == "Scratchpad cleared."
     assert await saved(services, eng.id) == ""
+    out = await scratchpad.ainvoke({"action": "clear", "runtime": rt(services, eng, t1.id)})
+    assert out == "Scratchpad is already empty."
 
 
 async def test_a_save_without_content_is_refused_not_a_wipe(services, _no_actor_runs):
