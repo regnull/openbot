@@ -231,6 +231,10 @@ class Run(Base):
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     model_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Files the run changed and the unified diff, captured with the snapshot store
+    # (runtime/snapshot.py); None when the run never reached a snapshot point.
+    changed_files: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    diff: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
