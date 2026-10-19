@@ -133,7 +133,7 @@ async def execute_cli_turn(runner, adapter: CliAdapter, bot, thread, run, seq: i
         seq = await runner._record(run, seq, "message", {"message_id": res.message.id})
     usage = result.usage
     seq = await session_totals(result.totals, seq)
-    await runner._set_status(run.id, "completed", usage=usage)
+    await runner._snapshot_attach_terminal(run.id, thread, "completed", usage=usage)
     log.info("run %s completed in %.1fs via %s: reply=%d chars model_calls=%d prompt_tokens=%d cache_read_tokens=%d "
              "completion_tokens=%d session=%s resumed=%s", run.id, time.monotonic() - started, adapter.binary,
              len(result.text), usage["model_calls"], usage["prompt_tokens"], usage["cache_read_tokens"],
