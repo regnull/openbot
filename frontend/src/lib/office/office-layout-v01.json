@@ -1,0 +1,9265 @@
+{
+ "version": "office-layout-v01",
+ "generator": "office authoring scripts (source assets, not in this repository)",
+ "units": "metres",
+ "frame": {
+  "up": "+Y",
+  "right": "+X",
+  "front": "+Z (entrance)",
+  "yaw": "local +Z -> (sin yaw, cos yaw)",
+  "blender": "(bx, by, bz) = (x, -z, y); yaw = Blender rotation about +Z"
+ },
+ "character": {
+  "height": 0.96,
+  "width": 0.49,
+  "depth": 0.62,
+  "radius": 0.27,
+  "propRadius": 0.33,
+  "seatHeight": 0.132,
+  "deskHeight": 0.15,
+  "deskReach": 0.358,
+  "deskEdge": 0.25,
+  "seatBack": 0.06,
+  "walkSpeed": 0.142,
+  "eyeHeight": 0.64
+ },
+ "clearance": 0.3,
+ "architecture": {
+  "wallThickness": 0.16,
+  "heights": {
+   "tall": 2.6,
+   "side": 2.0,
+   "partition": 1.15,
+   "low": 0.75,
+   "glassFront": 1.75,
+   "partitionBase": 0.42
+  },
+  "outline": [
+   [
+    -2.4,
+    4.6
+   ],
+   [
+    -6.8,
+    4.6
+   ],
+   [
+    -8.0,
+    3.4
+   ],
+   [
+    -8.0,
+    -4.9
+   ],
+   [
+    -7.3,
+    -5.6
+   ],
+   [
+    7.3,
+    -5.6
+   ],
+   [
+    8.0,
+    -4.9
+   ],
+   [
+    8.0,
+    3.4
+   ],
+   [
+    6.8,
+    4.6
+   ],
+   [
+    2.4,
+    4.6
+   ]
+  ],
+  "porch": [
+   -2.4,
+   4.6,
+   2.4,
+   6.3
+  ],
+  "bounds": [
+   -8.0,
+   -5.6,
+   8.0,
+   6.3
+  ]
+ },
+ "zones": [
+  {
+   "id": "lobby",
+   "number": 1,
+   "label": "Lobby / Entry",
+   "tagline": "Start your journey.",
+   "polygon": [
+    [
+     -2.4,
+     3.3
+    ],
+    [
+     2.4,
+     3.3
+    ],
+    [
+     2.4,
+     6.3
+    ],
+    [
+     -2.4,
+     6.3
+    ]
+   ],
+   "center": [
+    0.0,
+    4.8
+   ],
+   "bounds": [
+    -2.4,
+    3.3,
+    2.4,
+    6.3
+   ]
+  },
+  {
+   "id": "command",
+   "number": 2,
+   "label": "Central Command Hub",
+   "tagline": "Monitor. Coordinate. Inspire.",
+   "polygon": [
+    [
+     -2.9,
+     -5.6
+    ],
+    [
+     2.9,
+     -5.6
+    ],
+    [
+     2.9,
+     -1.45
+    ],
+    [
+     -2.9,
+     -1.45
+    ]
+   ],
+   "center": [
+    0.0,
+    -3.525
+   ],
+   "bounds": [
+    -2.9,
+    -5.6,
+    2.9,
+    -1.45
+   ]
+  },
+  {
+   "id": "workers",
+   "number": 3,
+   "label": "Worker Desk Zone",
+   "tagline": "Ideas into action.",
+   "polygon": [
+    [
+     -4.7,
+     -1.2
+    ],
+    [
+     -1.0,
+     -1.2
+    ],
+    [
+     -1.0,
+     3.3
+    ],
+    [
+     -4.7,
+     3.3
+    ]
+   ],
+   "center": [
+    -2.85,
+    1.05
+   ],
+   "bounds": [
+    -4.7,
+    -1.2,
+    -1.0,
+    3.3
+   ]
+  },
+  {
+   "id": "research",
+   "number": 4,
+   "label": "Research Corner",
+   "tagline": "Explore. Learn. Discover.",
+   "polygon": [
+    [
+     -7.3,
+     -5.6
+    ],
+    [
+     -2.9,
+     -5.6
+    ],
+    [
+     -2.9,
+     -1.8
+    ],
+    [
+     -8.0,
+     -1.8
+    ],
+    [
+     -8.0,
+     -4.9
+    ]
+   ],
+   "center": [
+    -5.82,
+    -3.94
+   ],
+   "bounds": [
+    -8.0,
+    -5.6,
+    -2.9,
+    -1.8
+   ]
+  },
+  {
+   "id": "devtest",
+   "number": 5,
+   "label": "Dev / Test Lab",
+   "tagline": "Build. Test. Improve.",
+   "polygon": [
+    [
+     2.9,
+     -5.6
+    ],
+    [
+     7.3,
+     -5.6
+    ],
+    [
+     8.0,
+     -4.9
+    ],
+    [
+     8.0,
+     -1.8
+    ],
+    [
+     2.9,
+     -1.8
+    ]
+   ],
+   "center": [
+    5.82,
+    -3.94
+   ],
+   "bounds": [
+    2.9,
+    -5.6,
+    8.0,
+    -1.8
+   ]
+  },
+  {
+   "id": "reporting",
+   "number": 6,
+   "label": "Reporting Area",
+   "tagline": "Turn progress into impact.",
+   "polygon": [
+    [
+     1.0,
+     -1.2
+    ],
+    [
+     4.7,
+     -1.2
+    ],
+    [
+     4.7,
+     3.3
+    ],
+    [
+     1.0,
+     3.3
+    ]
+   ],
+   "center": [
+    2.85,
+    1.05
+   ],
+   "bounds": [
+    1.0,
+    -1.2,
+    4.7,
+    3.3
+   ]
+  },
+  {
+   "id": "ops",
+   "number": 7,
+   "label": "Ops Wall",
+   "tagline": "Keep OpenBot healthy.",
+   "polygon": [
+    [
+     4.7,
+     -1.8
+    ],
+    [
+     8.0,
+     -1.8
+    ],
+    [
+     8.0,
+     3.4
+    ],
+    [
+     6.8,
+     4.6
+    ],
+    [
+     4.7,
+     4.6
+    ]
+   ],
+   "center": [
+    6.44,
+    1.8
+   ],
+   "bounds": [
+    4.7,
+    -1.8,
+    8.0,
+    4.6
+   ]
+  },
+  {
+   "id": "break",
+   "number": 8,
+   "label": "Break Area",
+   "tagline": "Recharge. Connect.",
+   "polygon": [
+    [
+     -8.0,
+     -1.8
+    ],
+    [
+     -4.7,
+     -1.8
+    ],
+    [
+     -4.7,
+     4.6
+    ],
+    [
+     -6.8,
+     4.6
+    ],
+    [
+     -8.0,
+     3.4
+    ]
+   ],
+   "center": [
+    -6.44,
+    1.8
+   ],
+   "bounds": [
+    -8.0,
+    -1.8,
+    -4.7,
+    4.6
+   ]
+  }
+ ],
+ "walls": [
+  {
+   "id": "W_Front_L",
+   "kind": "low",
+   "from": [
+    -2.4,
+    4.6
+   ],
+   "to": [
+    -6.8,
+    4.6
+   ],
+   "height": 0.75,
+   "thickness": 0.16,
+   "zone": null,
+   "openings": [],
+   "rail": 0.5
+  },
+  {
+   "id": "W_Chamfer_FL",
+   "kind": "low",
+   "from": [
+    -6.8,
+    4.6
+   ],
+   "to": [
+    -8.0,
+    3.4
+   ],
+   "height": 0.75,
+   "thickness": 0.16,
+   "zone": null,
+   "openings": [],
+   "rail": 0.5
+  },
+  {
+   "id": "W_Side_L_Front",
+   "kind": "solid",
+   "from": [
+    -8.0,
+    3.4
+   ],
+   "to": [
+    -8.0,
+    -1.8
+   ],
+   "height": 2.0,
+   "thickness": 0.16,
+   "zone": "break",
+   "openings": []
+  },
+  {
+   "id": "W_Side_L_Rear",
+   "kind": "solid",
+   "from": [
+    -8.0,
+    -1.8
+   ],
+   "to": [
+    -8.0,
+    -4.9
+   ],
+   "height": 2.6,
+   "thickness": 0.16,
+   "zone": "research",
+   "openings": []
+  },
+  {
+   "id": "W_Chamfer_RL",
+   "kind": "solid",
+   "from": [
+    -8.0,
+    -4.9
+   ],
+   "to": [
+    -7.3,
+    -5.6
+   ],
+   "height": 2.6,
+   "thickness": 0.16,
+   "zone": null,
+   "openings": []
+  },
+  {
+   "id": "W_Rear",
+   "kind": "solid",
+   "from": [
+    -7.3,
+    -5.6
+   ],
+   "to": [
+    7.3,
+    -5.6
+   ],
+   "height": 2.6,
+   "thickness": 0.16,
+   "zone": null,
+   "openings": []
+  },
+  {
+   "id": "W_Chamfer_RR",
+   "kind": "solid",
+   "from": [
+    7.3,
+    -5.6
+   ],
+   "to": [
+    8.0,
+    -4.9
+   ],
+   "height": 2.6,
+   "thickness": 0.16,
+   "zone": null,
+   "openings": []
+  },
+  {
+   "id": "W_Side_R_Rear",
+   "kind": "solid",
+   "from": [
+    8.0,
+    -4.9
+   ],
+   "to": [
+    8.0,
+    -1.8
+   ],
+   "height": 2.6,
+   "thickness": 0.16,
+   "zone": "devtest",
+   "openings": []
+  },
+  {
+   "id": "W_Side_R_Front",
+   "kind": "solid",
+   "from": [
+    8.0,
+    -1.8
+   ],
+   "to": [
+    8.0,
+    3.4
+   ],
+   "height": 2.0,
+   "thickness": 0.16,
+   "zone": "ops",
+   "openings": []
+  },
+  {
+   "id": "W_Chamfer_FR",
+   "kind": "low",
+   "from": [
+    8.0,
+    3.4
+   ],
+   "to": [
+    6.8,
+    4.6
+   ],
+   "height": 0.75,
+   "thickness": 0.16,
+   "zone": null,
+   "openings": [],
+   "rail": 0.5
+  },
+  {
+   "id": "W_Front_R",
+   "kind": "low",
+   "from": [
+    6.8,
+    4.6
+   ],
+   "to": [
+    2.4,
+    4.6
+   ],
+   "height": 0.75,
+   "thickness": 0.16,
+   "zone": null,
+   "openings": [],
+   "rail": 0.5
+  },
+  {
+   "id": "W_LobbyGlass",
+   "kind": "glass",
+   "from": [
+    -2.4,
+    4.6
+   ],
+   "to": [
+    2.4,
+    4.6
+   ],
+   "height": 1.75,
+   "thickness": 0.08,
+   "zone": "lobby",
+   "openings": [
+    [
+     1.7799999999999998,
+     3.02,
+     "door"
+    ]
+   ]
+  },
+  {
+   "id": "W_Porch_L",
+   "kind": "low",
+   "from": [
+    -2.4,
+    4.6
+   ],
+   "to": [
+    -2.4,
+    6.05
+   ],
+   "height": 0.45,
+   "thickness": 0.3,
+   "zone": "lobby",
+   "openings": []
+  },
+  {
+   "id": "W_Porch_R",
+   "kind": "low",
+   "from": [
+    2.4,
+    4.6
+   ],
+   "to": [
+    2.4,
+    6.05
+   ],
+   "height": 0.45,
+   "thickness": 0.3,
+   "zone": "lobby",
+   "openings": []
+  },
+  {
+   "id": "W_Cmd_L",
+   "kind": "solid",
+   "from": [
+    -2.9,
+    -5.6
+   ],
+   "to": [
+    -2.9,
+    -2.55
+   ],
+   "height": 2.6,
+   "thickness": 0.16,
+   "zone": "command",
+   "openings": []
+  },
+  {
+   "id": "W_Cmd_R",
+   "kind": "solid",
+   "from": [
+    2.9,
+    -5.6
+   ],
+   "to": [
+    2.9,
+    -2.55
+   ],
+   "height": 2.6,
+   "thickness": 0.16,
+   "zone": "command",
+   "openings": []
+  },
+  {
+   "id": "W_Cmd_L_Glass",
+   "kind": "partition",
+   "from": [
+    -2.9,
+    -2.55
+   ],
+   "to": [
+    -2.9,
+    -1.8
+   ],
+   "height": 1.15,
+   "thickness": 0.1,
+   "zone": "research",
+   "openings": []
+  },
+  {
+   "id": "W_Cmd_R_Glass",
+   "kind": "partition",
+   "from": [
+    2.9,
+    -2.55
+   ],
+   "to": [
+    2.9,
+    -1.8
+   ],
+   "height": 1.15,
+   "thickness": 0.1,
+   "zone": "devtest",
+   "openings": []
+  },
+  {
+   "id": "W_Break_Rear",
+   "kind": "solid",
+   "from": [
+    -8.0,
+    -1.8
+   ],
+   "to": [
+    -4.7,
+    -1.8
+   ],
+   "height": 1.15,
+   "thickness": 0.16,
+   "zone": "break",
+   "openings": []
+  },
+  {
+   "id": "W_Research_Front",
+   "kind": "partition",
+   "from": [
+    -4.7,
+    -1.8
+   ],
+   "to": [
+    -2.9,
+    -1.8
+   ],
+   "height": 1.15,
+   "thickness": 0.1,
+   "zone": "research",
+   "openings": [
+    [
+     0.45,
+     1.45,
+     "door"
+    ]
+   ]
+  },
+  {
+   "id": "W_Dev_Front",
+   "kind": "partition",
+   "from": [
+    2.9,
+    -1.8
+   ],
+   "to": [
+    4.7,
+    -1.8
+   ],
+   "height": 1.15,
+   "thickness": 0.1,
+   "zone": "devtest",
+   "openings": [
+    [
+     0.65,
+     1.65,
+     "door"
+    ]
+   ]
+  },
+  {
+   "id": "W_Ops_Rear",
+   "kind": "solid",
+   "from": [
+    4.7,
+    -1.8
+   ],
+   "to": [
+    8.0,
+    -1.8
+   ],
+   "height": 1.15,
+   "thickness": 0.16,
+   "zone": "ops",
+   "openings": []
+  },
+  {
+   "id": "W_Break_Inner",
+   "kind": "solid",
+   "from": [
+    -4.7,
+    -1.8
+   ],
+   "to": [
+    -4.7,
+    3.55
+   ],
+   "height": 1.15,
+   "thickness": 0.16,
+   "zone": "break",
+   "openings": [
+    [
+     0.3,
+     1.3,
+     "door"
+    ],
+    [
+     4.15,
+     5.35,
+     "door"
+    ]
+   ]
+  },
+  {
+   "id": "W_Ops_Inner",
+   "kind": "partition",
+   "from": [
+    4.7,
+    -1.8
+   ],
+   "to": [
+    4.7,
+    3.55
+   ],
+   "height": 1.15,
+   "thickness": 0.1,
+   "zone": "ops",
+   "openings": [
+    [
+     4.15,
+     5.35,
+     "door"
+    ]
+   ]
+  },
+  {
+   "id": "W_TestBay_Front",
+   "kind": "glass",
+   "from": [
+    5.75,
+    -2.85
+   ],
+   "to": [
+    7.72,
+    -2.85
+   ],
+   "height": 1.3,
+   "thickness": 0.06,
+   "zone": "devtest",
+   "openings": []
+  },
+  {
+   "id": "W_TestBay_Side",
+   "kind": "glass",
+   "from": [
+    5.75,
+    -5.1
+   ],
+   "to": [
+    5.75,
+    -2.85
+   ],
+   "height": 1.3,
+   "thickness": 0.06,
+   "zone": "devtest",
+   "openings": [
+    [
+     1.45,
+     2.25,
+     "door"
+    ]
+   ]
+  }
+ ],
+ "items": [
+  {
+   "id": "Lobby_Doors",
+   "type": "door_double",
+   "zone": "lobby",
+   "position": [
+    0.0,
+    0.0,
+    4.6
+   ],
+   "yaw": 0,
+   "params": {
+    "width": 1.24,
+    "leafWidth": 0.6,
+    "height": 1.55,
+    "openDeg": 78
+   }
+  },
+  {
+   "id": "Lobby_WelcomeMat",
+   "type": "welcome_mat",
+   "zone": "lobby",
+   "position": [
+    0.0,
+    0.0,
+    5.4
+   ],
+   "yaw": 0,
+   "params": {
+    "width": 1.7,
+    "depth": 0.95
+   }
+  },
+  {
+   "id": "Lobby_Plant_Out_L",
+   "type": "plant_tall",
+   "zone": "lobby",
+   "position": [
+    -1.78,
+    0.0,
+    5.82
+   ],
+   "yaw": -0.6,
+   "params": {
+    "pot": 0.22,
+    "height": 1.35,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Lobby_Plant_In_L",
+   "type": "plant_tall",
+   "zone": "lobby",
+   "position": [
+    -1.9,
+    0.0,
+    4.1
+   ],
+   "yaw": 0.9,
+   "params": {
+    "pot": 0.2,
+    "height": 1.2,
+    "variant": 1
+   }
+  },
+  {
+   "id": "Lobby_Planter_L",
+   "type": "planter_box",
+   "zone": "lobby",
+   "position": [
+    -2.4,
+    0.0,
+    5.33
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "length": 1.3,
+    "depth": 0.3,
+    "height": 0.45,
+    "mounted": true
+   }
+  },
+  {
+   "id": "Lobby_Plant_Out_R",
+   "type": "plant_tall",
+   "zone": "lobby",
+   "position": [
+    1.78,
+    0.0,
+    5.82
+   ],
+   "yaw": 0.6,
+   "params": {
+    "pot": 0.22,
+    "height": 1.35,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Lobby_Plant_In_R",
+   "type": "plant_tall",
+   "zone": "lobby",
+   "position": [
+    1.9,
+    0.0,
+    4.1
+   ],
+   "yaw": -0.9,
+   "params": {
+    "pot": 0.2,
+    "height": 1.2,
+    "variant": 1
+   }
+  },
+  {
+   "id": "Lobby_Planter_R",
+   "type": "planter_box",
+   "zone": "lobby",
+   "position": [
+    2.4,
+    0.0,
+    5.33
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "length": 1.3,
+    "depth": 0.3,
+    "height": 0.45,
+    "mounted": true
+   }
+  },
+  {
+   "id": "Lobby_Kiosk",
+   "type": "kiosk",
+   "zone": "lobby",
+   "position": [
+    1.55,
+    0.0,
+    3.62
+   ],
+   "yaw": -1.5708,
+   "params": {}
+  },
+  {
+   "id": "Front_Planter_L",
+   "type": "planter_box",
+   "zone": "lobby",
+   "position": [
+    -3.55,
+    0.0,
+    4.3
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 2.0,
+    "depth": 0.3,
+    "height": 0.3
+   }
+  },
+  {
+   "id": "Front_Plant_L",
+   "type": "plant_tall",
+   "zone": "lobby",
+   "position": [
+    -2.75,
+    0.0,
+    4.15
+   ],
+   "yaw": -0.7,
+   "params": {
+    "pot": 0.2,
+    "height": 1.25,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Front_Planter_R",
+   "type": "planter_box",
+   "zone": "lobby",
+   "position": [
+    3.55,
+    0.0,
+    4.3
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 2.0,
+    "depth": 0.3,
+    "height": 0.3
+   }
+  },
+  {
+   "id": "Front_Plant_R",
+   "type": "plant_tall",
+   "zone": "lobby",
+   "position": [
+    2.75,
+    0.0,
+    3.9
+   ],
+   "yaw": 0.962,
+   "params": {
+    "pot": 0.2,
+    "height": 1.25,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Lobby_Bench",
+   "type": "bench",
+   "zone": "lobby",
+   "position": [
+    -1.75,
+    0.0,
+    3.62
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "length": 0.9
+   }
+  },
+  {
+   "id": "Command_Platform",
+   "type": "platform_round",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.0,
+    -3.42
+   ],
+   "yaw": 0,
+   "params": {
+    "radius": 1.42
+   }
+  },
+  {
+   "id": "Command_Console",
+   "type": "console_horseshoe",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.0,
+    -3.42
+   ],
+   "yaw": 0,
+   "params": {
+    "inner": 0.6,
+    "outer": 0.98,
+    "height": 0.42,
+    "openingDeg": 96
+   }
+  },
+  {
+   "id": "Command_Display",
+   "type": "display_curved",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.0,
+    -3.42
+   ],
+   "yaw": 0,
+   "params": {
+    "radius": 2.0,
+    "angles": [
+     -64,
+     -32,
+     0,
+     32,
+     64
+    ],
+    "panelWidth": 1.04,
+    "panelHeight": 1.18,
+    "bottom": 0.55
+   }
+  },
+  {
+   "id": "Command_Globe",
+   "type": "globe_emitter",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.0,
+    -4.67
+   ],
+   "yaw": 0,
+   "params": {
+    "globeY": 1.72,
+    "radius": 0.56
+   }
+  },
+  {
+   "id": "Command_Plant_Front_L",
+   "type": "plant_tall",
+   "zone": "command",
+   "position": [
+    -2.2,
+    0.0,
+    -2.35
+   ],
+   "yaw": -4.354,
+   "params": {
+    "pot": 0.21,
+    "height": 1.3,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Command_Plant_Rear_L",
+   "type": "plant_tall",
+   "zone": "command",
+   "position": [
+    -2.405,
+    0.0,
+    -5.105
+   ],
+   "yaw": -0.4,
+   "params": {
+    "pot": 0.2,
+    "height": 1.45,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Command_Plant_Front_R",
+   "type": "plant_tall",
+   "zone": "command",
+   "position": [
+    2.2,
+    0.0,
+    -2.325
+   ],
+   "yaw": -1.144,
+   "params": {
+    "pot": 0.21,
+    "height": 1.3,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Command_Plant_Rear_R",
+   "type": "plant_tall",
+   "zone": "command",
+   "position": [
+    2.445,
+    0.0,
+    -5.07
+   ],
+   "yaw": 0.226,
+   "params": {
+    "pot": 0.2,
+    "height": 1.45,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Desk_01_Desk",
+   "type": "desk_work",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    0.65
+   ],
+   "yaw": 3.14159,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 2,
+    "style": "white",
+    "seed": 22,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Desk_01_Chair",
+   "type": "chair_office",
+   "zone": "workers",
+   "position": [
+    -3.37,
+    0.0,
+    -0.06
+   ],
+   "yaw": 0.22,
+   "params": {
+    "seatPose": [
+     -3.93,
+     0.0,
+     0.04
+    ],
+    "seatYaw": 0.0,
+    "restPose": [
+     -3.37,
+     0.0,
+     -0.06
+    ],
+    "restYaw": 0.22
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Desk_04_Desk",
+   "type": "desk_work",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    1.25
+   ],
+   "yaw": 6.28319,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 2,
+    "style": "white",
+    "seed": 24,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Desk_04_Chair",
+   "type": "chair_office",
+   "zone": "workers",
+   "position": [
+    -3.37,
+    0.0,
+    1.96
+   ],
+   "yaw": 2.92159,
+   "params": {
+    "seatPose": [
+     -3.93,
+     0.0,
+     1.86
+    ],
+    "seatYaw": 3.14159,
+    "restPose": [
+     -3.37,
+     0.0,
+     1.96
+    ],
+    "restYaw": 2.92159
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Desk_02_Desk",
+   "type": "desk_work",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    0.65
+   ],
+   "yaw": 3.14159,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 2,
+    "style": "white",
+    "seed": 26,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Desk_02_Chair",
+   "type": "chair_office",
+   "zone": "workers",
+   "position": [
+    -3.41,
+    0.0,
+    -0.06
+   ],
+   "yaw": -0.22,
+   "params": {
+    "seatPose": [
+     -2.85,
+     0.0,
+     0.04
+    ],
+    "seatYaw": 0.0,
+    "restPose": [
+     -3.41,
+     0.0,
+     -0.06
+    ],
+    "restYaw": -0.22
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Desk_05_Desk",
+   "type": "desk_work",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    1.25
+   ],
+   "yaw": 6.28319,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 2,
+    "style": "white",
+    "seed": 28,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Desk_05_Chair",
+   "type": "chair_office",
+   "zone": "workers",
+   "position": [
+    -3.41,
+    0.0,
+    1.96
+   ],
+   "yaw": 3.36159,
+   "params": {
+    "seatPose": [
+     -2.85,
+     0.0,
+     1.86
+    ],
+    "seatYaw": 3.14159,
+    "restPose": [
+     -3.41,
+     0.0,
+     1.96
+    ],
+    "restYaw": 3.36159
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Desk_03_Desk",
+   "type": "desk_work",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    0.65
+   ],
+   "yaw": 3.14159,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 2,
+    "style": "white",
+    "seed": 30,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Desk_03_Chair",
+   "type": "chair_office",
+   "zone": "workers",
+   "position": [
+    -1.21,
+    0.0,
+    -0.06
+   ],
+   "yaw": 0.22,
+   "params": {
+    "seatPose": [
+     -1.77,
+     0.0,
+     0.04
+    ],
+    "seatYaw": 0.0,
+    "restPose": [
+     -1.21,
+     0.0,
+     -0.06
+    ],
+    "restYaw": 0.22
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Desk_06_Desk",
+   "type": "desk_work",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    1.25
+   ],
+   "yaw": 6.28319,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 2,
+    "style": "white",
+    "seed": 32,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Desk_06_Chair",
+   "type": "chair_office",
+   "zone": "workers",
+   "position": [
+    -1.21,
+    0.0,
+    1.96
+   ],
+   "yaw": 2.92159,
+   "params": {
+    "seatPose": [
+     -1.77,
+     0.0,
+     1.86
+    ],
+    "seatYaw": 3.14159,
+    "restPose": [
+     -1.21,
+     0.0,
+     1.96
+    ],
+    "restYaw": 2.92159
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Workers_Divider",
+   "type": "low_divider",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    0.95
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 3.2,
+    "height": 0.62
+   }
+  },
+  {
+   "id": "Workers_Cabinet_W",
+   "type": "cabinet",
+   "zone": "workers",
+   "position": [
+    -4.48,
+    0.0,
+    0.95
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "width": 0.5,
+    "depth": 0.36,
+    "height": 0.42,
+    "style": "white"
+   }
+  },
+  {
+   "id": "Workers_GlassRail",
+   "type": "glass_rail",
+   "zone": "workers",
+   "position": [
+    -0.98,
+    0.0,
+    0.95
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "length": 2.0,
+    "height": 0.86
+   }
+  },
+  {
+   "id": "Workers_Plant_1",
+   "type": "plant_medium",
+   "zone": "workers",
+   "position": [
+    -4.45,
+    0.0,
+    1.62
+   ],
+   "yaw": 0.3,
+   "params": {
+    "pot": 0.17,
+    "height": 0.8,
+    "variant": 1
+   }
+  },
+  {
+   "id": "Workers_Plant_2",
+   "type": "plant_tall",
+   "zone": "workers",
+   "position": [
+    -0.98,
+    0.0,
+    2.2
+   ],
+   "yaw": 1.1,
+   "params": {
+    "pot": 0.18,
+    "height": 1.15,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Workers_Plant_3",
+   "type": "plant_medium",
+   "zone": "workers",
+   "position": [
+    -4.45,
+    0.0,
+    -0.1
+   ],
+   "yaw": 0.7,
+   "params": {
+    "pot": 0.17,
+    "height": 0.85,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Research_Shelf_1",
+   "type": "bookshelf",
+   "zone": "research",
+   "position": [
+    -6.55,
+    0.0,
+    -5.35
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 0.9,
+    "height": 2.0,
+    "seed": 11
+   }
+  },
+  {
+   "id": "Research_Shelf_2",
+   "type": "bookshelf",
+   "zone": "research",
+   "position": [
+    -5.63,
+    0.0,
+    -5.35
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 0.9,
+    "height": 2.0,
+    "seed": 12
+   }
+  },
+  {
+   "id": "Research_Shelf_3",
+   "type": "bookshelf",
+   "zone": "research",
+   "position": [
+    -4.71,
+    0.0,
+    -5.35
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 0.9,
+    "height": 2.0,
+    "seed": 13
+   }
+  },
+  {
+   "id": "Research_Shelf_4",
+   "type": "bookshelf",
+   "zone": "research",
+   "position": [
+    -3.79,
+    0.0,
+    -5.35
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 0.9,
+    "height": 2.0,
+    "seed": 14
+   }
+  },
+  {
+   "id": "Research_Whiteboard",
+   "type": "whiteboard",
+   "zone": "research",
+   "position": [
+    -7.895,
+    0.0,
+    -4.25
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "width": 1.35,
+    "height": 0.85,
+    "bottom": 0.5,
+    "mounted": true
+   }
+  },
+  {
+   "id": "Research_Desk_Desk",
+   "type": "desk_work",
+   "zone": "research",
+   "position": [
+    -7.62,
+    0.0,
+    -3.0
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 1,
+    "style": "wood",
+    "seed": 45,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Research_Desk_Chair",
+   "type": "chair_office",
+   "zone": "research",
+   "position": [
+    -6.91,
+    0.0,
+    -3.56
+   ],
+   "yaw": -1.7908,
+   "params": {
+    "seatPose": [
+     -7.01,
+     0.0,
+     -3.0
+    ],
+    "seatYaw": -1.5708,
+    "restPose": [
+     -6.91,
+     0.0,
+     -3.56
+    ],
+    "restYaw": -1.7908
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Research_Table",
+   "type": "table_round",
+   "zone": "research",
+   "position": [
+    -4.75,
+    0.0,
+    -3.5
+   ],
+   "yaw": 0,
+   "params": {
+    "radius": 0.42,
+    "height": 0.3,
+    "top": "white"
+   }
+  },
+  {
+   "id": "Research_Rug",
+   "type": "rug_round",
+   "zone": "research",
+   "position": [
+    -4.75,
+    0.0,
+    -3.5
+   ],
+   "yaw": 0,
+   "params": {
+    "radius": 1.1,
+    "color": "cream"
+   }
+  },
+  {
+   "id": "Research_Chair_1",
+   "type": "chair_lounge",
+   "zone": "research",
+   "position": [
+    -5.1904,
+    0.0,
+    -2.8562
+   ],
+   "yaw": 2.54159,
+   "params": {
+    "small": true
+   }
+  },
+  {
+   "id": "Research_Chair_2",
+   "type": "chair_lounge",
+   "zone": "research",
+   "position": [
+    -4.2832,
+    0.0,
+    -4.1249
+   ],
+   "yaw": 5.64159,
+   "params": {
+    "small": true
+   }
+  },
+  {
+   "id": "Research_Cabinet",
+   "type": "cabinet",
+   "zone": "research",
+   "position": [
+    -7.62,
+    0.0,
+    -4.55
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "width": 0.7,
+    "depth": 0.4,
+    "height": 0.5,
+    "style": "wood"
+   }
+  },
+  {
+   "id": "Research_Robot",
+   "type": "research_robot",
+   "zone": "research",
+   "position": [
+    -7.35,
+    0.0,
+    -3.75
+   ],
+   "yaw": 0.9,
+   "params": {}
+  },
+  {
+   "id": "Research_Plant_1",
+   "type": "plant_tall",
+   "zone": "research",
+   "position": [
+    -3.41,
+    0.0,
+    -4.925
+   ],
+   "yaw": 0.4,
+   "params": {
+    "pot": 0.2,
+    "height": 1.5,
+    "variant": 1
+   }
+  },
+  {
+   "id": "Research_Plant_2",
+   "type": "plant_medium",
+   "zone": "research",
+   "position": [
+    -3.2,
+    0.0,
+    -2.95
+   ],
+   "yaw": 1.0,
+   "params": {
+    "pot": 0.17,
+    "height": 0.85,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Research_Plant_3",
+   "type": "plant_tall",
+   "zone": "research",
+   "position": [
+    -7.2,
+    0.0,
+    -5.05
+   ],
+   "yaw": 0.1,
+   "params": {
+    "pot": 0.18,
+    "height": 1.3,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Research_Lamp",
+   "type": "floor_lamp",
+   "zone": "research",
+   "position": [
+    -7.6,
+    0.0,
+    -2.12
+   ],
+   "yaw": 0,
+   "params": {}
+  },
+  {
+   "id": "Dev_Desk_1_Desk",
+   "type": "desk_work",
+   "zone": "devtest",
+   "position": [
+    3.65,
+    0.0,
+    -5.2
+   ],
+   "yaw": 6.28319,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 3,
+    "style": "white",
+    "seed": 57,
+    "wallScreens": true
+   }
+  },
+  {
+   "id": "Dev_Desk_1_Chair",
+   "type": "chair_office",
+   "zone": "devtest",
+   "position": [
+    4.21,
+    0.0,
+    -4.49
+   ],
+   "yaw": 2.92159,
+   "params": {
+    "seatPose": [
+     3.65,
+     0.0,
+     -4.59
+    ],
+    "seatYaw": 3.14159,
+    "restPose": [
+     4.21,
+     0.0,
+     -4.49
+    ],
+    "restYaw": 2.92159
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Dev_Desk_2_Desk",
+   "type": "desk_work",
+   "zone": "devtest",
+   "position": [
+    4.78,
+    0.0,
+    -5.2
+   ],
+   "yaw": 6.28319,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 3,
+    "style": "white",
+    "seed": 59,
+    "wallScreens": true
+   }
+  },
+  {
+   "id": "Dev_Desk_2_Chair",
+   "type": "chair_office",
+   "zone": "devtest",
+   "position": [
+    4.22,
+    0.0,
+    -4.49
+   ],
+   "yaw": 3.36159,
+   "params": {
+    "seatPose": [
+     4.78,
+     0.0,
+     -4.59
+    ],
+    "seatYaw": 3.14159,
+    "restPose": [
+     4.22,
+     0.0,
+     -4.49
+    ],
+    "restYaw": 3.36159
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Test_Bay",
+   "type": "glass_enclosure",
+   "zone": "devtest",
+   "position": [
+    6.735,
+    0.0,
+    -4.075
+   ],
+   "yaw": 0,
+   "params": {
+    "x0": 5.75,
+    "x1": 7.72,
+    "z0": -5.3,
+    "z1": -2.85,
+    "height": 1.3
+   }
+  },
+  {
+   "id": "Test_RobotArm",
+   "type": "robot_arm",
+   "zone": "devtest",
+   "position": [
+    7.0,
+    0.0,
+    -4.6
+   ],
+   "yaw": -0.35,
+   "params": {
+    "scale": 1.25
+   }
+  },
+  {
+   "id": "Test_Bench",
+   "type": "test_bench",
+   "zone": "devtest",
+   "position": [
+    6.85,
+    0.0,
+    -3.78
+   ],
+   "yaw": 0,
+   "params": {
+    "width": 0.85,
+    "depth": 0.4,
+    "height": 0.34
+   }
+  },
+  {
+   "id": "Test_Rack",
+   "type": "server_rack",
+   "zone": "devtest",
+   "position": [
+    6.12,
+    0.0,
+    -4.95
+   ],
+   "yaw": 0,
+   "params": {
+    "height": 1.35
+   }
+  },
+  {
+   "id": "Dev_Cabinet",
+   "type": "cabinet",
+   "zone": "devtest",
+   "position": [
+    3.25,
+    0.0,
+    -2.25
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "width": 0.62,
+    "depth": 0.4,
+    "height": 0.48,
+    "style": "drawers"
+   }
+  },
+  {
+   "id": "Dev_Plant_1",
+   "type": "plant_tall",
+   "zone": "devtest",
+   "position": [
+    5.48,
+    0.0,
+    -5.15
+   ],
+   "yaw": 0.2,
+   "params": {
+    "pot": 0.19,
+    "height": 1.35,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Dev_Plant_2",
+   "type": "plant_medium",
+   "zone": "devtest",
+   "position": [
+    7.47,
+    0.0,
+    -2.25
+   ],
+   "yaw": 2.333,
+   "params": {
+    "pot": 0.17,
+    "height": 0.85,
+    "variant": 1
+   }
+  },
+  {
+   "id": "Reporting_Screen",
+   "type": "screen_stand",
+   "zone": "reporting",
+   "position": [
+    3.15,
+    0.0,
+    -0.05
+   ],
+   "yaw": -0.38,
+   "params": {
+    "width": 1.55,
+    "height": 0.88,
+    "bottom": 0.42
+   }
+  },
+  {
+   "id": "Reporting_Rug",
+   "type": "rug_round",
+   "zone": "reporting",
+   "position": [
+    2.5,
+    0.0,
+    1.45
+   ],
+   "yaw": 0,
+   "params": {
+    "radius": 1.2,
+    "color": "navy"
+   }
+  },
+  {
+   "id": "Reporting_Table",
+   "type": "table_round",
+   "zone": "reporting",
+   "position": [
+    2.45,
+    0.0,
+    1.5
+   ],
+   "yaw": 0,
+   "params": {
+    "radius": 0.3,
+    "height": 0.3,
+    "top": "white",
+    "decor": "tablet"
+   }
+  },
+  {
+   "id": "Reporting_Stool_3",
+   "type": "stool",
+   "zone": "reporting",
+   "position": [
+    2.3211,
+    0.0,
+    2.1065
+   ],
+   "yaw": 0.3,
+   "params": {
+    "color": "blue"
+   }
+  },
+  {
+   "id": "Reporting_Stool_1",
+   "type": "stool",
+   "zone": "reporting",
+   "position": [
+    1.9872,
+    0.0,
+    0.9484
+   ],
+   "yaw": 0.69813,
+   "params": {
+    "color": "navy",
+    "seatPose": [
+     1.8674,
+     0.0,
+     1.7121
+    ],
+    "seatYaw": 1.91986,
+    "restPose": [
+     1.9872,
+     0.0,
+     0.9484
+    ],
+    "restYaw": 0.69813
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Reporting_Stool_2",
+   "type": "stool",
+   "zone": "reporting",
+   "position": [
+    3.1696,
+    0.0,
+    1.4749
+   ],
+   "yaw": 4.7473,
+   "params": {
+    "color": "navy",
+    "seatPose": [
+     2.9249,
+     0.0,
+     1.8985
+    ],
+    "seatYaw": 4.01426,
+    "restPose": [
+     3.1696,
+     0.0,
+     1.4749
+    ],
+    "restYaw": 4.7473
+   },
+   "collection": "dynamic"
+  },
+  {
+   "id": "Reporting_Plant_1",
+   "type": "plant_tall",
+   "zone": "reporting",
+   "position": [
+    4.35,
+    0.0,
+    -0.85
+   ],
+   "yaw": 2.62,
+   "params": {
+    "pot": 0.2,
+    "height": 1.3,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Reporting_Plant_2",
+   "type": "plant_medium",
+   "zone": "reporting",
+   "position": [
+    1.25,
+    0.0,
+    -0.98
+   ],
+   "yaw": 0.2,
+   "params": {
+    "pot": 0.17,
+    "height": 0.8,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Reporting_Plant_3",
+   "type": "plant_bush",
+   "zone": "reporting",
+   "position": [
+    4.42,
+    0.0,
+    2.05
+   ],
+   "yaw": 0.464,
+   "params": {
+    "pot": 0.16,
+    "height": 0.55,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Ops_Wall",
+   "type": "ops_display",
+   "zone": "ops",
+   "position": [
+    7.92,
+    0.0,
+    1.05
+   ],
+   "yaw": -1.5708,
+   "params": {
+    "width": 4.1,
+    "height": 1.28,
+    "bottom": 0.36,
+    "mounted": true
+   }
+  },
+  {
+   "id": "Ops_Console",
+   "type": "equipment_console",
+   "zone": "ops",
+   "position": [
+    7.1,
+    0.0,
+    -0.95
+   ],
+   "yaw": -1.5708,
+   "params": {
+    "width": 0.9,
+    "depth": 0.45,
+    "height": 0.44
+   }
+  },
+  {
+   "id": "Ops_Cabinet",
+   "type": "cabinet",
+   "zone": "ops",
+   "position": [
+    5.6,
+    0.0,
+    -1.53
+   ],
+   "yaw": 0,
+   "params": {
+    "width": 0.95,
+    "depth": 0.42,
+    "height": 0.95,
+    "style": "dark"
+   }
+  },
+  {
+   "id": "Ops_Terminal",
+   "type": "kiosk",
+   "zone": "ops",
+   "position": [
+    7.45,
+    0.0,
+    3.25
+   ],
+   "yaw": -2.3,
+   "params": {
+    "style": "ops"
+   }
+  },
+  {
+   "id": "Ops_Plant_1",
+   "type": "plant_tall",
+   "zone": "ops",
+   "position": [
+    7.62,
+    0.0,
+    -1.43
+   ],
+   "yaw": -2.567,
+   "params": {
+    "pot": 0.19,
+    "height": 1.3,
+    "variant": 1
+   }
+  },
+  {
+   "id": "Ops_Rack",
+   "type": "server_rack",
+   "zone": "ops",
+   "position": [
+    6.55,
+    0.0,
+    -1.45
+   ],
+   "yaw": 0,
+   "params": {
+    "height": 1.05
+   }
+  },
+  {
+   "id": "Ops_Planter",
+   "type": "planter_box",
+   "zone": "ops",
+   "position": [
+    4.98,
+    0.0,
+    0.6
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "length": 1.6,
+    "depth": 0.3,
+    "height": 0.32
+   }
+  },
+  {
+   "id": "Ops_Station",
+   "type": "desk_work",
+   "zone": "ops",
+   "position": [
+    6.65,
+    0.0,
+    3.0
+   ],
+   "yaw": -1.5708,
+   "params": {
+    "width": 1.0,
+    "depth": 0.6,
+    "height": 0.15,
+    "monitors": 2,
+    "style": "white",
+    "seed": 91,
+    "wallScreens": false
+   }
+  },
+  {
+   "id": "Ops_Station_Chair",
+   "type": "chair_office",
+   "zone": "ops",
+   "position": [
+    6.04,
+    0.0,
+    3.0
+   ],
+   "yaw": 1.7708,
+   "params": {}
+  },
+  {
+   "id": "Ops_Stool_1",
+   "type": "stool",
+   "zone": "ops",
+   "position": [
+    5.85,
+    0.0,
+    1.55
+   ],
+   "yaw": 0.4,
+   "params": {
+    "color": "blue"
+   }
+  },
+  {
+   "id": "Ops_Stool_2",
+   "type": "stool",
+   "zone": "ops",
+   "position": [
+    5.85,
+    0.0,
+    0.95
+   ],
+   "yaw": -0.3,
+   "params": {
+    "color": "navy"
+   }
+  },
+  {
+   "id": "Ops_Plant_3",
+   "type": "plant_tall",
+   "zone": "ops",
+   "position": [
+    5.04,
+    0.0,
+    3.91
+   ],
+   "yaw": 3.431,
+   "params": {
+    "pot": 0.2,
+    "height": 1.2,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Break_Counter",
+   "type": "counter",
+   "zone": "break",
+   "position": [
+    -6.45,
+    0.0,
+    -1.51
+   ],
+   "yaw": 0,
+   "params": {
+    "length": 2.4,
+    "depth": 0.42,
+    "height": 0.45
+   }
+  },
+  {
+   "id": "Break_Sofa",
+   "type": "sofa",
+   "zone": "break",
+   "position": [
+    -7.59,
+    0.0,
+    1.35
+   ],
+   "yaw": 1.5708,
+   "params": {
+    "length": 1.75
+   }
+  },
+  {
+   "id": "Break_Chair_1",
+   "type": "chair_lounge",
+   "zone": "break",
+   "position": [
+    -5.3,
+    0.0,
+    0.72
+   ],
+   "yaw": -1.9208,
+   "params": {}
+  },
+  {
+   "id": "Break_Chair_2",
+   "type": "chair_lounge",
+   "zone": "break",
+   "position": [
+    -5.3,
+    0.0,
+    2.02
+   ],
+   "yaw": -1.2208,
+   "params": {}
+  },
+  {
+   "id": "Break_Table",
+   "type": "table_round",
+   "zone": "break",
+   "position": [
+    -6.15,
+    0.0,
+    1.35
+   ],
+   "yaw": 0,
+   "params": {
+    "radius": 0.4,
+    "height": 0.2,
+    "top": "wood"
+   }
+  },
+  {
+   "id": "Break_Rug",
+   "type": "rug_rect",
+   "zone": "break",
+   "position": [
+    -6.4,
+    0.0,
+    1.38
+   ],
+   "yaw": 0,
+   "params": {
+    "width": 2.55,
+    "depth": 2.2,
+    "color": "cream"
+   }
+  },
+  {
+   "id": "Break_Lamp",
+   "type": "floor_lamp",
+   "zone": "break",
+   "position": [
+    -7.62,
+    0.0,
+    2.55
+   ],
+   "yaw": 0,
+   "params": {}
+  },
+  {
+   "id": "Break_Plant_1",
+   "type": "plant_tall",
+   "zone": "break",
+   "position": [
+    -5.05,
+    0.0,
+    -1.4
+   ],
+   "yaw": 0.4,
+   "params": {
+    "pot": 0.2,
+    "height": 1.3,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Break_Plant_2",
+   "type": "plant_tall",
+   "zone": "break",
+   "position": [
+    -7.55,
+    0.0,
+    3.15
+   ],
+   "yaw": 0.8,
+   "params": {
+    "pot": 0.2,
+    "height": 1.2,
+    "variant": 0
+   }
+  },
+  {
+   "id": "Break_Plant_4",
+   "type": "plant_bush",
+   "zone": "break",
+   "position": [
+    -5.1,
+    0.0,
+    4.1
+   ],
+   "yaw": 0.2,
+   "params": {
+    "pot": 0.17,
+    "height": 0.6,
+    "variant": 2
+   }
+  },
+  {
+   "id": "Break_WaterCooler",
+   "type": "water_cooler",
+   "zone": "break",
+   "position": [
+    -7.6,
+    0.0,
+    -0.3
+   ],
+   "yaw": 1.5708,
+   "params": {}
+  },
+  {
+   "id": "Aisle_Plant_R",
+   "type": "plant_medium",
+   "zone": "reporting",
+   "position": [
+    1.25,
+    0.0,
+    -0.35
+   ],
+   "yaw": 0.6,
+   "params": {
+    "pot": 0.17,
+    "height": 0.85,
+    "variant": 0
+   }
+  }
+ ],
+ "anchors": [
+  {
+   "id": "Lobby_Entry",
+   "zone": "lobby",
+   "position": [
+    0.0,
+    0.0,
+    6.05
+   ],
+   "yaw": 3.14159,
+   "kind": "stand"
+  },
+  {
+   "id": "Lobby_Exit",
+   "zone": "lobby",
+   "position": [
+    0.0,
+    0.0,
+    5.05
+   ],
+   "yaw": 0,
+   "kind": "stand"
+  },
+  {
+   "id": "Lobby_Wait",
+   "zone": "lobby",
+   "position": [
+    -0.95,
+    0.0,
+    3.75
+   ],
+   "yaw": 1.5708,
+   "kind": "stand"
+  },
+  {
+   "id": "Lobby_CheckIn",
+   "zone": "lobby",
+   "position": [
+    1.0,
+    0.0,
+    3.62
+   ],
+   "yaw": 1.5708,
+   "kind": "stand"
+  },
+  {
+   "id": "Command_Work",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.0,
+    -3.42
+   ],
+   "yaw": 0,
+   "kind": "stand",
+   "clip": "Reporting",
+   "approach": [
+    0.0,
+    0.0,
+    -4.5
+   ]
+  },
+  {
+   "id": "Command_ReceiveReport",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.0,
+    -2.0
+   ],
+   "yaw": 3.14159,
+   "kind": "stand",
+   "clip": "Reporting"
+  },
+  {
+   "id": "Command_Approach",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.0,
+    -1.62
+   ],
+   "yaw": 3.14159,
+   "kind": "stand"
+  },
+  {
+   "id": "Command_VisitorWait",
+   "zone": "command",
+   "position": [
+    1.6,
+    0.0,
+    -2.0
+   ],
+   "yaw": -2.5,
+   "kind": "stand"
+  },
+  {
+   "id": "Desk_01_Arrive",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    -0.78
+   ],
+   "yaw": 0.0,
+   "kind": "approach",
+   "desk": "Desk_01"
+  },
+  {
+   "id": "Desk_01_Seat",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    0.1
+   ],
+   "yaw": 0.0,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Desk_01",
+   "chair": "Desk_01_Chair",
+   "approach": [
+    -3.93,
+    0.0,
+    -0.78
+   ],
+   "ignore": [
+    "Desk_01_Chair"
+   ]
+  },
+  {
+   "id": "Desk_01_Work",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.15,
+    0.458
+   ],
+   "yaw": 0.0,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Desk_01",
+   "seat": "Desk_01_Seat"
+  },
+  {
+   "id": "Desk_01_Exit",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    -0.78
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Desk_01"
+  },
+  {
+   "id": "Desk_04_Arrive",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    2.68
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Desk_04"
+  },
+  {
+   "id": "Desk_04_Seat",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    1.8
+   ],
+   "yaw": 3.14159,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Desk_04",
+   "chair": "Desk_04_Chair",
+   "approach": [
+    -3.93,
+    0.0,
+    2.68
+   ],
+   "ignore": [
+    "Desk_04_Chair"
+   ]
+  },
+  {
+   "id": "Desk_04_Work",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.15,
+    1.442
+   ],
+   "yaw": 3.14159,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Desk_04",
+   "seat": "Desk_04_Seat"
+  },
+  {
+   "id": "Desk_04_Exit",
+   "zone": "workers",
+   "position": [
+    -3.93,
+    0.0,
+    2.68
+   ],
+   "yaw": 6.28319,
+   "kind": "approach",
+   "desk": "Desk_04"
+  },
+  {
+   "id": "Desk_02_Arrive",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    -0.78
+   ],
+   "yaw": 0.0,
+   "kind": "approach",
+   "desk": "Desk_02"
+  },
+  {
+   "id": "Desk_02_Seat",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    0.1
+   ],
+   "yaw": 0.0,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Desk_02",
+   "chair": "Desk_02_Chair",
+   "approach": [
+    -2.85,
+    0.0,
+    -0.78
+   ],
+   "ignore": [
+    "Desk_02_Chair"
+   ]
+  },
+  {
+   "id": "Desk_02_Work",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.15,
+    0.458
+   ],
+   "yaw": 0.0,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Desk_02",
+   "seat": "Desk_02_Seat"
+  },
+  {
+   "id": "Desk_02_Exit",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    -0.78
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Desk_02"
+  },
+  {
+   "id": "Desk_05_Arrive",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    2.68
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Desk_05"
+  },
+  {
+   "id": "Desk_05_Seat",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    1.8
+   ],
+   "yaw": 3.14159,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Desk_05",
+   "chair": "Desk_05_Chair",
+   "approach": [
+    -2.85,
+    0.0,
+    2.68
+   ],
+   "ignore": [
+    "Desk_05_Chair"
+   ]
+  },
+  {
+   "id": "Desk_05_Work",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.15,
+    1.442
+   ],
+   "yaw": 3.14159,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Desk_05",
+   "seat": "Desk_05_Seat"
+  },
+  {
+   "id": "Desk_05_Exit",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.0,
+    2.68
+   ],
+   "yaw": 6.28319,
+   "kind": "approach",
+   "desk": "Desk_05"
+  },
+  {
+   "id": "Desk_03_Arrive",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    -0.78
+   ],
+   "yaw": 0.0,
+   "kind": "approach",
+   "desk": "Desk_03"
+  },
+  {
+   "id": "Desk_03_Seat",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    0.1
+   ],
+   "yaw": 0.0,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Desk_03",
+   "chair": "Desk_03_Chair",
+   "approach": [
+    -1.77,
+    0.0,
+    -0.78
+   ],
+   "ignore": [
+    "Desk_03_Chair"
+   ]
+  },
+  {
+   "id": "Desk_03_Work",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.15,
+    0.458
+   ],
+   "yaw": 0.0,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Desk_03",
+   "seat": "Desk_03_Seat"
+  },
+  {
+   "id": "Desk_03_Exit",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    -0.78
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Desk_03"
+  },
+  {
+   "id": "Desk_06_Arrive",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    2.68
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Desk_06"
+  },
+  {
+   "id": "Desk_06_Seat",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    1.8
+   ],
+   "yaw": 3.14159,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Desk_06",
+   "chair": "Desk_06_Chair",
+   "approach": [
+    -1.77,
+    0.0,
+    2.68
+   ],
+   "ignore": [
+    "Desk_06_Chair"
+   ]
+  },
+  {
+   "id": "Desk_06_Work",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.15,
+    1.442
+   ],
+   "yaw": 3.14159,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Desk_06",
+   "seat": "Desk_06_Seat"
+  },
+  {
+   "id": "Desk_06_Exit",
+   "zone": "workers",
+   "position": [
+    -1.77,
+    0.0,
+    2.68
+   ],
+   "yaw": 6.28319,
+   "kind": "approach",
+   "desk": "Desk_06"
+  },
+  {
+   "id": "Research_Desk_Arrive",
+   "zone": "research",
+   "position": [
+    -6.19,
+    0.0,
+    -3.0
+   ],
+   "yaw": -1.5708,
+   "kind": "approach",
+   "desk": "Research_Desk"
+  },
+  {
+   "id": "Research_Desk_Seat",
+   "zone": "research",
+   "position": [
+    -7.07,
+    0.0,
+    -3.0
+   ],
+   "yaw": -1.5708,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Research_Desk",
+   "chair": "Research_Desk_Chair",
+   "approach": [
+    -6.19,
+    0.0,
+    -3.0
+   ],
+   "ignore": [
+    "Research_Desk_Chair"
+   ]
+  },
+  {
+   "id": "Research_Desk_Work",
+   "zone": "research",
+   "position": [
+    -7.428,
+    0.15,
+    -3.0
+   ],
+   "yaw": -1.5708,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Research_Desk",
+   "seat": "Research_Desk_Seat"
+  },
+  {
+   "id": "Research_Desk_Exit",
+   "zone": "research",
+   "position": [
+    -6.19,
+    0.0,
+    -3.0
+   ],
+   "yaw": 1.5708,
+   "kind": "approach",
+   "desk": "Research_Desk"
+  },
+  {
+   "id": "Research_Work",
+   "zone": "research",
+   "position": [
+    -7.07,
+    0.0,
+    -3.0
+   ],
+   "yaw": -1.5708,
+   "kind": "sit",
+   "clip": "Typing",
+   "seatHeight": 0.132,
+   "desk": "Research_Desk",
+   "chair": "Research_Desk_Chair",
+   "approach": [
+    -6.19,
+    0.0,
+    -3.0
+   ],
+   "alias": "Research_Desk_Seat"
+  },
+  {
+   "id": "Research_Reading",
+   "zone": "research",
+   "position": [
+    -5.62,
+    0.0,
+    -4.62
+   ],
+   "yaw": 3.14159,
+   "kind": "stand",
+   "clip": "Reporting"
+  },
+  {
+   "id": "Research_Discuss",
+   "zone": "research",
+   "position": [
+    -3.92,
+    0.0,
+    -3.45
+   ],
+   "yaw": -1.5708,
+   "kind": "stand",
+   "clip": "Reporting"
+  },
+  {
+   "id": "Research_Exit",
+   "zone": "research",
+   "position": [
+    -3.75,
+    0.0,
+    -2.3
+   ],
+   "yaw": 0,
+   "kind": "stand"
+  },
+  {
+   "id": "Dev_Desk_1_Arrive",
+   "zone": "devtest",
+   "position": [
+    3.65,
+    0.0,
+    -3.77
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Dev_Desk_1"
+  },
+  {
+   "id": "Dev_Desk_1_Seat",
+   "zone": "devtest",
+   "position": [
+    3.65,
+    0.0,
+    -4.65
+   ],
+   "yaw": 3.14159,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Dev_Desk_1",
+   "chair": "Dev_Desk_1_Chair",
+   "approach": [
+    3.65,
+    0.0,
+    -3.77
+   ],
+   "ignore": [
+    "Dev_Desk_1_Chair"
+   ]
+  },
+  {
+   "id": "Dev_Desk_1_Work",
+   "zone": "devtest",
+   "position": [
+    3.65,
+    0.15,
+    -5.008
+   ],
+   "yaw": 3.14159,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Dev_Desk_1",
+   "seat": "Dev_Desk_1_Seat"
+  },
+  {
+   "id": "Dev_Desk_1_Exit",
+   "zone": "devtest",
+   "position": [
+    3.65,
+    0.0,
+    -3.77
+   ],
+   "yaw": 6.28319,
+   "kind": "approach",
+   "desk": "Dev_Desk_1"
+  },
+  {
+   "id": "Dev_Desk_2_Arrive",
+   "zone": "devtest",
+   "position": [
+    4.78,
+    0.0,
+    -3.77
+   ],
+   "yaw": 3.14159,
+   "kind": "approach",
+   "desk": "Dev_Desk_2"
+  },
+  {
+   "id": "Dev_Desk_2_Seat",
+   "zone": "devtest",
+   "position": [
+    4.78,
+    0.0,
+    -4.65
+   ],
+   "yaw": 3.14159,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "desk": "Dev_Desk_2",
+   "chair": "Dev_Desk_2_Chair",
+   "approach": [
+    4.78,
+    0.0,
+    -3.77
+   ],
+   "ignore": [
+    "Dev_Desk_2_Chair"
+   ]
+  },
+  {
+   "id": "Dev_Desk_2_Work",
+   "zone": "devtest",
+   "position": [
+    4.78,
+    0.15,
+    -5.008
+   ],
+   "yaw": 3.14159,
+   "kind": "work",
+   "clip": "Typing",
+   "desk": "Dev_Desk_2",
+   "seat": "Dev_Desk_2_Seat"
+  },
+  {
+   "id": "Dev_Desk_2_Exit",
+   "zone": "devtest",
+   "position": [
+    4.78,
+    0.0,
+    -3.77
+   ],
+   "yaw": 6.28319,
+   "kind": "approach",
+   "desk": "Dev_Desk_2"
+  },
+  {
+   "id": "Test_Work",
+   "zone": "devtest",
+   "position": [
+    6.85,
+    0.0,
+    -3.33
+   ],
+   "yaw": 3.14159,
+   "kind": "stand",
+   "clip": "Idle",
+   "approach": [
+    6.05,
+    0.0,
+    -3.3
+   ]
+  },
+  {
+   "id": "Test_Inspect",
+   "zone": "devtest",
+   "position": [
+    6.7,
+    0.0,
+    -2.4
+   ],
+   "yaw": 3.14159,
+   "kind": "stand",
+   "clip": "Idle"
+  },
+  {
+   "id": "Test_Exit",
+   "zone": "devtest",
+   "position": [
+    5.35,
+    0.0,
+    -2.35
+   ],
+   "yaw": 0,
+   "kind": "stand"
+  },
+  {
+   "id": "Dev_Exit",
+   "zone": "devtest",
+   "position": [
+    4.15,
+    0.0,
+    -2.35
+   ],
+   "yaw": 0,
+   "kind": "stand"
+  },
+  {
+   "id": "Reporting_Seat_01",
+   "zone": "reporting",
+   "position": [
+    1.8674,
+    0.0,
+    1.7121
+   ],
+   "yaw": 1.91986,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "chair": "Reporting_Stool_1",
+   "approach": [
+    1.3412,
+    0.0,
+    1.9036
+   ],
+   "ignore": [
+    "Reporting_Stool_1"
+   ]
+  },
+  {
+   "id": "Reporting_Seat_02",
+   "zone": "reporting",
+   "position": [
+    2.9249,
+    0.0,
+    1.8985
+   ],
+   "yaw": 4.01426,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "chair": "Reporting_Stool_2",
+   "approach": [
+    3.3539,
+    0.0,
+    2.2585
+   ],
+   "ignore": [
+    "Reporting_Stool_2"
+   ]
+  },
+  {
+   "id": "Reporting_Presenter",
+   "zone": "reporting",
+   "position": [
+    4.05,
+    0.0,
+    0.6
+   ],
+   "yaw": -0.6,
+   "kind": "stand",
+   "clip": "Reporting",
+   "approach": [
+    4.0,
+    0.0,
+    1.25
+   ]
+  },
+  {
+   "id": "Reporting_Approach",
+   "zone": "reporting",
+   "position": [
+    1.55,
+    0.0,
+    0.55
+   ],
+   "yaw": 1.5708,
+   "kind": "stand"
+  },
+  {
+   "id": "Reporting_Exit",
+   "zone": "reporting",
+   "position": [
+    1.55,
+    0.0,
+    2.55
+   ],
+   "yaw": -1.5708,
+   "kind": "stand"
+  },
+  {
+   "id": "Ops_Inspect",
+   "zone": "ops",
+   "position": [
+    7.05,
+    0.0,
+    1.55
+   ],
+   "yaw": 1.5708,
+   "kind": "stand",
+   "clip": "Idle"
+  },
+  {
+   "id": "Ops_AlertReview",
+   "zone": "ops",
+   "position": [
+    7.05,
+    0.0,
+    0.35
+   ],
+   "yaw": 1.5708,
+   "kind": "stand",
+   "clip": "Idle"
+  },
+  {
+   "id": "Ops_Desk",
+   "zone": "ops",
+   "position": [
+    6.52,
+    0.0,
+    -0.7
+   ],
+   "yaw": 1.5708,
+   "kind": "stand",
+   "clip": "Idle",
+   "approach": [
+    6.05,
+    0.0,
+    -0.45
+   ]
+  },
+  {
+   "id": "Ops_Exit",
+   "zone": "ops",
+   "position": [
+    5.35,
+    0.0,
+    2.75
+   ],
+   "yaw": -1.5708,
+   "kind": "stand"
+  },
+  {
+   "id": "Break_Sofa_Seat",
+   "zone": "break",
+   "position": [
+    -7.53,
+    0.0,
+    0.92
+   ],
+   "yaw": 1.5708,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "approach": [
+    -6.95,
+    0.0,
+    0.92
+   ],
+   "ignore": [
+    "Break_Sofa"
+   ]
+  },
+  {
+   "id": "Break_Sofa_Seat_2",
+   "zone": "break",
+   "position": [
+    -7.53,
+    0.0,
+    1.78
+   ],
+   "yaw": 1.5708,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "approach": [
+    -6.95,
+    0.0,
+    1.78
+   ],
+   "ignore": [
+    "Break_Sofa"
+   ]
+  },
+  {
+   "id": "Break_Chair_Seat",
+   "zone": "break",
+   "position": [
+    -5.3564,
+    0.0,
+    0.6994
+   ],
+   "yaw": -1.9208,
+   "kind": "sit",
+   "clip": "SitIdle",
+   "seatHeight": 0.132,
+   "approach": [
+    -5.8824,
+    0.0,
+    0.5074
+   ],
+   "ignore": [
+    "Break_Chair_1"
+   ]
+  },
+  {
+   "id": "Break_Coffee",
+   "zone": "break",
+   "position": [
+    -6.75,
+    0.0,
+    -1.0
+   ],
+   "yaw": 3.14159,
+   "kind": "stand",
+   "clip": "Idle"
+  },
+  {
+   "id": "Break_Approach",
+   "zone": "break",
+   "position": [
+    -6.1,
+    0.0,
+    2.85
+   ],
+   "yaw": -1.5708,
+   "kind": "stand"
+  },
+  {
+   "id": "Break_Exit",
+   "zone": "break",
+   "position": [
+    -5.25,
+    0.0,
+    2.95
+   ],
+   "yaw": 1.5708,
+   "kind": "stand"
+  },
+  {
+   "id": "Lobby_CameraFocus",
+   "zone": "lobby",
+   "position": [
+    0.0,
+    0.5,
+    4.6
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "lobby"
+  },
+  {
+   "id": "Command_CameraFocus",
+   "zone": "command",
+   "position": [
+    0.0,
+    0.85,
+    -3.9
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "command"
+  },
+  {
+   "id": "Workers_CameraFocus",
+   "zone": "workers",
+   "position": [
+    -2.85,
+    0.35,
+    0.95
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "workers"
+  },
+  {
+   "id": "Research_CameraFocus",
+   "zone": "research",
+   "position": [
+    -5.4,
+    0.6,
+    -3.7
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "research"
+  },
+  {
+   "id": "DevTest_CameraFocus",
+   "zone": "devtest",
+   "position": [
+    5.4,
+    0.55,
+    -3.8
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "devtest"
+  },
+  {
+   "id": "Reporting_CameraFocus",
+   "zone": "reporting",
+   "position": [
+    3.0,
+    0.5,
+    0.9
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "reporting"
+  },
+  {
+   "id": "Ops_CameraFocus",
+   "zone": "ops",
+   "position": [
+    7.0,
+    0.7,
+    0.9
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "ops"
+  },
+  {
+   "id": "Break_CameraFocus",
+   "zone": "break",
+   "position": [
+    -6.5,
+    0.4,
+    0.9
+   ],
+   "yaw": 0,
+   "kind": "camera",
+   "camera": "break"
+  }
+ ],
+ "nav": {
+  "waypoints": [
+   {
+    "id": "N_Spine_0",
+    "position": [
+     0.0,
+     0.0,
+     6.05
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Spine_1",
+    "position": [
+     0.0,
+     0.0,
+     5.05
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Spine_2",
+    "position": [
+     0.0,
+     0.0,
+     3.85
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Spine_3",
+    "position": [
+     0.0,
+     0.0,
+     2.75
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Spine_4",
+    "position": [
+     0.0,
+     0.0,
+     1.6
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Spine_5",
+    "position": [
+     0.0,
+     0.0,
+     0.4
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Spine_6",
+    "position": [
+     0.0,
+     0.0,
+     -0.65
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Spine_7",
+    "position": [
+     0.0,
+     0.0,
+     -1.5
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_FrontW_1_6",
+    "position": [
+     -1.6,
+     0.0,
+     2.82
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_FrontW_3_4",
+    "position": [
+     -3.4,
+     0.0,
+     2.82
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_FrontW_4_3",
+    "position": [
+     -4.35,
+     0.0,
+     2.82
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_FrontE_1_6",
+    "position": [
+     1.55,
+     0.0,
+     2.82
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_FrontE_3_4",
+    "position": [
+     3.4,
+     0.0,
+     2.82
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_FrontE_4_3",
+    "position": [
+     4.35,
+     0.0,
+     2.82
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_Door",
+    "position": [
+     -4.7,
+     0.0,
+     2.85
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_In",
+    "position": [
+     -5.35,
+     0.0,
+     2.85
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_Counter",
+    "position": [
+     -6.3,
+     0.0,
+     -0.75
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_RearDoor",
+    "position": [
+     -4.7,
+     0.0,
+     -1.0
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_RearIn",
+    "position": [
+     -5.3,
+     0.0,
+     -0.95
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Ops_Door",
+    "position": [
+     4.7,
+     0.0,
+     2.85
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Ops_In",
+    "position": [
+     5.4,
+     0.0,
+     2.85
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Ops_Mid",
+    "position": [
+     6.25,
+     0.0,
+     1.0
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Ops_Rear",
+    "position": [
+     6.2,
+     0.0,
+     -0.35
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Corr_m4_30",
+    "position": [
+     -4.3,
+     0.0,
+     -1.42
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Corr_m3_75",
+    "position": [
+     -3.75,
+     0.0,
+     -1.42
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Corr_m2_85",
+    "position": [
+     -2.85,
+     0.0,
+     -1.42
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Corr_m1_50",
+    "position": [
+     -1.5,
+     0.0,
+     -1.42
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Corr_p1_50",
+    "position": [
+     1.5,
+     0.0,
+     -1.42
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Corr_p2_60",
+    "position": [
+     2.6,
+     0.0,
+     -1.42
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Corr_p4_15",
+    "position": [
+     4.15,
+     0.0,
+     -1.42
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Reporting_Side",
+    "position": [
+     3.95,
+     0.0,
+     1.95
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Reporting_Mid",
+    "position": [
+     2.75,
+     0.0,
+     0.72
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_West",
+    "position": [
+     -6.95,
+     0.0,
+     0.3
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_Sofa",
+    "position": [
+     -6.95,
+     0.0,
+     1.35
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Break_Lamp",
+    "position": [
+     -6.95,
+     0.0,
+     2.2
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Research_Door",
+    "position": [
+     -3.75,
+     0.0,
+     -1.8
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Research_In",
+    "position": [
+     -3.75,
+     0.0,
+     -2.38
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Research_Front",
+    "position": [
+     -5.2,
+     0.0,
+     -2.2
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Research_West",
+    "position": [
+     -6.2,
+     0.0,
+     -2.6
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Research_Shelf",
+    "position": [
+     -4.95,
+     0.0,
+     -4.75
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Research_Table_E",
+    "position": [
+     -3.62,
+     0.0,
+     -4.3
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Cmd_Front_L",
+    "position": [
+     -1.2,
+     0.0,
+     -2.1
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Cmd_Front_R",
+    "position": [
+     1.2,
+     0.0,
+     -2.1
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Cmd_Side_L",
+    "position": [
+     -1.458,
+     0.0,
+     -3.677
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Cmd_Side_R",
+    "position": [
+     1.458,
+     0.0,
+     -3.677
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Cmd_Back_L",
+    "position": [
+     -1.1,
+     0.0,
+     -4.41
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Cmd_Back_R",
+    "position": [
+     1.1,
+     0.0,
+     -4.41
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Cmd_Back",
+    "position": [
+     0.0,
+     0.0,
+     -4.9
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Dev_Door",
+    "position": [
+     4.15,
+     0.0,
+     -1.8
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Dev_In",
+    "position": [
+     4.15,
+     0.0,
+     -2.35
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Dev_Lane",
+    "position": [
+     4.2,
+     0.0,
+     -3.45
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Bay_Door",
+    "position": [
+     5.75,
+     0.0,
+     -3.25
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Bay_Out",
+    "position": [
+     5.32,
+     0.0,
+     -3.25
+    ],
+    "zone": null
+   },
+   {
+    "id": "N_Bay_Front",
+    "position": [
+     5.45,
+     0.0,
+     -2.4
+    ],
+    "zone": null
+   }
+  ],
+  "edges": [
+   [
+    "N_Spine_0",
+    "N_Spine_1",
+    1.0
+   ],
+   [
+    "N_Spine_0",
+    "N_Spine_2",
+    2.2
+   ],
+   [
+    "N_Spine_0",
+    "N_Spine_3",
+    3.3
+   ],
+   [
+    "N_Spine_0",
+    "Lobby_Entry",
+    0.0
+   ],
+   [
+    "N_Spine_0",
+    "Lobby_Exit",
+    1.0
+   ],
+   [
+    "N_Spine_1",
+    "N_Spine_2",
+    1.2
+   ],
+   [
+    "N_Spine_1",
+    "N_Spine_3",
+    2.3
+   ],
+   [
+    "N_Spine_1",
+    "N_Spine_4",
+    3.45
+   ],
+   [
+    "N_Spine_1",
+    "Lobby_Entry",
+    1.0
+   ],
+   [
+    "N_Spine_1",
+    "Lobby_Exit",
+    0.0
+   ],
+   [
+    "N_Spine_2",
+    "N_Spine_3",
+    1.1
+   ],
+   [
+    "N_Spine_2",
+    "N_Spine_4",
+    2.25
+   ],
+   [
+    "N_Spine_2",
+    "N_Spine_5",
+    3.45
+   ],
+   [
+    "N_Spine_2",
+    "N_FrontW_1_6",
+    1.903
+   ],
+   [
+    "N_Spine_2",
+    "N_FrontE_1_6",
+    1.861
+   ],
+   [
+    "N_Spine_2",
+    "Lobby_Entry",
+    2.2
+   ],
+   [
+    "N_Spine_2",
+    "Lobby_Exit",
+    1.2
+   ],
+   [
+    "N_Spine_2",
+    "Desk_05_Arrive",
+    3.081
+   ],
+   [
+    "N_Spine_2",
+    "Desk_05_Seat__approach",
+    3.081
+   ],
+   [
+    "N_Spine_2",
+    "Desk_05_Exit",
+    3.081
+   ],
+   [
+    "N_Spine_2",
+    "Desk_06_Arrive",
+    2.122
+   ],
+   [
+    "N_Spine_2",
+    "Desk_06_Seat__approach",
+    2.122
+   ],
+   [
+    "N_Spine_2",
+    "Desk_06_Exit",
+    2.122
+   ],
+   [
+    "N_Spine_2",
+    "Reporting_Seat_01__approach",
+    2.364
+   ],
+   [
+    "N_Spine_2",
+    "Reporting_Exit",
+    2.023
+   ],
+   [
+    "N_Spine_3",
+    "N_Spine_4",
+    1.15
+   ],
+   [
+    "N_Spine_3",
+    "N_Spine_5",
+    2.35
+   ],
+   [
+    "N_Spine_3",
+    "N_Spine_6",
+    3.4
+   ],
+   [
+    "N_Spine_3",
+    "N_FrontW_1_6",
+    1.602
+   ],
+   [
+    "N_Spine_3",
+    "N_FrontW_3_4",
+    3.401
+   ],
+   [
+    "N_Spine_3",
+    "N_FrontE_1_6",
+    1.552
+   ],
+   [
+    "N_Spine_3",
+    "N_FrontE_3_4",
+    3.401
+   ],
+   [
+    "N_Spine_3",
+    "Lobby_Entry",
+    3.3
+   ],
+   [
+    "N_Spine_3",
+    "Lobby_Exit",
+    2.3
+   ],
+   [
+    "N_Spine_3",
+    "Lobby_Wait",
+    1.379
+   ],
+   [
+    "N_Spine_3",
+    "Lobby_CheckIn",
+    1.325
+   ],
+   [
+    "N_Spine_3",
+    "Desk_05_Arrive",
+    2.851
+   ],
+   [
+    "N_Spine_3",
+    "Desk_05_Seat__approach",
+    2.851
+   ],
+   [
+    "N_Spine_3",
+    "Desk_05_Exit",
+    2.851
+   ],
+   [
+    "N_Spine_3",
+    "Desk_06_Arrive",
+    1.771
+   ],
+   [
+    "N_Spine_3",
+    "Desk_06_Seat__approach",
+    1.771
+   ],
+   [
+    "N_Spine_3",
+    "Desk_06_Exit",
+    1.771
+   ],
+   [
+    "N_Spine_3",
+    "Reporting_Seat_01__approach",
+    1.586
+   ],
+   [
+    "N_Spine_3",
+    "Reporting_Approach",
+    2.691
+   ],
+   [
+    "N_Spine_3",
+    "Reporting_Exit",
+    1.563
+   ],
+   [
+    "N_Spine_4",
+    "N_Spine_5",
+    1.2
+   ],
+   [
+    "N_Spine_4",
+    "N_Spine_6",
+    2.25
+   ],
+   [
+    "N_Spine_4",
+    "N_Spine_7",
+    3.1
+   ],
+   [
+    "N_Spine_4",
+    "N_FrontE_1_6",
+    1.973
+   ],
+   [
+    "N_Spine_4",
+    "Lobby_Exit",
+    3.45
+   ],
+   [
+    "N_Spine_4",
+    "Lobby_Wait",
+    2.351
+   ],
+   [
+    "N_Spine_4",
+    "Lobby_CheckIn",
+    2.254
+   ],
+   [
+    "N_Spine_4",
+    "Command_ReceiveReport",
+    3.6
+   ],
+   [
+    "N_Spine_4",
+    "Command_Approach",
+    3.22
+   ],
+   [
+    "N_Spine_4",
+    "Reporting_Seat_01__approach",
+    1.375
+   ],
+   [
+    "N_Spine_4",
+    "Reporting_Approach",
+    1.872
+   ],
+   [
+    "N_Spine_4",
+    "Reporting_Exit",
+    1.818
+   ],
+   [
+    "N_Spine_5",
+    "N_Spine_6",
+    1.05
+   ],
+   [
+    "N_Spine_5",
+    "N_Spine_7",
+    1.9
+   ],
+   [
+    "N_Spine_5",
+    "N_FrontE_1_6",
+    2.874
+   ],
+   [
+    "N_Spine_5",
+    "N_Corr_m1_50",
+    2.358
+   ],
+   [
+    "N_Spine_5",
+    "N_Cmd_Front_L",
+    2.773
+   ],
+   [
+    "N_Spine_5",
+    "N_Cmd_Front_R",
+    2.773
+   ],
+   [
+    "N_Spine_5",
+    "Lobby_CheckIn",
+    3.372
+   ],
+   [
+    "N_Spine_5",
+    "Command_ReceiveReport",
+    2.4
+   ],
+   [
+    "N_Spine_5",
+    "Command_Approach",
+    2.02
+   ],
+   [
+    "N_Spine_5",
+    "Reporting_Seat_01__approach",
+    2.015
+   ],
+   [
+    "N_Spine_5",
+    "Reporting_Approach",
+    1.557
+   ],
+   [
+    "N_Spine_5",
+    "Reporting_Exit",
+    2.65
+   ],
+   [
+    "N_Spine_6",
+    "N_Spine_7",
+    0.85
+   ],
+   [
+    "N_Spine_6",
+    "N_Corr_m2_85",
+    2.952
+   ],
+   [
+    "N_Spine_6",
+    "N_Corr_m1_50",
+    1.686
+   ],
+   [
+    "N_Spine_6",
+    "N_Cmd_Front_L",
+    1.882
+   ],
+   [
+    "N_Spine_6",
+    "N_Cmd_Front_R",
+    1.882
+   ],
+   [
+    "N_Spine_6",
+    "Command_ReceiveReport",
+    1.35
+   ],
+   [
+    "N_Spine_6",
+    "Command_Approach",
+    0.97
+   ],
+   [
+    "N_Spine_6",
+    "Command_VisitorWait",
+    2.093
+   ],
+   [
+    "N_Spine_6",
+    "Desk_02_Arrive",
+    2.853
+   ],
+   [
+    "N_Spine_6",
+    "Desk_02_Seat__approach",
+    2.853
+   ],
+   [
+    "N_Spine_6",
+    "Desk_02_Exit",
+    2.853
+   ],
+   [
+    "N_Spine_6",
+    "Desk_03_Arrive",
+    1.775
+   ],
+   [
+    "N_Spine_6",
+    "Desk_03_Seat__approach",
+    1.775
+   ],
+   [
+    "N_Spine_6",
+    "Desk_03_Exit",
+    1.775
+   ],
+   [
+    "N_Spine_6",
+    "Reporting_Seat_01__approach",
+    2.884
+   ],
+   [
+    "N_Spine_6",
+    "Reporting_Approach",
+    1.96
+   ],
+   [
+    "N_Spine_6",
+    "Reporting_Exit",
+    3.556
+   ],
+   [
+    "N_Spine_7",
+    "N_Corr_m2_85",
+    2.851
+   ],
+   [
+    "N_Spine_7",
+    "N_Corr_m1_50",
+    1.502
+   ],
+   [
+    "N_Spine_7",
+    "N_Cmd_Front_L",
+    1.342
+   ],
+   [
+    "N_Spine_7",
+    "N_Cmd_Front_R",
+    1.342
+   ],
+   [
+    "N_Spine_7",
+    "Command_ReceiveReport",
+    0.5
+   ],
+   [
+    "N_Spine_7",
+    "Command_Approach",
+    0.12
+   ],
+   [
+    "N_Spine_7",
+    "Command_VisitorWait",
+    1.676
+   ],
+   [
+    "N_Spine_7",
+    "Desk_02_Arrive",
+    2.94
+   ],
+   [
+    "N_Spine_7",
+    "Desk_02_Seat__approach",
+    2.94
+   ],
+   [
+    "N_Spine_7",
+    "Desk_02_Exit",
+    2.94
+   ],
+   [
+    "N_Spine_7",
+    "Desk_03_Arrive",
+    1.911
+   ],
+   [
+    "N_Spine_7",
+    "Desk_03_Seat__approach",
+    1.911
+   ],
+   [
+    "N_Spine_7",
+    "Desk_03_Exit",
+    1.911
+   ],
+   [
+    "N_FrontW_1_6",
+    "N_FrontW_3_4",
+    1.8
+   ],
+   [
+    "N_FrontW_1_6",
+    "N_FrontW_4_3",
+    2.75
+   ],
+   [
+    "N_FrontW_1_6",
+    "N_FrontE_1_6",
+    3.15
+   ],
+   [
+    "N_FrontW_1_6",
+    "N_Break_Door",
+    3.1
+   ],
+   [
+    "N_FrontW_1_6",
+    "Lobby_Wait",
+    1.135
+   ],
+   [
+    "N_FrontW_1_6",
+    "Lobby_CheckIn",
+    2.72
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_04_Arrive",
+    2.334
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_04_Seat__approach",
+    2.334
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_04_Exit",
+    2.334
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_05_Arrive",
+    1.258
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_05_Seat__approach",
+    1.258
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_05_Exit",
+    1.258
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_06_Arrive",
+    0.22
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_06_Seat__approach",
+    0.22
+   ],
+   [
+    "N_FrontW_1_6",
+    "Desk_06_Exit",
+    0.22
+   ],
+   [
+    "N_FrontW_1_6",
+    "Reporting_Exit",
+    3.162
+   ],
+   [
+    "N_FrontW_3_4",
+    "N_FrontW_4_3",
+    0.95
+   ],
+   [
+    "N_FrontW_3_4",
+    "N_Break_Door",
+    1.3
+   ],
+   [
+    "N_FrontW_3_4",
+    "N_Break_In",
+    1.95
+   ],
+   [
+    "N_FrontW_3_4",
+    "Lobby_Wait",
+    2.621
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_04_Arrive",
+    0.548
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_04_Seat__approach",
+    0.548
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_04_Exit",
+    0.548
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_05_Arrive",
+    0.568
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_05_Seat__approach",
+    0.568
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_05_Exit",
+    0.568
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_06_Arrive",
+    1.636
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_06_Seat__approach",
+    1.636
+   ],
+   [
+    "N_FrontW_3_4",
+    "Desk_06_Exit",
+    1.636
+   ],
+   [
+    "N_FrontW_3_4",
+    "Break_Approach",
+    2.7
+   ],
+   [
+    "N_FrontW_3_4",
+    "Break_Exit",
+    1.855
+   ],
+   [
+    "N_FrontW_4_3",
+    "N_Break_Door",
+    0.351
+   ],
+   [
+    "N_FrontW_4_3",
+    "N_Break_In",
+    1.0
+   ],
+   [
+    "N_FrontW_4_3",
+    "Lobby_Wait",
+    3.525
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_04_Arrive",
+    0.443
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_04_Seat__approach",
+    0.443
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_04_Exit",
+    0.443
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_05_Arrive",
+    1.507
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_05_Seat__approach",
+    1.507
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_05_Exit",
+    1.507
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_06_Arrive",
+    2.584
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_06_Seat__approach",
+    2.584
+   ],
+   [
+    "N_FrontW_4_3",
+    "Desk_06_Exit",
+    2.584
+   ],
+   [
+    "N_FrontW_4_3",
+    "Break_Approach",
+    1.75
+   ],
+   [
+    "N_FrontW_4_3",
+    "Break_Exit",
+    0.909
+   ],
+   [
+    "N_FrontE_1_6",
+    "N_FrontE_3_4",
+    1.85
+   ],
+   [
+    "N_FrontE_1_6",
+    "N_FrontE_4_3",
+    2.8
+   ],
+   [
+    "N_FrontE_1_6",
+    "N_Ops_Door",
+    3.15
+   ],
+   [
+    "N_FrontE_1_6",
+    "Lobby_Wait",
+    2.667
+   ],
+   [
+    "N_FrontE_1_6",
+    "Desk_06_Arrive",
+    3.323
+   ],
+   [
+    "N_FrontE_1_6",
+    "Desk_06_Seat__approach",
+    3.323
+   ],
+   [
+    "N_FrontE_1_6",
+    "Desk_06_Exit",
+    3.323
+   ],
+   [
+    "N_FrontE_1_6",
+    "Reporting_Seat_01__approach",
+    0.94
+   ],
+   [
+    "N_FrontE_1_6",
+    "Reporting_Exit",
+    0.27
+   ],
+   [
+    "N_FrontE_3_4",
+    "N_FrontE_4_3",
+    0.95
+   ],
+   [
+    "N_FrontE_3_4",
+    "N_Ops_Door",
+    1.3
+   ],
+   [
+    "N_FrontE_3_4",
+    "N_Ops_In",
+    2.0
+   ],
+   [
+    "N_FrontE_3_4",
+    "Reporting_Seat_02__approach",
+    0.563
+   ],
+   [
+    "N_FrontE_3_4",
+    "Reporting_Presenter__approach",
+    1.681
+   ],
+   [
+    "N_FrontE_3_4",
+    "Reporting_Exit",
+    1.87
+   ],
+   [
+    "N_FrontE_3_4",
+    "Ops_Exit",
+    1.951
+   ],
+   [
+    "N_FrontE_4_3",
+    "N_Ops_Door",
+    0.351
+   ],
+   [
+    "N_FrontE_4_3",
+    "N_Ops_In",
+    1.05
+   ],
+   [
+    "N_FrontE_4_3",
+    "Reporting_Seat_02__approach",
+    1.143
+   ],
+   [
+    "N_FrontE_4_3",
+    "Reporting_Exit",
+    2.813
+   ],
+   [
+    "N_FrontE_4_3",
+    "Ops_Exit",
+    1.002
+   ],
+   [
+    "N_Break_Door",
+    "N_Break_In",
+    0.65
+   ],
+   [
+    "N_Break_Door",
+    "Desk_04_Arrive",
+    0.789
+   ],
+   [
+    "N_Break_Door",
+    "Desk_04_Seat__approach",
+    0.789
+   ],
+   [
+    "N_Break_Door",
+    "Desk_04_Exit",
+    0.789
+   ],
+   [
+    "N_Break_Door",
+    "Desk_05_Arrive",
+    1.858
+   ],
+   [
+    "N_Break_Door",
+    "Desk_05_Seat__approach",
+    1.858
+   ],
+   [
+    "N_Break_Door",
+    "Desk_05_Exit",
+    1.858
+   ],
+   [
+    "N_Break_Door",
+    "Desk_06_Arrive",
+    2.935
+   ],
+   [
+    "N_Break_Door",
+    "Desk_06_Seat__approach",
+    2.935
+   ],
+   [
+    "N_Break_Door",
+    "Desk_06_Exit",
+    2.935
+   ],
+   [
+    "N_Break_Door",
+    "Break_Approach",
+    1.4
+   ],
+   [
+    "N_Break_Door",
+    "Break_Exit",
+    0.559
+   ],
+   [
+    "N_Break_In",
+    "N_Break_Lamp",
+    1.727
+   ],
+   [
+    "N_Break_In",
+    "Desk_04_Arrive",
+    1.43
+   ],
+   [
+    "N_Break_In",
+    "Desk_04_Seat__approach",
+    1.43
+   ],
+   [
+    "N_Break_In",
+    "Desk_04_Exit",
+    1.43
+   ],
+   [
+    "N_Break_In",
+    "Desk_05_Arrive",
+    2.506
+   ],
+   [
+    "N_Break_In",
+    "Desk_05_Seat__approach",
+    2.506
+   ],
+   [
+    "N_Break_In",
+    "Desk_05_Exit",
+    2.506
+   ],
+   [
+    "N_Break_In",
+    "Desk_06_Arrive",
+    3.584
+   ],
+   [
+    "N_Break_In",
+    "Desk_06_Seat__approach",
+    3.584
+   ],
+   [
+    "N_Break_In",
+    "Desk_06_Exit",
+    3.584
+   ],
+   [
+    "N_Break_In",
+    "Break_Sofa_Seat_2__approach",
+    1.925
+   ],
+   [
+    "N_Break_In",
+    "Break_Approach",
+    0.75
+   ],
+   [
+    "N_Break_In",
+    "Break_Exit",
+    0.141
+   ],
+   [
+    "N_Break_Counter",
+    "N_Break_West",
+    1.235
+   ],
+   [
+    "N_Break_Counter",
+    "N_Break_Sofa",
+    2.198
+   ],
+   [
+    "N_Break_Counter",
+    "Break_Sofa_Seat__approach",
+    1.792
+   ],
+   [
+    "N_Break_Counter",
+    "Break_Chair_Seat__approach",
+    1.325
+   ],
+   [
+    "N_Break_Counter",
+    "Break_Coffee",
+    0.515
+   ],
+   [
+    "N_Break_RearDoor",
+    "N_Corr_m3_75",
+    1.039
+   ],
+   [
+    "N_Break_RearDoor",
+    "N_Corr_m2_85",
+    1.897
+   ],
+   [
+    "N_Break_RearDoor",
+    "N_Corr_m1_50",
+    3.227
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_01_Arrive",
+    0.801
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_01_Seat__approach",
+    0.801
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_01_Exit",
+    0.801
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_02_Arrive",
+    1.863
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_02_Seat__approach",
+    1.863
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_02_Exit",
+    1.863
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_03_Arrive",
+    2.938
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_03_Seat__approach",
+    2.938
+   ],
+   [
+    "N_Break_RearDoor",
+    "Desk_03_Exit",
+    2.938
+   ],
+   [
+    "N_Break_RearDoor",
+    "Break_Sofa_Seat__approach",
+    2.958
+   ],
+   [
+    "N_Ops_Door",
+    "N_Ops_In",
+    0.7
+   ],
+   [
+    "N_Ops_Door",
+    "Reporting_Seat_02__approach",
+    1.47
+   ],
+   [
+    "N_Ops_Door",
+    "Reporting_Exit",
+    3.164
+   ],
+   [
+    "N_Ops_Door",
+    "Ops_Inspect",
+    2.686
+   ],
+   [
+    "N_Ops_Door",
+    "Ops_Exit",
+    0.658
+   ],
+   [
+    "N_Ops_In",
+    "Ops_Exit",
+    0.112
+   ],
+   [
+    "N_Ops_Rear",
+    "Ops_Inspect",
+    2.081
+   ],
+   [
+    "N_Ops_Rear",
+    "Ops_AlertReview",
+    1.101
+   ],
+   [
+    "N_Ops_Rear",
+    "Ops_Desk__approach",
+    0.18
+   ],
+   [
+    "N_Corr_m4_30",
+    "N_Corr_m3_75",
+    0.55
+   ],
+   [
+    "N_Corr_m4_30",
+    "N_Corr_m2_85",
+    1.45
+   ],
+   [
+    "N_Corr_m4_30",
+    "N_Corr_m1_50",
+    2.8
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_01_Arrive",
+    0.739
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_01_Seat__approach",
+    0.739
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_01_Exit",
+    0.739
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_02_Arrive",
+    1.585
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_02_Seat__approach",
+    1.585
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_02_Exit",
+    1.585
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_03_Arrive",
+    2.61
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_03_Seat__approach",
+    2.61
+   ],
+   [
+    "N_Corr_m4_30",
+    "Desk_03_Exit",
+    2.61
+   ],
+   [
+    "N_Corr_m3_75",
+    "N_Corr_m2_85",
+    0.9
+   ],
+   [
+    "N_Corr_m3_75",
+    "N_Corr_m1_50",
+    2.25
+   ],
+   [
+    "N_Corr_m3_75",
+    "N_Research_Door",
+    0.38
+   ],
+   [
+    "N_Corr_m3_75",
+    "N_Research_In",
+    0.96
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_01_Arrive",
+    0.665
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_01_Seat__approach",
+    0.665
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_01_Exit",
+    0.665
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_02_Arrive",
+    1.104
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_02_Seat__approach",
+    1.104
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_02_Exit",
+    1.104
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_03_Arrive",
+    2.081
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_03_Seat__approach",
+    2.081
+   ],
+   [
+    "N_Corr_m3_75",
+    "Desk_03_Exit",
+    2.081
+   ],
+   [
+    "N_Corr_m3_75",
+    "Research_Discuss",
+    2.037
+   ],
+   [
+    "N_Corr_m3_75",
+    "Research_Exit",
+    0.88
+   ],
+   [
+    "N_Corr_m2_85",
+    "N_Corr_m1_50",
+    1.35
+   ],
+   [
+    "N_Corr_m2_85",
+    "N_Cmd_Front_L",
+    1.785
+   ],
+   [
+    "N_Corr_m2_85",
+    "Command_ReceiveReport",
+    2.908
+   ],
+   [
+    "N_Corr_m2_85",
+    "Command_Approach",
+    2.857
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_01_Arrive",
+    1.255
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_01_Seat__approach",
+    1.255
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_01_Exit",
+    1.255
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_02_Arrive",
+    0.64
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_02_Seat__approach",
+    0.64
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_02_Exit",
+    0.64
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_03_Arrive",
+    1.255
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_03_Seat__approach",
+    1.255
+   ],
+   [
+    "N_Corr_m2_85",
+    "Desk_03_Exit",
+    1.255
+   ],
+   [
+    "N_Corr_m1_50",
+    "N_Cmd_Front_L",
+    0.743
+   ],
+   [
+    "N_Corr_m1_50",
+    "N_Cmd_Front_R",
+    2.784
+   ],
+   [
+    "N_Corr_m1_50",
+    "N_Cmd_Side_L",
+    2.257
+   ],
+   [
+    "N_Corr_m1_50",
+    "Command_ReceiveReport",
+    1.608
+   ],
+   [
+    "N_Corr_m1_50",
+    "Command_Approach",
+    1.513
+   ],
+   [
+    "N_Corr_m1_50",
+    "Command_VisitorWait",
+    3.154
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_01_Arrive",
+    2.513
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_01_Seat__approach",
+    2.513
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_01_Exit",
+    2.513
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_02_Arrive",
+    1.494
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_02_Seat__approach",
+    1.494
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_02_Exit",
+    1.494
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_03_Arrive",
+    0.695
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_03_Seat__approach",
+    0.695
+   ],
+   [
+    "N_Corr_m1_50",
+    "Desk_03_Exit",
+    0.695
+   ],
+   [
+    "N_Corr_p1_50",
+    "N_Corr_p2_60",
+    1.1
+   ],
+   [
+    "N_Corr_p1_50",
+    "N_Corr_p4_15",
+    2.65
+   ],
+   [
+    "N_Corr_p1_50",
+    "N_Cmd_Front_R",
+    0.743
+   ],
+   [
+    "N_Corr_p1_50",
+    "N_Cmd_Side_R",
+    2.257
+   ],
+   [
+    "N_Corr_p1_50",
+    "Command_ReceiveReport",
+    1.608
+   ],
+   [
+    "N_Corr_p1_50",
+    "Command_VisitorWait",
+    0.589
+   ],
+   [
+    "N_Corr_p2_60",
+    "N_Corr_p4_15",
+    1.55
+   ],
+   [
+    "N_Corr_p2_60",
+    "N_Cmd_Front_R",
+    1.556
+   ],
+   [
+    "N_Corr_p2_60",
+    "Command_ReceiveReport",
+    2.664
+   ],
+   [
+    "N_Corr_p2_60",
+    "Command_Approach",
+    2.608
+   ],
+   [
+    "N_Corr_p2_60",
+    "Command_VisitorWait",
+    1.156
+   ],
+   [
+    "N_Corr_p2_60",
+    "Reporting_Approach",
+    2.232
+   ],
+   [
+    "N_Corr_p4_15",
+    "N_Dev_Door",
+    0.38
+   ],
+   [
+    "N_Corr_p4_15",
+    "N_Dev_In",
+    0.93
+   ],
+   [
+    "N_Corr_p4_15",
+    "N_Dev_Lane",
+    2.031
+   ],
+   [
+    "N_Corr_p4_15",
+    "Dev_Desk_1_Arrive",
+    2.403
+   ],
+   [
+    "N_Corr_p4_15",
+    "Dev_Desk_1_Seat__approach",
+    2.403
+   ],
+   [
+    "N_Corr_p4_15",
+    "Dev_Desk_1_Exit",
+    2.403
+   ],
+   [
+    "N_Corr_p4_15",
+    "Dev_Exit",
+    0.93
+   ],
+   [
+    "N_Reporting_Mid",
+    "Reporting_Presenter__approach",
+    1.358
+   ],
+   [
+    "N_Break_West",
+    "N_Break_Sofa",
+    1.05
+   ],
+   [
+    "N_Break_West",
+    "N_Break_Lamp",
+    1.9
+   ],
+   [
+    "N_Break_West",
+    "Break_Sofa_Seat__approach",
+    0.62
+   ],
+   [
+    "N_Break_West",
+    "Break_Sofa_Seat_2__approach",
+    1.48
+   ],
+   [
+    "N_Break_West",
+    "Break_Chair_Seat__approach",
+    1.088
+   ],
+   [
+    "N_Break_West",
+    "Break_Coffee",
+    1.315
+   ],
+   [
+    "N_Break_Sofa",
+    "N_Break_Lamp",
+    0.85
+   ],
+   [
+    "N_Break_Sofa",
+    "Break_Sofa_Seat__approach",
+    0.43
+   ],
+   [
+    "N_Break_Sofa",
+    "Break_Sofa_Seat_2__approach",
+    0.43
+   ],
+   [
+    "N_Break_Sofa",
+    "Break_Coffee",
+    2.358
+   ],
+   [
+    "N_Break_Lamp",
+    "Break_Sofa_Seat__approach",
+    1.28
+   ],
+   [
+    "N_Break_Lamp",
+    "Break_Sofa_Seat_2__approach",
+    0.42
+   ],
+   [
+    "N_Break_Lamp",
+    "Break_Coffee",
+    3.206
+   ],
+   [
+    "N_Break_Lamp",
+    "Break_Approach",
+    1.07
+   ],
+   [
+    "N_Break_Lamp",
+    "Break_Exit",
+    1.858
+   ],
+   [
+    "N_Research_Door",
+    "N_Research_In",
+    0.58
+   ],
+   [
+    "N_Research_Door",
+    "Desk_01_Arrive",
+    1.036
+   ],
+   [
+    "N_Research_Door",
+    "Desk_01_Seat__approach",
+    1.036
+   ],
+   [
+    "N_Research_Door",
+    "Desk_01_Exit",
+    1.036
+   ],
+   [
+    "N_Research_Door",
+    "Desk_02_Arrive",
+    1.36
+   ],
+   [
+    "N_Research_Door",
+    "Desk_02_Seat__approach",
+    1.36
+   ],
+   [
+    "N_Research_Door",
+    "Desk_02_Exit",
+    1.36
+   ],
+   [
+    "N_Research_Door",
+    "Research_Discuss",
+    1.659
+   ],
+   [
+    "N_Research_Door",
+    "Research_Exit",
+    0.5
+   ],
+   [
+    "N_Research_In",
+    "N_Research_Front",
+    1.461
+   ],
+   [
+    "N_Research_In",
+    "N_Research_Table_E",
+    1.924
+   ],
+   [
+    "N_Research_In",
+    "Desk_01_Arrive",
+    1.61
+   ],
+   [
+    "N_Research_In",
+    "Desk_01_Seat__approach",
+    1.61
+   ],
+   [
+    "N_Research_In",
+    "Desk_01_Exit",
+    1.61
+   ],
+   [
+    "N_Research_In",
+    "Research_Discuss",
+    1.083
+   ],
+   [
+    "N_Research_In",
+    "Research_Exit",
+    0.08
+   ],
+   [
+    "N_Research_Front",
+    "N_Research_West",
+    1.077
+   ],
+   [
+    "N_Research_Front",
+    "Research_Exit",
+    1.453
+   ],
+   [
+    "N_Research_West",
+    "N_Research_Shelf",
+    2.487
+   ],
+   [
+    "N_Research_West",
+    "Research_Desk_Arrive",
+    0.4
+   ],
+   [
+    "N_Research_West",
+    "Research_Desk_Seat__approach",
+    0.4
+   ],
+   [
+    "N_Research_West",
+    "Research_Desk_Exit",
+    0.4
+   ],
+   [
+    "N_Research_West",
+    "Research_Reading",
+    2.102
+   ],
+   [
+    "N_Research_Shelf",
+    "Research_Desk_Arrive",
+    2.145
+   ],
+   [
+    "N_Research_Shelf",
+    "Research_Desk_Seat__approach",
+    2.145
+   ],
+   [
+    "N_Research_Shelf",
+    "Research_Desk_Exit",
+    2.145
+   ],
+   [
+    "N_Research_Shelf",
+    "Research_Reading",
+    0.682
+   ],
+   [
+    "N_Research_Table_E",
+    "Desk_01_Arrive",
+    3.534
+   ],
+   [
+    "N_Research_Table_E",
+    "Desk_01_Seat__approach",
+    3.534
+   ],
+   [
+    "N_Research_Table_E",
+    "Desk_01_Exit",
+    3.534
+   ],
+   [
+    "N_Research_Table_E",
+    "Research_Exit",
+    2.004
+   ],
+   [
+    "N_Cmd_Front_L",
+    "N_Cmd_Side_L",
+    1.598
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Command_ReceiveReport",
+    1.204
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Command_Approach",
+    1.292
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Command_VisitorWait",
+    2.802
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_01_Arrive",
+    3.032
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_01_Seat__approach",
+    3.032
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_01_Exit",
+    3.032
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_02_Arrive",
+    2.113
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_02_Seat__approach",
+    2.113
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_02_Exit",
+    2.113
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_03_Arrive",
+    1.438
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_03_Seat__approach",
+    1.438
+   ],
+   [
+    "N_Cmd_Front_L",
+    "Desk_03_Exit",
+    1.438
+   ],
+   [
+    "N_Cmd_Front_R",
+    "N_Cmd_Side_R",
+    1.598
+   ],
+   [
+    "N_Cmd_Front_R",
+    "Command_ReceiveReport",
+    1.204
+   ],
+   [
+    "N_Cmd_Front_R",
+    "Command_Approach",
+    1.292
+   ],
+   [
+    "N_Cmd_Front_R",
+    "Command_VisitorWait",
+    0.412
+   ],
+   [
+    "N_Cmd_Front_R",
+    "Desk_03_Arrive",
+    3.25
+   ],
+   [
+    "N_Cmd_Front_R",
+    "Desk_03_Seat__approach",
+    3.25
+   ],
+   [
+    "N_Cmd_Front_R",
+    "Desk_03_Exit",
+    3.25
+   ],
+   [
+    "N_Cmd_Side_L",
+    "N_Cmd_Back_L",
+    0.816
+   ],
+   [
+    "N_Cmd_Side_L",
+    "Desk_03_Arrive",
+    2.914
+   ],
+   [
+    "N_Cmd_Side_L",
+    "Desk_03_Seat__approach",
+    2.914
+   ],
+   [
+    "N_Cmd_Side_L",
+    "Desk_03_Exit",
+    2.914
+   ],
+   [
+    "N_Cmd_Side_R",
+    "N_Cmd_Back_R",
+    0.816
+   ],
+   [
+    "N_Cmd_Side_R",
+    "Command_VisitorWait",
+    1.683
+   ],
+   [
+    "N_Cmd_Back_L",
+    "N_Cmd_Back",
+    1.204
+   ],
+   [
+    "N_Cmd_Back_R",
+    "N_Cmd_Back",
+    1.204
+   ],
+   [
+    "N_Cmd_Back",
+    "Command_Work__approach",
+    0.4
+   ],
+   [
+    "N_Dev_Door",
+    "N_Dev_In",
+    0.55
+   ],
+   [
+    "N_Dev_Door",
+    "N_Dev_Lane",
+    1.651
+   ],
+   [
+    "N_Dev_Door",
+    "Dev_Desk_1_Arrive",
+    2.032
+   ],
+   [
+    "N_Dev_Door",
+    "Dev_Desk_1_Seat__approach",
+    2.032
+   ],
+   [
+    "N_Dev_Door",
+    "Dev_Desk_1_Exit",
+    2.032
+   ],
+   [
+    "N_Dev_Door",
+    "Dev_Desk_2_Arrive",
+    2.068
+   ],
+   [
+    "N_Dev_Door",
+    "Dev_Desk_2_Seat__approach",
+    2.068
+   ],
+   [
+    "N_Dev_Door",
+    "Dev_Desk_2_Exit",
+    2.068
+   ],
+   [
+    "N_Dev_Door",
+    "Dev_Exit",
+    0.55
+   ],
+   [
+    "N_Dev_In",
+    "N_Dev_Lane",
+    1.101
+   ],
+   [
+    "N_Dev_In",
+    "N_Bay_Door",
+    1.836
+   ],
+   [
+    "N_Dev_In",
+    "N_Bay_Out",
+    1.476
+   ],
+   [
+    "N_Dev_In",
+    "N_Bay_Front",
+    1.301
+   ],
+   [
+    "N_Dev_In",
+    "Dev_Desk_1_Arrive",
+    1.505
+   ],
+   [
+    "N_Dev_In",
+    "Dev_Desk_1_Seat__approach",
+    1.505
+   ],
+   [
+    "N_Dev_In",
+    "Dev_Desk_1_Exit",
+    1.505
+   ],
+   [
+    "N_Dev_In",
+    "Dev_Desk_2_Arrive",
+    1.553
+   ],
+   [
+    "N_Dev_In",
+    "Dev_Desk_2_Seat__approach",
+    1.553
+   ],
+   [
+    "N_Dev_In",
+    "Dev_Desk_2_Exit",
+    1.553
+   ],
+   [
+    "N_Dev_In",
+    "Test_Inspect",
+    2.55
+   ],
+   [
+    "N_Dev_In",
+    "Test_Exit",
+    1.2
+   ],
+   [
+    "N_Dev_In",
+    "Dev_Exit",
+    0.0
+   ],
+   [
+    "N_Dev_Lane",
+    "N_Bay_Door",
+    1.563
+   ],
+   [
+    "N_Dev_Lane",
+    "N_Bay_Out",
+    1.138
+   ],
+   [
+    "N_Dev_Lane",
+    "N_Bay_Front",
+    1.632
+   ],
+   [
+    "N_Dev_Lane",
+    "Dev_Desk_1_Arrive",
+    0.636
+   ],
+   [
+    "N_Dev_Lane",
+    "Dev_Desk_1_Seat__approach",
+    0.636
+   ],
+   [
+    "N_Dev_Lane",
+    "Dev_Desk_1_Exit",
+    0.636
+   ],
+   [
+    "N_Dev_Lane",
+    "Dev_Desk_2_Arrive",
+    0.662
+   ],
+   [
+    "N_Dev_Lane",
+    "Dev_Desk_2_Seat__approach",
+    0.662
+   ],
+   [
+    "N_Dev_Lane",
+    "Dev_Desk_2_Exit",
+    0.662
+   ],
+   [
+    "N_Dev_Lane",
+    "Test_Exit",
+    1.591
+   ],
+   [
+    "N_Dev_Lane",
+    "Dev_Exit",
+    1.101
+   ],
+   [
+    "N_Bay_Door",
+    "N_Bay_Out",
+    0.43
+   ],
+   [
+    "N_Bay_Door",
+    "Dev_Desk_1_Arrive",
+    2.163
+   ],
+   [
+    "N_Bay_Door",
+    "Dev_Desk_1_Seat__approach",
+    2.163
+   ],
+   [
+    "N_Bay_Door",
+    "Dev_Desk_1_Exit",
+    2.163
+   ],
+   [
+    "N_Bay_Door",
+    "Dev_Desk_2_Arrive",
+    1.101
+   ],
+   [
+    "N_Bay_Door",
+    "Dev_Desk_2_Seat__approach",
+    1.101
+   ],
+   [
+    "N_Bay_Door",
+    "Dev_Desk_2_Exit",
+    1.101
+   ],
+   [
+    "N_Bay_Door",
+    "Test_Work__approach",
+    0.304
+   ],
+   [
+    "N_Bay_Door",
+    "Dev_Exit",
+    1.836
+   ],
+   [
+    "N_Bay_Out",
+    "N_Bay_Front",
+    0.86
+   ],
+   [
+    "N_Bay_Out",
+    "Dev_Desk_1_Arrive",
+    1.749
+   ],
+   [
+    "N_Bay_Out",
+    "Dev_Desk_1_Seat__approach",
+    1.749
+   ],
+   [
+    "N_Bay_Out",
+    "Dev_Desk_1_Exit",
+    1.749
+   ],
+   [
+    "N_Bay_Out",
+    "Dev_Desk_2_Arrive",
+    0.75
+   ],
+   [
+    "N_Bay_Out",
+    "Dev_Desk_2_Seat__approach",
+    0.75
+   ],
+   [
+    "N_Bay_Out",
+    "Dev_Desk_2_Exit",
+    0.75
+   ],
+   [
+    "N_Bay_Out",
+    "Test_Work__approach",
+    0.732
+   ],
+   [
+    "N_Bay_Out",
+    "Test_Exit",
+    0.9
+   ],
+   [
+    "N_Bay_Out",
+    "Dev_Exit",
+    1.476
+   ],
+   [
+    "N_Bay_Front",
+    "Dev_Desk_1_Arrive",
+    2.262
+   ],
+   [
+    "N_Bay_Front",
+    "Dev_Desk_1_Seat__approach",
+    2.262
+   ],
+   [
+    "N_Bay_Front",
+    "Dev_Desk_1_Exit",
+    2.262
+   ],
+   [
+    "N_Bay_Front",
+    "Dev_Desk_2_Arrive",
+    1.525
+   ],
+   [
+    "N_Bay_Front",
+    "Dev_Desk_2_Seat__approach",
+    1.525
+   ],
+   [
+    "N_Bay_Front",
+    "Dev_Desk_2_Exit",
+    1.525
+   ],
+   [
+    "N_Bay_Front",
+    "Test_Inspect",
+    1.25
+   ],
+   [
+    "N_Bay_Front",
+    "Test_Exit",
+    0.112
+   ],
+   [
+    "N_Bay_Front",
+    "Dev_Exit",
+    1.301
+   ],
+   [
+    "Lobby_Entry",
+    "Lobby_Exit",
+    1.0
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_04_Arrive",
+    3.166
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_04_Seat__approach",
+    3.166
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_04_Exit",
+    3.166
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_05_Arrive",
+    2.181
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_05_Seat__approach",
+    2.181
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_05_Exit",
+    2.181
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_06_Arrive",
+    1.348
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_06_Seat__approach",
+    1.348
+   ],
+   [
+    "Lobby_Wait",
+    "Desk_06_Exit",
+    1.348
+   ],
+   [
+    "Lobby_Wait",
+    "Reporting_Seat_01__approach",
+    2.943
+   ],
+   [
+    "Lobby_Wait",
+    "Reporting_Exit",
+    2.773
+   ],
+   [
+    "Lobby_CheckIn",
+    "Desk_06_Arrive",
+    2.925
+   ],
+   [
+    "Lobby_CheckIn",
+    "Desk_06_Seat__approach",
+    2.925
+   ],
+   [
+    "Lobby_CheckIn",
+    "Desk_06_Exit",
+    2.925
+   ],
+   [
+    "Lobby_CheckIn",
+    "Reporting_Seat_01__approach",
+    1.75
+   ],
+   [
+    "Lobby_CheckIn",
+    "Reporting_Approach",
+    3.119
+   ],
+   [
+    "Command_ReceiveReport",
+    "Command_Approach",
+    0.38
+   ],
+   [
+    "Command_ReceiveReport",
+    "Command_VisitorWait",
+    1.6
+   ],
+   [
+    "Command_ReceiveReport",
+    "Desk_02_Arrive",
+    3.1
+   ],
+   [
+    "Command_ReceiveReport",
+    "Desk_02_Seat__approach",
+    3.1
+   ],
+   [
+    "Command_ReceiveReport",
+    "Desk_02_Exit",
+    3.1
+   ],
+   [
+    "Command_ReceiveReport",
+    "Desk_03_Arrive",
+    2.15
+   ],
+   [
+    "Command_ReceiveReport",
+    "Desk_03_Seat__approach",
+    2.15
+   ],
+   [
+    "Command_ReceiveReport",
+    "Desk_03_Exit",
+    2.15
+   ],
+   [
+    "Command_Approach",
+    "Command_VisitorWait",
+    1.645
+   ],
+   [
+    "Command_Approach",
+    "Desk_02_Arrive",
+    2.971
+   ],
+   [
+    "Command_Approach",
+    "Desk_02_Seat__approach",
+    2.971
+   ],
+   [
+    "Command_Approach",
+    "Desk_02_Exit",
+    2.971
+   ],
+   [
+    "Command_Approach",
+    "Desk_03_Arrive",
+    1.959
+   ],
+   [
+    "Command_Approach",
+    "Desk_03_Seat__approach",
+    1.959
+   ],
+   [
+    "Command_Approach",
+    "Desk_03_Exit",
+    1.959
+   ],
+   [
+    "Command_VisitorWait",
+    "Desk_03_Arrive",
+    3.584
+   ],
+   [
+    "Command_VisitorWait",
+    "Desk_03_Seat__approach",
+    3.584
+   ],
+   [
+    "Command_VisitorWait",
+    "Desk_03_Exit",
+    3.584
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_01_Seat__approach",
+    0.0
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_01_Exit",
+    0.0
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_02_Arrive",
+    1.08
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_02_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_02_Exit",
+    1.08
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_03_Arrive",
+    2.16
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_03_Seat__approach",
+    2.16
+   ],
+   [
+    "Desk_01_Arrive",
+    "Desk_03_Exit",
+    2.16
+   ],
+   [
+    "Desk_01_Arrive",
+    "Research_Exit",
+    1.531
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Desk_01_Exit",
+    0.0
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Desk_02_Arrive",
+    1.08
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Desk_02_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Desk_02_Exit",
+    1.08
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Desk_03_Arrive",
+    2.16
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Desk_03_Seat__approach",
+    2.16
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Desk_03_Exit",
+    2.16
+   ],
+   [
+    "Desk_01_Seat__approach",
+    "Research_Exit",
+    1.531
+   ],
+   [
+    "Desk_01_Exit",
+    "Desk_02_Arrive",
+    1.08
+   ],
+   [
+    "Desk_01_Exit",
+    "Desk_02_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_01_Exit",
+    "Desk_02_Exit",
+    1.08
+   ],
+   [
+    "Desk_01_Exit",
+    "Desk_03_Arrive",
+    2.16
+   ],
+   [
+    "Desk_01_Exit",
+    "Desk_03_Seat__approach",
+    2.16
+   ],
+   [
+    "Desk_01_Exit",
+    "Desk_03_Exit",
+    2.16
+   ],
+   [
+    "Desk_01_Exit",
+    "Research_Exit",
+    1.531
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_04_Seat__approach",
+    0.0
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_04_Exit",
+    0.0
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_05_Arrive",
+    1.08
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_05_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_05_Exit",
+    1.08
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_06_Arrive",
+    2.16
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_06_Seat__approach",
+    2.16
+   ],
+   [
+    "Desk_04_Arrive",
+    "Desk_06_Exit",
+    2.16
+   ],
+   [
+    "Desk_04_Arrive",
+    "Break_Approach",
+    2.177
+   ],
+   [
+    "Desk_04_Arrive",
+    "Break_Exit",
+    1.347
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Desk_04_Exit",
+    0.0
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Desk_05_Arrive",
+    1.08
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Desk_05_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Desk_05_Exit",
+    1.08
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Desk_06_Arrive",
+    2.16
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Desk_06_Seat__approach",
+    2.16
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Desk_06_Exit",
+    2.16
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Break_Approach",
+    2.177
+   ],
+   [
+    "Desk_04_Seat__approach",
+    "Break_Exit",
+    1.347
+   ],
+   [
+    "Desk_04_Exit",
+    "Desk_05_Arrive",
+    1.08
+   ],
+   [
+    "Desk_04_Exit",
+    "Desk_05_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_04_Exit",
+    "Desk_05_Exit",
+    1.08
+   ],
+   [
+    "Desk_04_Exit",
+    "Desk_06_Arrive",
+    2.16
+   ],
+   [
+    "Desk_04_Exit",
+    "Desk_06_Seat__approach",
+    2.16
+   ],
+   [
+    "Desk_04_Exit",
+    "Desk_06_Exit",
+    2.16
+   ],
+   [
+    "Desk_04_Exit",
+    "Break_Approach",
+    2.177
+   ],
+   [
+    "Desk_04_Exit",
+    "Break_Exit",
+    1.347
+   ],
+   [
+    "Desk_02_Arrive",
+    "Desk_02_Seat__approach",
+    0.0
+   ],
+   [
+    "Desk_02_Arrive",
+    "Desk_02_Exit",
+    0.0
+   ],
+   [
+    "Desk_02_Arrive",
+    "Desk_03_Arrive",
+    1.08
+   ],
+   [
+    "Desk_02_Arrive",
+    "Desk_03_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_02_Arrive",
+    "Desk_03_Exit",
+    1.08
+   ],
+   [
+    "Desk_02_Seat__approach",
+    "Desk_02_Exit",
+    0.0
+   ],
+   [
+    "Desk_02_Seat__approach",
+    "Desk_03_Arrive",
+    1.08
+   ],
+   [
+    "Desk_02_Seat__approach",
+    "Desk_03_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_02_Seat__approach",
+    "Desk_03_Exit",
+    1.08
+   ],
+   [
+    "Desk_02_Exit",
+    "Desk_03_Arrive",
+    1.08
+   ],
+   [
+    "Desk_02_Exit",
+    "Desk_03_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_02_Exit",
+    "Desk_03_Exit",
+    1.08
+   ],
+   [
+    "Desk_05_Arrive",
+    "Desk_05_Seat__approach",
+    0.0
+   ],
+   [
+    "Desk_05_Arrive",
+    "Desk_05_Exit",
+    0.0
+   ],
+   [
+    "Desk_05_Arrive",
+    "Desk_06_Arrive",
+    1.08
+   ],
+   [
+    "Desk_05_Arrive",
+    "Desk_06_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_05_Arrive",
+    "Desk_06_Exit",
+    1.08
+   ],
+   [
+    "Desk_05_Arrive",
+    "Break_Approach",
+    3.254
+   ],
+   [
+    "Desk_05_Arrive",
+    "Break_Exit",
+    2.415
+   ],
+   [
+    "Desk_05_Seat__approach",
+    "Desk_05_Exit",
+    0.0
+   ],
+   [
+    "Desk_05_Seat__approach",
+    "Desk_06_Arrive",
+    1.08
+   ],
+   [
+    "Desk_05_Seat__approach",
+    "Desk_06_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_05_Seat__approach",
+    "Desk_06_Exit",
+    1.08
+   ],
+   [
+    "Desk_05_Seat__approach",
+    "Break_Approach",
+    3.254
+   ],
+   [
+    "Desk_05_Seat__approach",
+    "Break_Exit",
+    2.415
+   ],
+   [
+    "Desk_05_Exit",
+    "Desk_06_Arrive",
+    1.08
+   ],
+   [
+    "Desk_05_Exit",
+    "Desk_06_Seat__approach",
+    1.08
+   ],
+   [
+    "Desk_05_Exit",
+    "Desk_06_Exit",
+    1.08
+   ],
+   [
+    "Desk_05_Exit",
+    "Break_Approach",
+    3.254
+   ],
+   [
+    "Desk_05_Exit",
+    "Break_Exit",
+    2.415
+   ],
+   [
+    "Desk_03_Arrive",
+    "Desk_03_Seat__approach",
+    0.0
+   ],
+   [
+    "Desk_03_Arrive",
+    "Desk_03_Exit",
+    0.0
+   ],
+   [
+    "Desk_03_Seat__approach",
+    "Desk_03_Exit",
+    0.0
+   ],
+   [
+    "Desk_03_Seat__approach",
+    "Reporting_Approach",
+    3.576
+   ],
+   [
+    "Desk_06_Arrive",
+    "Desk_06_Seat__approach",
+    0.0
+   ],
+   [
+    "Desk_06_Arrive",
+    "Desk_06_Exit",
+    0.0
+   ],
+   [
+    "Desk_06_Arrive",
+    "Break_Exit",
+    3.49
+   ],
+   [
+    "Desk_06_Seat__approach",
+    "Desk_06_Exit",
+    0.0
+   ],
+   [
+    "Desk_06_Seat__approach",
+    "Break_Exit",
+    3.49
+   ],
+   [
+    "Desk_06_Exit",
+    "Break_Exit",
+    3.49
+   ],
+   [
+    "Research_Desk_Arrive",
+    "Research_Desk_Seat__approach",
+    0.0
+   ],
+   [
+    "Research_Desk_Arrive",
+    "Research_Desk_Exit",
+    0.0
+   ],
+   [
+    "Research_Desk_Arrive",
+    "Research_Reading",
+    1.717
+   ],
+   [
+    "Research_Desk_Seat__approach",
+    "Research_Desk_Exit",
+    0.0
+   ],
+   [
+    "Research_Desk_Seat__approach",
+    "Research_Reading",
+    1.717
+   ],
+   [
+    "Research_Desk_Exit",
+    "Research_Reading",
+    1.717
+   ],
+   [
+    "Research_Discuss",
+    "Research_Exit",
+    1.162
+   ],
+   [
+    "Dev_Desk_1_Arrive",
+    "Dev_Desk_1_Seat__approach",
+    0.0
+   ],
+   [
+    "Dev_Desk_1_Arrive",
+    "Dev_Desk_1_Exit",
+    0.0
+   ],
+   [
+    "Dev_Desk_1_Arrive",
+    "Dev_Desk_2_Arrive",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Arrive",
+    "Dev_Desk_2_Seat__approach",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Arrive",
+    "Dev_Desk_2_Exit",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Arrive",
+    "Test_Exit",
+    2.215
+   ],
+   [
+    "Dev_Desk_1_Arrive",
+    "Dev_Exit",
+    1.505
+   ],
+   [
+    "Dev_Desk_1_Seat__approach",
+    "Dev_Desk_1_Exit",
+    0.0
+   ],
+   [
+    "Dev_Desk_1_Seat__approach",
+    "Dev_Desk_2_Arrive",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Seat__approach",
+    "Dev_Desk_2_Seat__approach",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Seat__approach",
+    "Dev_Desk_2_Exit",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Seat__approach",
+    "Test_Exit",
+    2.215
+   ],
+   [
+    "Dev_Desk_1_Seat__approach",
+    "Dev_Exit",
+    1.505
+   ],
+   [
+    "Dev_Desk_1_Exit",
+    "Dev_Desk_2_Arrive",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Exit",
+    "Dev_Desk_2_Seat__approach",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Exit",
+    "Dev_Desk_2_Exit",
+    1.13
+   ],
+   [
+    "Dev_Desk_1_Exit",
+    "Test_Exit",
+    2.215
+   ],
+   [
+    "Dev_Desk_1_Exit",
+    "Dev_Exit",
+    1.505
+   ],
+   [
+    "Dev_Desk_2_Arrive",
+    "Dev_Desk_2_Seat__approach",
+    0.0
+   ],
+   [
+    "Dev_Desk_2_Arrive",
+    "Dev_Desk_2_Exit",
+    0.0
+   ],
+   [
+    "Dev_Desk_2_Arrive",
+    "Test_Exit",
+    1.53
+   ],
+   [
+    "Dev_Desk_2_Arrive",
+    "Dev_Exit",
+    1.553
+   ],
+   [
+    "Dev_Desk_2_Seat__approach",
+    "Dev_Desk_2_Exit",
+    0.0
+   ],
+   [
+    "Dev_Desk_2_Seat__approach",
+    "Test_Exit",
+    1.53
+   ],
+   [
+    "Dev_Desk_2_Seat__approach",
+    "Dev_Exit",
+    1.553
+   ],
+   [
+    "Dev_Desk_2_Exit",
+    "Test_Exit",
+    1.53
+   ],
+   [
+    "Dev_Desk_2_Exit",
+    "Dev_Exit",
+    1.553
+   ],
+   [
+    "Test_Inspect",
+    "Test_Exit",
+    1.351
+   ],
+   [
+    "Test_Inspect",
+    "Dev_Exit",
+    2.55
+   ],
+   [
+    "Test_Exit",
+    "Dev_Exit",
+    1.2
+   ],
+   [
+    "Reporting_Seat_01__approach",
+    "Reporting_Approach",
+    1.37
+   ],
+   [
+    "Reporting_Seat_01__approach",
+    "Reporting_Exit",
+    0.679
+   ],
+   [
+    "Reporting_Seat_02__approach",
+    "Reporting_Presenter__approach",
+    1.198
+   ],
+   [
+    "Ops_Inspect",
+    "Ops_AlertReview",
+    1.2
+   ],
+   [
+    "Ops_Inspect",
+    "Ops_Desk__approach",
+    2.236
+   ],
+   [
+    "Ops_Inspect",
+    "Ops_Exit",
+    2.081
+   ],
+   [
+    "Ops_AlertReview",
+    "Ops_Desk__approach",
+    1.281
+   ],
+   [
+    "Break_Sofa_Seat__approach",
+    "Break_Sofa_Seat_2__approach",
+    0.86
+   ],
+   [
+    "Break_Sofa_Seat__approach",
+    "Break_Coffee",
+    1.93
+   ],
+   [
+    "Break_Sofa_Seat_2__approach",
+    "Break_Coffee",
+    2.787
+   ],
+   [
+    "Break_Sofa_Seat_2__approach",
+    "Break_Approach",
+    1.367
+   ],
+   [
+    "Break_Sofa_Seat_2__approach",
+    "Break_Exit",
+    2.064
+   ],
+   [
+    "Break_Chair_Seat__approach",
+    "Break_Coffee",
+    1.739
+   ],
+   [
+    "Break_Approach",
+    "Break_Exit",
+    0.856
+   ]
+  ],
+  "links": []
+ },
+ "obstacles": [
+  {
+   "id": "W_Front_L_run0",
+   "kind": "segment",
+   "a": [
+    -2.4,
+    4.6
+   ],
+   "b": [
+    -6.8,
+    4.6
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Front_L"
+  },
+  {
+   "id": "W_Chamfer_FL_run0",
+   "kind": "segment",
+   "a": [
+    -6.8,
+    4.6
+   ],
+   "b": [
+    -8.0,
+    3.4
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Chamfer_FL"
+  },
+  {
+   "id": "W_Side_L_Front_run0",
+   "kind": "segment",
+   "a": [
+    -8.0,
+    3.4
+   ],
+   "b": [
+    -8.0,
+    -1.8
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Side_L_Front"
+  },
+  {
+   "id": "W_Side_L_Rear_run0",
+   "kind": "segment",
+   "a": [
+    -8.0,
+    -1.8
+   ],
+   "b": [
+    -8.0,
+    -4.9
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Side_L_Rear"
+  },
+  {
+   "id": "W_Chamfer_RL_run0",
+   "kind": "segment",
+   "a": [
+    -8.0,
+    -4.9
+   ],
+   "b": [
+    -7.3,
+    -5.6
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Chamfer_RL"
+  },
+  {
+   "id": "W_Rear_run0",
+   "kind": "segment",
+   "a": [
+    -7.3,
+    -5.6
+   ],
+   "b": [
+    7.3,
+    -5.6
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Rear"
+  },
+  {
+   "id": "W_Chamfer_RR_run0",
+   "kind": "segment",
+   "a": [
+    7.3,
+    -5.6
+   ],
+   "b": [
+    8.0,
+    -4.9
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Chamfer_RR"
+  },
+  {
+   "id": "W_Side_R_Rear_run0",
+   "kind": "segment",
+   "a": [
+    8.0,
+    -4.9
+   ],
+   "b": [
+    8.0,
+    -1.8
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Side_R_Rear"
+  },
+  {
+   "id": "W_Side_R_Front_run0",
+   "kind": "segment",
+   "a": [
+    8.0,
+    -1.8
+   ],
+   "b": [
+    8.0,
+    3.4
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Side_R_Front"
+  },
+  {
+   "id": "W_Chamfer_FR_run0",
+   "kind": "segment",
+   "a": [
+    8.0,
+    3.4
+   ],
+   "b": [
+    6.8,
+    4.6
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Chamfer_FR"
+  },
+  {
+   "id": "W_Front_R_run0",
+   "kind": "segment",
+   "a": [
+    6.8,
+    4.6
+   ],
+   "b": [
+    2.4,
+    4.6
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Front_R"
+  },
+  {
+   "id": "W_LobbyGlass_run0",
+   "kind": "segment",
+   "a": [
+    -2.4,
+    4.6
+   ],
+   "b": [
+    -0.62,
+    4.6
+   ],
+   "halfWidth": 0.04,
+   "source": "W_LobbyGlass"
+  },
+  {
+   "id": "W_LobbyGlass_run1",
+   "kind": "segment",
+   "a": [
+    0.62,
+    4.6
+   ],
+   "b": [
+    2.4,
+    4.6
+   ],
+   "halfWidth": 0.04,
+   "source": "W_LobbyGlass"
+  },
+  {
+   "id": "W_Porch_L_run0",
+   "kind": "segment",
+   "a": [
+    -2.4,
+    4.6
+   ],
+   "b": [
+    -2.4,
+    6.05
+   ],
+   "halfWidth": 0.15,
+   "source": "W_Porch_L"
+  },
+  {
+   "id": "W_Porch_R_run0",
+   "kind": "segment",
+   "a": [
+    2.4,
+    4.6
+   ],
+   "b": [
+    2.4,
+    6.05
+   ],
+   "halfWidth": 0.15,
+   "source": "W_Porch_R"
+  },
+  {
+   "id": "W_Cmd_L_run0",
+   "kind": "segment",
+   "a": [
+    -2.9,
+    -5.6
+   ],
+   "b": [
+    -2.9,
+    -2.55
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Cmd_L"
+  },
+  {
+   "id": "W_Cmd_R_run0",
+   "kind": "segment",
+   "a": [
+    2.9,
+    -5.6
+   ],
+   "b": [
+    2.9,
+    -2.55
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Cmd_R"
+  },
+  {
+   "id": "W_Cmd_L_Glass_run0",
+   "kind": "segment",
+   "a": [
+    -2.9,
+    -2.55
+   ],
+   "b": [
+    -2.9,
+    -1.8
+   ],
+   "halfWidth": 0.05,
+   "source": "W_Cmd_L_Glass"
+  },
+  {
+   "id": "W_Cmd_R_Glass_run0",
+   "kind": "segment",
+   "a": [
+    2.9,
+    -2.55
+   ],
+   "b": [
+    2.9,
+    -1.8
+   ],
+   "halfWidth": 0.05,
+   "source": "W_Cmd_R_Glass"
+  },
+  {
+   "id": "W_Break_Rear_run0",
+   "kind": "segment",
+   "a": [
+    -8.0,
+    -1.8
+   ],
+   "b": [
+    -4.7,
+    -1.8
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Break_Rear"
+  },
+  {
+   "id": "W_Research_Front_run0",
+   "kind": "segment",
+   "a": [
+    -4.7,
+    -1.8
+   ],
+   "b": [
+    -4.25,
+    -1.8
+   ],
+   "halfWidth": 0.05,
+   "source": "W_Research_Front"
+  },
+  {
+   "id": "W_Research_Front_run1",
+   "kind": "segment",
+   "a": [
+    -3.25,
+    -1.8
+   ],
+   "b": [
+    -2.9,
+    -1.8
+   ],
+   "halfWidth": 0.05,
+   "source": "W_Research_Front"
+  },
+  {
+   "id": "W_Dev_Front_run0",
+   "kind": "segment",
+   "a": [
+    2.9,
+    -1.8
+   ],
+   "b": [
+    3.55,
+    -1.8
+   ],
+   "halfWidth": 0.05,
+   "source": "W_Dev_Front"
+  },
+  {
+   "id": "W_Dev_Front_run1",
+   "kind": "segment",
+   "a": [
+    4.55,
+    -1.8
+   ],
+   "b": [
+    4.7,
+    -1.8
+   ],
+   "halfWidth": 0.05,
+   "source": "W_Dev_Front"
+  },
+  {
+   "id": "W_Ops_Rear_run0",
+   "kind": "segment",
+   "a": [
+    4.7,
+    -1.8
+   ],
+   "b": [
+    8.0,
+    -1.8
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Ops_Rear"
+  },
+  {
+   "id": "W_Break_Inner_run0",
+   "kind": "segment",
+   "a": [
+    -4.7,
+    -1.8
+   ],
+   "b": [
+    -4.7,
+    -1.5
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Break_Inner"
+  },
+  {
+   "id": "W_Break_Inner_run1",
+   "kind": "segment",
+   "a": [
+    -4.7,
+    -0.5
+   ],
+   "b": [
+    -4.7,
+    2.35
+   ],
+   "halfWidth": 0.08,
+   "source": "W_Break_Inner"
+  },
+  {
+   "id": "W_Ops_Inner_run0",
+   "kind": "segment",
+   "a": [
+    4.7,
+    -1.8
+   ],
+   "b": [
+    4.7,
+    2.35
+   ],
+   "halfWidth": 0.05,
+   "source": "W_Ops_Inner"
+  },
+  {
+   "id": "Lobby_Doors_fp0",
+   "kind": "box",
+   "center": [
+    -0.5576,
+    4.3066
+   ],
+   "size": [
+    0.6,
+    0.06
+   ],
+   "yaw": 1.36136,
+   "source": "Lobby_Doors"
+  },
+  {
+   "id": "Lobby_Doors_fp1",
+   "kind": "box",
+   "center": [
+    0.5576,
+    4.3066
+   ],
+   "size": [
+    0.6,
+    0.06
+   ],
+   "yaw": -1.36136,
+   "source": "Lobby_Doors"
+  },
+  {
+   "id": "Lobby_Plant_Out_L_fp0",
+   "kind": "circle",
+   "center": [
+    -1.78,
+    5.82
+   ],
+   "radius": 0.25,
+   "source": "Lobby_Plant_Out_L"
+  },
+  {
+   "id": "Lobby_Plant_In_L_fp0",
+   "kind": "circle",
+   "center": [
+    -1.9,
+    4.1
+   ],
+   "radius": 0.23,
+   "source": "Lobby_Plant_In_L"
+  },
+  {
+   "id": "Lobby_Plant_Out_R_fp0",
+   "kind": "circle",
+   "center": [
+    1.78,
+    5.82
+   ],
+   "radius": 0.25,
+   "source": "Lobby_Plant_Out_R"
+  },
+  {
+   "id": "Lobby_Plant_In_R_fp0",
+   "kind": "circle",
+   "center": [
+    1.9,
+    4.1
+   ],
+   "radius": 0.23,
+   "source": "Lobby_Plant_In_R"
+  },
+  {
+   "id": "Lobby_Kiosk_fp0",
+   "kind": "box",
+   "center": [
+    1.55,
+    3.62
+   ],
+   "size": [
+    0.36,
+    0.3
+   ],
+   "yaw": -1.5708,
+   "source": "Lobby_Kiosk"
+  },
+  {
+   "id": "Front_Planter_L_fp0",
+   "kind": "box",
+   "center": [
+    -3.55,
+    4.3
+   ],
+   "size": [
+    2.0,
+    0.3
+   ],
+   "yaw": 0.0,
+   "source": "Front_Planter_L"
+  },
+  {
+   "id": "Front_Plant_L_fp0",
+   "kind": "circle",
+   "center": [
+    -2.75,
+    4.15
+   ],
+   "radius": 0.23,
+   "source": "Front_Plant_L"
+  },
+  {
+   "id": "Front_Planter_R_fp0",
+   "kind": "box",
+   "center": [
+    3.55,
+    4.3
+   ],
+   "size": [
+    2.0,
+    0.3
+   ],
+   "yaw": 0.0,
+   "source": "Front_Planter_R"
+  },
+  {
+   "id": "Front_Plant_R_fp0",
+   "kind": "circle",
+   "center": [
+    2.75,
+    3.9
+   ],
+   "radius": 0.23,
+   "source": "Front_Plant_R"
+  },
+  {
+   "id": "Command_Console_fp0",
+   "kind": "circle",
+   "center": [
+    0.5871,
+    -3.9486
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp1",
+   "kind": "circle",
+   "center": [
+    0.6842,
+    -3.815
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp2",
+   "kind": "circle",
+   "center": [
+    0.7513,
+    -3.6641
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp3",
+   "kind": "circle",
+   "center": [
+    0.7857,
+    -3.5026
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp4",
+   "kind": "circle",
+   "center": [
+    0.7857,
+    -3.3374
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp5",
+   "kind": "circle",
+   "center": [
+    0.7513,
+    -3.1759
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp6",
+   "kind": "circle",
+   "center": [
+    0.6842,
+    -3.025
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp7",
+   "kind": "circle",
+   "center": [
+    0.5871,
+    -2.8914
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp8",
+   "kind": "circle",
+   "center": [
+    0.4644,
+    -2.7809
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp9",
+   "kind": "circle",
+   "center": [
+    0.3213,
+    -2.6983
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp10",
+   "kind": "circle",
+   "center": [
+    0.1643,
+    -2.6473
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp11",
+   "kind": "circle",
+   "center": [
+    0.0,
+    -2.63
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp12",
+   "kind": "circle",
+   "center": [
+    -0.1643,
+    -2.6473
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp13",
+   "kind": "circle",
+   "center": [
+    -0.3213,
+    -2.6983
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp14",
+   "kind": "circle",
+   "center": [
+    -0.4644,
+    -2.7809
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp15",
+   "kind": "circle",
+   "center": [
+    -0.5871,
+    -2.8914
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp16",
+   "kind": "circle",
+   "center": [
+    -0.6842,
+    -3.025
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp17",
+   "kind": "circle",
+   "center": [
+    -0.7513,
+    -3.1759
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp18",
+   "kind": "circle",
+   "center": [
+    -0.7857,
+    -3.3374
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp19",
+   "kind": "circle",
+   "center": [
+    -0.7857,
+    -3.5026
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp20",
+   "kind": "circle",
+   "center": [
+    -0.7513,
+    -3.6641
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp21",
+   "kind": "circle",
+   "center": [
+    -0.6842,
+    -3.815
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Console_fp22",
+   "kind": "circle",
+   "center": [
+    -0.5871,
+    -3.9486
+   ],
+   "radius": 0.23,
+   "source": "Command_Console"
+  },
+  {
+   "id": "Command_Display_fp0",
+   "kind": "box",
+   "center": [
+    -1.7976,
+    -4.2967
+   ],
+   "size": [
+    1.09,
+    0.12
+   ],
+   "yaw": 1.11701,
+   "source": "Command_Display"
+  },
+  {
+   "id": "Command_Display_fp1",
+   "kind": "box",
+   "center": [
+    -1.0598,
+    -5.1161
+   ],
+   "size": [
+    1.09,
+    0.12
+   ],
+   "yaw": 0.55851,
+   "source": "Command_Display"
+  },
+  {
+   "id": "Command_Display_fp2",
+   "kind": "box",
+   "center": [
+    0.0,
+    -5.42
+   ],
+   "size": [
+    1.09,
+    0.12
+   ],
+   "yaw": 0.0,
+   "source": "Command_Display"
+  },
+  {
+   "id": "Command_Display_fp3",
+   "kind": "box",
+   "center": [
+    1.0598,
+    -5.1161
+   ],
+   "size": [
+    1.09,
+    0.12
+   ],
+   "yaw": -0.55851,
+   "source": "Command_Display"
+  },
+  {
+   "id": "Command_Display_fp4",
+   "kind": "box",
+   "center": [
+    1.7976,
+    -4.2967
+   ],
+   "size": [
+    1.09,
+    0.12
+   ],
+   "yaw": -1.11701,
+   "source": "Command_Display"
+  },
+  {
+   "id": "Command_Plant_Front_L_fp0",
+   "kind": "circle",
+   "center": [
+    -2.2,
+    -2.35
+   ],
+   "radius": 0.24,
+   "source": "Command_Plant_Front_L"
+  },
+  {
+   "id": "Command_Plant_Rear_L_fp0",
+   "kind": "circle",
+   "center": [
+    -2.405,
+    -5.105
+   ],
+   "radius": 0.23,
+   "source": "Command_Plant_Rear_L"
+  },
+  {
+   "id": "Command_Plant_Front_R_fp0",
+   "kind": "circle",
+   "center": [
+    2.2,
+    -2.325
+   ],
+   "radius": 0.24,
+   "source": "Command_Plant_Front_R"
+  },
+  {
+   "id": "Command_Plant_Rear_R_fp0",
+   "kind": "circle",
+   "center": [
+    2.445,
+    -5.07
+   ],
+   "radius": 0.23,
+   "source": "Command_Plant_Rear_R"
+  },
+  {
+   "id": "Desk_01_Desk_fp0",
+   "kind": "box",
+   "center": [
+    -3.93,
+    0.65
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 3.14159,
+   "source": "Desk_01_Desk"
+  },
+  {
+   "id": "Desk_01_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    -3.37,
+    -0.06
+   ],
+   "radius": 0.25,
+   "source": "Desk_01_Chair"
+  },
+  {
+   "id": "Desk_04_Desk_fp0",
+   "kind": "box",
+   "center": [
+    -3.93,
+    1.25
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 6.28319,
+   "source": "Desk_04_Desk"
+  },
+  {
+   "id": "Desk_04_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    -3.37,
+    1.96
+   ],
+   "radius": 0.25,
+   "source": "Desk_04_Chair"
+  },
+  {
+   "id": "Desk_02_Desk_fp0",
+   "kind": "box",
+   "center": [
+    -2.85,
+    0.65
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 3.14159,
+   "source": "Desk_02_Desk"
+  },
+  {
+   "id": "Desk_02_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    -3.41,
+    -0.06
+   ],
+   "radius": 0.25,
+   "source": "Desk_02_Chair"
+  },
+  {
+   "id": "Desk_05_Desk_fp0",
+   "kind": "box",
+   "center": [
+    -2.85,
+    1.25
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 6.28319,
+   "source": "Desk_05_Desk"
+  },
+  {
+   "id": "Desk_05_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    -3.41,
+    1.96
+   ],
+   "radius": 0.25,
+   "source": "Desk_05_Chair"
+  },
+  {
+   "id": "Desk_03_Desk_fp0",
+   "kind": "box",
+   "center": [
+    -1.77,
+    0.65
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 3.14159,
+   "source": "Desk_03_Desk"
+  },
+  {
+   "id": "Desk_03_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    -1.21,
+    -0.06
+   ],
+   "radius": 0.25,
+   "source": "Desk_03_Chair"
+  },
+  {
+   "id": "Desk_06_Desk_fp0",
+   "kind": "box",
+   "center": [
+    -1.77,
+    1.25
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 6.28319,
+   "source": "Desk_06_Desk"
+  },
+  {
+   "id": "Desk_06_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    -1.21,
+    1.96
+   ],
+   "radius": 0.25,
+   "source": "Desk_06_Chair"
+  },
+  {
+   "id": "Workers_Divider_fp0",
+   "kind": "box",
+   "center": [
+    -2.85,
+    0.95
+   ],
+   "size": [
+    3.2,
+    0.08
+   ],
+   "yaw": 0.0,
+   "source": "Workers_Divider"
+  },
+  {
+   "id": "Workers_Cabinet_W_fp0",
+   "kind": "box",
+   "center": [
+    -4.48,
+    0.95
+   ],
+   "size": [
+    0.5,
+    0.36
+   ],
+   "yaw": 1.5708,
+   "source": "Workers_Cabinet_W"
+  },
+  {
+   "id": "Workers_GlassRail_fp0",
+   "kind": "box",
+   "center": [
+    -0.98,
+    0.95
+   ],
+   "size": [
+    2.0,
+    0.1
+   ],
+   "yaw": 1.5708,
+   "source": "Workers_GlassRail"
+  },
+  {
+   "id": "Workers_Plant_1_fp0",
+   "kind": "circle",
+   "center": [
+    -4.45,
+    1.62
+   ],
+   "radius": 0.2,
+   "source": "Workers_Plant_1"
+  },
+  {
+   "id": "Workers_Plant_2_fp0",
+   "kind": "circle",
+   "center": [
+    -0.98,
+    2.2
+   ],
+   "radius": 0.21,
+   "source": "Workers_Plant_2"
+  },
+  {
+   "id": "Workers_Plant_3_fp0",
+   "kind": "circle",
+   "center": [
+    -4.45,
+    -0.1
+   ],
+   "radius": 0.2,
+   "source": "Workers_Plant_3"
+  },
+  {
+   "id": "Research_Shelf_1_fp0",
+   "kind": "box",
+   "center": [
+    -6.55,
+    -5.35
+   ],
+   "size": [
+    0.9,
+    0.34
+   ],
+   "yaw": 0.0,
+   "source": "Research_Shelf_1"
+  },
+  {
+   "id": "Research_Shelf_2_fp0",
+   "kind": "box",
+   "center": [
+    -5.63,
+    -5.35
+   ],
+   "size": [
+    0.9,
+    0.34
+   ],
+   "yaw": 0.0,
+   "source": "Research_Shelf_2"
+  },
+  {
+   "id": "Research_Shelf_3_fp0",
+   "kind": "box",
+   "center": [
+    -4.71,
+    -5.35
+   ],
+   "size": [
+    0.9,
+    0.34
+   ],
+   "yaw": 0.0,
+   "source": "Research_Shelf_3"
+  },
+  {
+   "id": "Research_Shelf_4_fp0",
+   "kind": "box",
+   "center": [
+    -3.79,
+    -5.35
+   ],
+   "size": [
+    0.9,
+    0.34
+   ],
+   "yaw": 0.0,
+   "source": "Research_Shelf_4"
+  },
+  {
+   "id": "Research_Desk_Desk_fp0",
+   "kind": "box",
+   "center": [
+    -7.62,
+    -3.0
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 1.5708,
+   "source": "Research_Desk_Desk"
+  },
+  {
+   "id": "Research_Desk_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    -6.91,
+    -3.56
+   ],
+   "radius": 0.25,
+   "source": "Research_Desk_Chair"
+  },
+  {
+   "id": "Research_Table_fp0",
+   "kind": "circle",
+   "center": [
+    -4.75,
+    -3.5
+   ],
+   "radius": 0.44,
+   "source": "Research_Table"
+  },
+  {
+   "id": "Research_Chair_1_fp0",
+   "kind": "circle",
+   "center": [
+    -5.2017,
+    -2.8397
+   ],
+   "radius": 0.28,
+   "source": "Research_Chair_1"
+  },
+  {
+   "id": "Research_Chair_2_fp0",
+   "kind": "circle",
+   "center": [
+    -4.2712,
+    -4.1409
+   ],
+   "radius": 0.28,
+   "source": "Research_Chair_2"
+  },
+  {
+   "id": "Research_Cabinet_fp0",
+   "kind": "box",
+   "center": [
+    -7.62,
+    -4.55
+   ],
+   "size": [
+    0.7,
+    0.4
+   ],
+   "yaw": 1.5708,
+   "source": "Research_Cabinet"
+  },
+  {
+   "id": "Research_Robot_fp0",
+   "kind": "circle",
+   "center": [
+    -7.35,
+    -3.75
+   ],
+   "radius": 0.2,
+   "source": "Research_Robot"
+  },
+  {
+   "id": "Research_Plant_1_fp0",
+   "kind": "circle",
+   "center": [
+    -3.41,
+    -4.925
+   ],
+   "radius": 0.23,
+   "source": "Research_Plant_1"
+  },
+  {
+   "id": "Research_Plant_2_fp0",
+   "kind": "circle",
+   "center": [
+    -3.2,
+    -2.95
+   ],
+   "radius": 0.2,
+   "source": "Research_Plant_2"
+  },
+  {
+   "id": "Research_Plant_3_fp0",
+   "kind": "circle",
+   "center": [
+    -7.2,
+    -5.05
+   ],
+   "radius": 0.21,
+   "source": "Research_Plant_3"
+  },
+  {
+   "id": "Research_Lamp_fp0",
+   "kind": "circle",
+   "center": [
+    -7.6,
+    -2.12
+   ],
+   "radius": 0.16,
+   "source": "Research_Lamp"
+  },
+  {
+   "id": "Dev_Desk_1_Desk_fp0",
+   "kind": "box",
+   "center": [
+    3.65,
+    -5.2
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 6.28319,
+   "source": "Dev_Desk_1_Desk"
+  },
+  {
+   "id": "Dev_Desk_1_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    4.21,
+    -4.49
+   ],
+   "radius": 0.25,
+   "source": "Dev_Desk_1_Chair"
+  },
+  {
+   "id": "Dev_Desk_2_Desk_fp0",
+   "kind": "box",
+   "center": [
+    4.78,
+    -5.2
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": 6.28319,
+   "source": "Dev_Desk_2_Desk"
+  },
+  {
+   "id": "Dev_Desk_2_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    4.22,
+    -4.49
+   ],
+   "radius": 0.25,
+   "source": "Dev_Desk_2_Chair"
+  },
+  {
+   "id": "W_TestBay_Front_run0",
+   "kind": "segment",
+   "a": [
+    5.75,
+    -2.85
+   ],
+   "b": [
+    7.72,
+    -2.85
+   ],
+   "halfWidth": 0.03,
+   "source": "W_TestBay_Front"
+  },
+  {
+   "id": "W_TestBay_Side_run0",
+   "kind": "segment",
+   "a": [
+    5.75,
+    -5.1
+   ],
+   "b": [
+    5.75,
+    -3.65
+   ],
+   "halfWidth": 0.03,
+   "source": "W_TestBay_Side"
+  },
+  {
+   "id": "Test_RobotArm_fp0",
+   "kind": "circle",
+   "center": [
+    7.0,
+    -4.6
+   ],
+   "radius": 0.42,
+   "source": "Test_RobotArm"
+  },
+  {
+   "id": "Test_Bench_fp0",
+   "kind": "box",
+   "center": [
+    6.85,
+    -3.78
+   ],
+   "size": [
+    0.85,
+    0.4
+   ],
+   "yaw": 0.0,
+   "source": "Test_Bench"
+  },
+  {
+   "id": "Test_Rack_fp0",
+   "kind": "box",
+   "center": [
+    6.12,
+    -4.95
+   ],
+   "size": [
+    0.62,
+    0.62
+   ],
+   "yaw": 0.0,
+   "source": "Test_Rack"
+  },
+  {
+   "id": "Dev_Cabinet_fp0",
+   "kind": "box",
+   "center": [
+    3.25,
+    -2.25
+   ],
+   "size": [
+    0.62,
+    0.4
+   ],
+   "yaw": 1.5708,
+   "source": "Dev_Cabinet"
+  },
+  {
+   "id": "Dev_Plant_1_fp0",
+   "kind": "circle",
+   "center": [
+    5.48,
+    -5.15
+   ],
+   "radius": 0.22,
+   "source": "Dev_Plant_1"
+  },
+  {
+   "id": "Dev_Plant_2_fp0",
+   "kind": "circle",
+   "center": [
+    7.47,
+    -2.25
+   ],
+   "radius": 0.2,
+   "source": "Dev_Plant_2"
+  },
+  {
+   "id": "Reporting_Screen_fp0",
+   "kind": "box",
+   "center": [
+    3.15,
+    -0.05
+   ],
+   "size": [
+    1.426,
+    0.42
+   ],
+   "yaw": -0.38,
+   "source": "Reporting_Screen"
+  },
+  {
+   "id": "Reporting_Table_fp0",
+   "kind": "circle",
+   "center": [
+    2.45,
+    1.5
+   ],
+   "radius": 0.32,
+   "source": "Reporting_Table"
+  },
+  {
+   "id": "Reporting_Stool_3_fp0",
+   "kind": "circle",
+   "center": [
+    2.3211,
+    2.1065
+   ],
+   "radius": 0.2,
+   "source": "Reporting_Stool_3"
+  },
+  {
+   "id": "Reporting_Stool_1_fp0",
+   "kind": "circle",
+   "center": [
+    1.9872,
+    0.9484
+   ],
+   "radius": 0.2,
+   "source": "Reporting_Stool_1"
+  },
+  {
+   "id": "Reporting_Stool_2_fp0",
+   "kind": "circle",
+   "center": [
+    3.1696,
+    1.4749
+   ],
+   "radius": 0.2,
+   "source": "Reporting_Stool_2"
+  },
+  {
+   "id": "Reporting_Plant_1_fp0",
+   "kind": "circle",
+   "center": [
+    4.35,
+    -0.85
+   ],
+   "radius": 0.23,
+   "source": "Reporting_Plant_1"
+  },
+  {
+   "id": "Reporting_Plant_2_fp0",
+   "kind": "circle",
+   "center": [
+    1.25,
+    -0.98
+   ],
+   "radius": 0.2,
+   "source": "Reporting_Plant_2"
+  },
+  {
+   "id": "Reporting_Plant_3_fp0",
+   "kind": "circle",
+   "center": [
+    4.42,
+    2.05
+   ],
+   "radius": 0.19,
+   "source": "Reporting_Plant_3"
+  },
+  {
+   "id": "Ops_Console_fp0",
+   "kind": "box",
+   "center": [
+    7.1,
+    -0.95
+   ],
+   "size": [
+    0.9,
+    0.45
+   ],
+   "yaw": -1.5708,
+   "source": "Ops_Console"
+  },
+  {
+   "id": "Ops_Cabinet_fp0",
+   "kind": "box",
+   "center": [
+    5.6,
+    -1.53
+   ],
+   "size": [
+    0.95,
+    0.42
+   ],
+   "yaw": 0.0,
+   "source": "Ops_Cabinet"
+  },
+  {
+   "id": "Ops_Terminal_fp0",
+   "kind": "box",
+   "center": [
+    7.45,
+    3.25
+   ],
+   "size": [
+    0.36,
+    0.3
+   ],
+   "yaw": -2.3,
+   "source": "Ops_Terminal"
+  },
+  {
+   "id": "Ops_Plant_1_fp0",
+   "kind": "circle",
+   "center": [
+    7.62,
+    -1.43
+   ],
+   "radius": 0.22,
+   "source": "Ops_Plant_1"
+  },
+  {
+   "id": "Ops_Rack_fp0",
+   "kind": "box",
+   "center": [
+    6.55,
+    -1.45
+   ],
+   "size": [
+    0.62,
+    0.62
+   ],
+   "yaw": 0.0,
+   "source": "Ops_Rack"
+  },
+  {
+   "id": "Ops_Planter_fp0",
+   "kind": "box",
+   "center": [
+    4.98,
+    0.6
+   ],
+   "size": [
+    1.6,
+    0.3
+   ],
+   "yaw": 1.5708,
+   "source": "Ops_Planter"
+  },
+  {
+   "id": "Ops_Station_fp0",
+   "kind": "box",
+   "center": [
+    6.65,
+    3.0
+   ],
+   "size": [
+    1.0,
+    0.6
+   ],
+   "yaw": -1.5708,
+   "source": "Ops_Station"
+  },
+  {
+   "id": "Ops_Station_Chair_fp0",
+   "kind": "circle",
+   "center": [
+    6.04,
+    3.0
+   ],
+   "radius": 0.25,
+   "source": "Ops_Station_Chair"
+  },
+  {
+   "id": "Ops_Stool_1_fp0",
+   "kind": "circle",
+   "center": [
+    5.85,
+    1.55
+   ],
+   "radius": 0.2,
+   "source": "Ops_Stool_1"
+  },
+  {
+   "id": "Ops_Stool_2_fp0",
+   "kind": "circle",
+   "center": [
+    5.85,
+    0.95
+   ],
+   "radius": 0.2,
+   "source": "Ops_Stool_2"
+  },
+  {
+   "id": "Ops_Plant_3_fp0",
+   "kind": "circle",
+   "center": [
+    5.04,
+    3.91
+   ],
+   "radius": 0.23,
+   "source": "Ops_Plant_3"
+  },
+  {
+   "id": "Break_Counter_fp0",
+   "kind": "box",
+   "center": [
+    -6.45,
+    -1.51
+   ],
+   "size": [
+    2.4,
+    0.42
+   ],
+   "yaw": 0.0,
+   "source": "Break_Counter"
+  },
+  {
+   "id": "Break_Sofa_fp0",
+   "kind": "box",
+   "center": [
+    -7.59,
+    1.35
+   ],
+   "size": [
+    1.75,
+    0.66
+   ],
+   "yaw": 1.5708,
+   "source": "Break_Sofa"
+  },
+  {
+   "id": "Break_Chair_1_fp0",
+   "kind": "circle",
+   "center": [
+    -5.2812,
+    0.7269
+   ],
+   "radius": 0.39,
+   "source": "Break_Chair_1"
+  },
+  {
+   "id": "Break_Chair_2_fp0",
+   "kind": "circle",
+   "center": [
+    -5.2812,
+    2.0131
+   ],
+   "radius": 0.39,
+   "source": "Break_Chair_2"
+  },
+  {
+   "id": "Break_Table_fp0",
+   "kind": "circle",
+   "center": [
+    -6.15,
+    1.35
+   ],
+   "radius": 0.42,
+   "source": "Break_Table"
+  },
+  {
+   "id": "Break_Lamp_fp0",
+   "kind": "circle",
+   "center": [
+    -7.62,
+    2.55
+   ],
+   "radius": 0.16,
+   "source": "Break_Lamp"
+  },
+  {
+   "id": "Break_Plant_1_fp0",
+   "kind": "circle",
+   "center": [
+    -5.05,
+    -1.4
+   ],
+   "radius": 0.23,
+   "source": "Break_Plant_1"
+  },
+  {
+   "id": "Break_Plant_2_fp0",
+   "kind": "circle",
+   "center": [
+    -7.55,
+    3.15
+   ],
+   "radius": 0.23,
+   "source": "Break_Plant_2"
+  },
+  {
+   "id": "Break_Plant_4_fp0",
+   "kind": "circle",
+   "center": [
+    -5.1,
+    4.1
+   ],
+   "radius": 0.2,
+   "source": "Break_Plant_4"
+  },
+  {
+   "id": "Break_WaterCooler_fp0",
+   "kind": "circle",
+   "center": [
+    -7.6,
+    -0.3
+   ],
+   "radius": 0.18,
+   "source": "Break_WaterCooler"
+  },
+  {
+   "id": "Aisle_Plant_R_fp0",
+   "kind": "circle",
+   "center": [
+    1.25,
+    -0.35
+   ],
+   "radius": 0.2,
+   "source": "Aisle_Plant_R"
+  }
+ ],
+ "cameras": [
+  {
+   "id": "main",
+   "label": "Main Isometric",
+   "position": [
+    0.0,
+    10.6,
+    15.2
+   ],
+   "target": [
+    0.0,
+    0.0,
+    -0.6
+   ],
+   "fov": 36
+  },
+  {
+   "id": "front",
+   "label": "Front",
+   "position": [
+    0.0,
+    4.6,
+    17.5
+   ],
+   "target": [
+    0.0,
+    0.6,
+    -0.4
+   ],
+   "fov": 34
+  },
+  {
+   "id": "top",
+   "label": "Top / Floor plan",
+   "position": [
+    0.0,
+    24.0,
+    0.35
+   ],
+   "target": [
+    0.0,
+    0.0,
+    0.3
+   ],
+   "fov": 34
+  },
+  {
+   "id": "left",
+   "label": "Left Oblique",
+   "position": [
+    -11.5,
+    15.5,
+    8.5
+   ],
+   "target": [
+    -0.6,
+    0.0,
+    -0.6
+   ],
+   "fov": 32
+  },
+  {
+   "id": "right",
+   "label": "Right Oblique",
+   "position": [
+    11.5,
+    15.5,
+    8.5
+   ],
+   "target": [
+    0.6,
+    0.0,
+    -0.6
+   ],
+   "fov": 32
+  },
+  {
+   "id": "lobby",
+   "label": "Lobby / Entry",
+   "position": [
+    0.0,
+    3.3,
+    9.6
+   ],
+   "target": [
+    0.0,
+    0.5,
+    4.6
+   ],
+   "fov": 36,
+   "zone": "lobby"
+  },
+  {
+   "id": "command",
+   "label": "Central Command Hub",
+   "position": [
+    0.0,
+    3.6,
+    2.4
+   ],
+   "target": [
+    0.0,
+    0.85,
+    -3.9
+   ],
+   "fov": 36,
+   "zone": "command"
+  },
+  {
+   "id": "workers",
+   "label": "Worker Desk Zone",
+   "position": [
+    -1.0,
+    3.6,
+    5.6
+   ],
+   "target": [
+    -2.85,
+    0.35,
+    0.95
+   ],
+   "fov": 36,
+   "zone": "workers"
+  },
+  {
+   "id": "research",
+   "label": "Research Corner",
+   "position": [
+    -2.6,
+    3.7,
+    1.2
+   ],
+   "target": [
+    -5.4,
+    0.6,
+    -3.7
+   ],
+   "fov": 36,
+   "zone": "research"
+  },
+  {
+   "id": "devtest",
+   "label": "Dev / Test Lab",
+   "position": [
+    2.8,
+    3.8,
+    1.3
+   ],
+   "target": [
+    5.4,
+    0.55,
+    -3.8
+   ],
+   "fov": 36,
+   "zone": "devtest"
+  },
+  {
+   "id": "reporting",
+   "label": "Reporting Area",
+   "position": [
+    0.4,
+    3.1,
+    4.6
+   ],
+   "target": [
+    3.0,
+    0.5,
+    0.9
+   ],
+   "fov": 36,
+   "zone": "reporting"
+  },
+  {
+   "id": "ops",
+   "label": "Ops Wall",
+   "position": [
+    3.4,
+    3.4,
+    3.9
+   ],
+   "target": [
+    7.0,
+    0.7,
+    0.9
+   ],
+   "fov": 36,
+   "zone": "ops"
+  },
+  {
+   "id": "break",
+   "label": "Break Area",
+   "position": [
+    -3.3,
+    3.3,
+    4.7
+   ],
+   "target": [
+    -6.5,
+    0.4,
+    0.9
+   ],
+   "fov": 36,
+   "zone": "break"
+  }
+ ],
+ "lights": [
+  {
+   "id": "Sun",
+   "type": "directional",
+   "position": [
+    -6.5,
+    14.0,
+    9.0
+   ],
+   "target": [
+    0.0,
+    0.0,
+    -0.5
+   ],
+   "color": "#fff4e2",
+   "intensity": 2.4,
+   "castShadow": true
+  },
+  {
+   "id": "Sky",
+   "type": "hemisphere",
+   "sky": "#eef4ff",
+   "ground": "#e8dcc8",
+   "intensity": 0.9
+  },
+  {
+   "id": "Cmd_Key",
+   "type": "spot",
+   "position": [
+    0.0,
+    3.0,
+    -1.6
+   ],
+   "target": [
+    0.0,
+    0.7,
+    -3.55
+   ],
+   "color": "#fff1dc",
+   "intensity": 9.0,
+   "angle": 0.55,
+   "penumbra": 0.8,
+   "distance": 7
+  },
+  {
+   "id": "Cmd_Cyan",
+   "type": "point",
+   "position": [
+    0.0,
+    0.25,
+    -3.55
+   ],
+   "color": "#3fd4f0",
+   "intensity": 1.2,
+   "distance": 2.6
+  },
+  {
+   "id": "Break_Warm",
+   "type": "point",
+   "position": [
+    -6.6,
+    1.6,
+    1.3
+   ],
+   "color": "#ffd9a8",
+   "intensity": 2.2,
+   "distance": 5
+  },
+  {
+   "id": "Research_Warm",
+   "type": "point",
+   "position": [
+    -5.2,
+    1.7,
+    -4.4
+   ],
+   "color": "#ffe2b8",
+   "intensity": 1.8,
+   "distance": 5
+  },
+  {
+   "id": "Ops_Cyan",
+   "type": "point",
+   "position": [
+    7.1,
+    1.2,
+    1.05
+   ],
+   "color": "#4cc9f0",
+   "intensity": 1.4,
+   "distance": 4
+  },
+  {
+   "id": "Dev_Cyan",
+   "type": "point",
+   "position": [
+    6.6,
+    1.1,
+    -3.9
+   ],
+   "color": "#5fd0ff",
+   "intensity": 1.0,
+   "distance": 3.2
+  }
+ ],
+ "signs": [
+  {
+   "id": "SIGN_Lobby_Transom",
+   "text": "OpenBot",
+   "sub": "WORK BRIGHTER TOGETHER",
+   "style": "navy",
+   "logo": true
+  },
+  {
+   "id": "SIGN_WelcomeMat",
+   "text": "OpenBot",
+   "sub": "WELCOME",
+   "style": "mat",
+   "logo": true
+  },
+  {
+   "id": "SIGN_Quote_FrontL",
+   "text": "Different skills.\nSame bigger tomorrow.",
+   "style": "script"
+  },
+  {
+   "id": "SIGN_Quote_FrontR",
+   "text": "Good ideas lead to\nbrighter tomorrows.",
+   "style": "script",
+   "smile": true
+  },
+  {
+   "id": "SIGN_Quote_Break",
+   "text": "Better helpers,\nhappier tomorrows.",
+   "style": "scriptLarge"
+  },
+  {
+   "id": "SIGN_Research_Board",
+   "text": "Ideas today.\nA brighter tomorrow.",
+   "style": "whiteboard"
+  },
+  {
+   "id": "SIGN_Command_Header",
+   "text": "OpenBot",
+   "sub": "SMALL HELPERS. BIG POSSIBILITIES.",
+   "style": "header",
+   "logo": true
+  }
+ ]
+}
