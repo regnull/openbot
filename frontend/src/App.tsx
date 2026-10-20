@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import SaveNotification from "./components/SaveNotification";
 import CustomCaret from "./components/CustomCaret";
@@ -14,11 +15,33 @@ import BotPage from "./pages/BotPage";
 import SettingsPage from "./pages/SettingsPage";
 import ScheduledPage from "./pages/ScheduledPage";
 import DocumentTitle from "./components/DocumentTitle";
+import { Spinner } from "./components/ui";
+
+// Internal 3D character lab: lazy so three.js stays out of the main bundle, and outside the
+// backend gates because it only needs static assets.
+const OpenlingsLabPage = lazy(() => import("./pages/OpenlingsLabPage"));
+const OfficeLabPage = lazy(() => import("./pages/OfficeLabPage"));
 
 export default function App() {
   return (
     <>
     <DocumentTitle />
+    <Routes>
+      <Route path="/lab/openlings" element={
+        <Suspense fallback={<div className="flex h-dvh items-center justify-center"><Spinner /></div>}><OpenlingsLabPage /></Suspense>
+      } />
+      <Route path="/lab/office" element={
+        <Suspense fallback={<div className="flex h-dvh items-center justify-center"><Spinner /></div>}><OfficeLabPage /></Suspense>
+      } />
+      <Route path="*" element={<MainApp />} />
+    </Routes>
+    </>
+  );
+}
+
+function MainApp() {
+  return (
+    <>
     <CustomCaret />
     <SaveNotification />
     <ApiKeyGate>

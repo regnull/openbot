@@ -9,6 +9,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/bots/new": "New bot",
   "/settings": "Settings",
   "/scheduled": "Scheduled",
+  "/lab/openlings": "Openlings Lab",
+  "/lab/office": "Living Office",
 };
 
 function pageTitleFor(pathname: string): string | undefined {
