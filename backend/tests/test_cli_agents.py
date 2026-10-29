@@ -750,5 +750,43 @@ async def test_api_accepts_cli_bots_without_a_model_and_checks_their_settings(cl
     assert bad.status_code == 422 and "model" in bad.text
 
 
+async def test_providers_lists_the_cli_by_whether_it_is_found_without_running_it(client, settings, fake, tmp_path):
+    home, exe = fake
+    settings.claude_code_path = str(tmp_path / "no-claude")
+    r = await client.get("/api/v1/providers")
+    assert r.json()["cli_agents"] == [{"id": "claude-code", "label": "Claude Code", "found": False,
+                                         "models": ["sonnet", "opus", "haiku"]}]
+    assert "claude-code" not in {p["id"] for p in r.json()["providers"]}
+    settings.claude_code_path = str(exe)
+    assert (await client.get("/api/v1/providers")).json()["cli_agents"][0]["found"] is True
+    assert not (home / "versions.txt").exists()
+
+
+async def test_cli_status_reports_path_version_and_login(client, settings, fake):
+    home, exe = fake
+    settings.claude_code_path = str(exe)
+    r = await client.get("/api/v1/providers/cli/claude-code")
+    assert r.status_code == 200
+    assert r.json() == {"id": "claude-code", "label": "Claude Code", "path": str(exe), "version": "2.1.283",
+                        "logged_in": True, "problem": None}
+    (home / "auth_exit.txt").write_text("1")
+    r = await client.get("/api/v1/providers/cli/claude-code")
+    assert r.json()["logged_in"] is False and r.json()["problem"] == "Claude Code is not logged in. Run `claude auth login` in a terminal."
+    assert (await client.get("/api/v1/providers/cli/openai")).status_code == 404
+
+
+async def test_cli_status_says_why_the_cli_is_unusable(client, settings, fake, tmp_path, monkeypatch):
+    home, exe = fake
+    settings.claude_code_path = str(tmp_path / "no-claude")
+    r = (await client.get("/api/v1/providers/cli/claude-code")).json()
+    assert r["path"] is None and r["problem"].startswith("Claude Code CLI (claude) not found") and "CLAUDE_CODE_PATH" in r["problem"]
+    settings.claude_code_path = str(exe)
+    monkeypatch.setenv("FAKE_CLAUDE_VERSION", "2.1.100 (Claude Code)")
+    (home / "auth_exit.txt").write_text("1")
+    r = (await client.get("/api/v1/providers/cli/claude-code")).json()
+    assert r["version"] is None and r["logged_in"] is None
+    assert r["problem"] == "Claude Code 2.1.100 is too old; OpenBot needs 2.1.248 or later. Update it with `claude update`."
+
+
 def test_settings_default_timeout(settings):
     assert settings.cli_agent_timeout == 1800 and settings.claude_code_path is None

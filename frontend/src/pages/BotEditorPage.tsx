@@ -30,6 +30,9 @@ const Toggle = ({ checked, onChange, children }: { checked: boolean; onChange: (
   <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /> {children}</label>
 );
 
+// The CLI hints quote commands in backticks.
+const withCode = (text: string) => text.split("`").map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part));
+
 const empty: BotInput = { handle: "", name: "", description: "", icon: DEFAULT_BOT_ICON, instructions: "", provider: "auto", model: "", model_settings: {},
   tool_names: [], approval_tools: [], skill_names: [], memory_enabled: true, enabled: true };
 
@@ -91,6 +94,11 @@ export default function BotEditorPage() {
   const isAuto = form.provider === "auto";
   const auto = providers.data?.providers.find((p) => p.id === "auto");
   const prov = providers.data?.providers.find((p) => p.id === form.provider);
+  const cliAgents = providers.data?.cli_agents ?? [];
+  const cli = cliAgents.find((a) => a.id === form.provider);
+  // Runs the CLI (version, login), so only once a bot is on it; refetched on focus, e.g. after a login.
+  const cliStatus = useQuery({ queryKey: ["cli-agent", cli?.id], queryFn: () => Api.getCliAgent(cli!.id), enabled: !!cli });
+  const permission = form.model_settings.permission === "edit" ? "edit" : "read-only";
   // The model whose effort levels apply: the bot's own, or for "auto" whatever the server resolves to.
   const autoTarget = isAuto ? splitAutoDefault(auto?.default_model) : null;
   const effortProvider = isAuto ? autoTarget?.provider : form.provider;
@@ -108,7 +116,7 @@ export default function BotEditorPage() {
   // effective_bot_profile runs a bot on its own provider and model; only a cloud bot whose provider has
   // no key falls back to the default OpenRouter model, when OpenRouter is configured.
   const configured = (id: string) => providers.data?.providers.find((p) => p.id === id)?.configured ?? false;
-  const rerouted = !isAuto && form.provider !== "ollama" && form.provider !== "openrouter"
+  const rerouted = !isAuto && !cli && form.provider !== "ollama" && form.provider !== "openrouter"
     && !configured(form.provider) && configured("openrouter");
   const grouped = groupTools(tools.data?.tools ?? []);
   const unavailable = unavailableGrants(form.tool_names, tools.data?.tools ?? []);
@@ -160,7 +168,7 @@ export default function BotEditorPage() {
         </Field></div>
         <div className="sm:col-span-2"><Field label="Instructions" hint="The system prompt. Say what the bot is for, how it should work, and when to hand off."><Textarea rows={12} value={form.instructions} onChange={(e) => set("instructions", e.target.value)} className="font-sans text-[13.5px]" /></Field></div>
         <SectionTitle className="sm:col-span-2">Model</SectionTitle>
-        <Field label="Provider" hint="Auto picks whichever provider is configured on the server and keeps working if that changes.">
+        <Field label="Provider" hint={cli ? `Runs the installed ${cli.label} CLI with the login you set up for it.` : "Auto picks whichever provider is configured on the server and keeps working if that changes."}>
           <Select value={form.provider} onChange={(e) => {
             const value = e.target.value;
             if (value === "auto") { setForm((f) => ({ ...f, provider: "auto", model: "" })); return; }
@@ -169,11 +177,17 @@ export default function BotEditorPage() {
           }}>
             <option value="auto">Auto (recommended){auto?.configured ? "" : " (no provider configured)"}</option>
             {providers.data?.providers.filter((p) => p.id !== "auto").map((p) => <option key={p.id} value={p.id}>{p.id}{p.configured ? "" : " (not configured)"}</option>)}
+            {cliAgents.filter((a) => a.found || a.id === form.provider).map((a) => <option key={a.id} value={a.id}>{a.label}{a.found ? "" : " (not found)"}</option>)}
           </Select>
         </Field>
         {isAuto ? (
           <Field label="Model" hint="Chosen automatically from the configured provider.">
             <Input value={auto?.configured ? `auto (currently ${auto.default_model})` : "auto (no provider configured yet)"} disabled />
+          </Field>
+        ) : cli ? (
+          <Field label="Model" hint="Passed to the CLI. Empty uses the CLI's own default.">
+            <Input list="cli-models" value={form.model} onChange={(e) => set("model", e.target.value)} placeholder="CLI default" />
+            <datalist id="cli-models">{cli.models.map((m) => <option key={m} value={m} />)}</datalist>
           </Field>
         ) : hasCatalog(form.provider) ? (
           <Field label="Model" hint="Pick from the catalog or type any model id.">
@@ -194,6 +208,24 @@ export default function BotEditorPage() {
             </Select>
           </Field>
         )}
+        {cli && (
+          <>
+            <Field label="Access" hint={permission === "edit"
+              ? "Reads and changes files in the thread's working directory. Runs no commands."
+              : "Reads files in the thread's working directory. Changes nothing, runs no commands."}>
+              <Select aria-label="Access" value={permission} onChange={(e) => set("model_settings", { ...form.model_settings, permission: e.target.value })}>
+                <option value="read-only">Read only</option>
+                <option value="edit">Read and edit files</option>
+              </Select>
+            </Field>
+            <Hint className={`text-xs sm:col-span-2${cliStatus.data?.problem ? " text-warn" : ""}`}>
+              {cliStatus.isLoading ? `Checking ${cli.label}…`
+                : cliStatus.data?.problem ? withCode(cliStatus.data.problem)
+                : cliStatus.data ? `${cli.label} ${cliStatus.data.version} at ${cliStatus.data.path}, ${cliStatus.data.logged_in ? "logged in" : "login state unknown"}.`
+                : `Could not check ${cli.label}.`}
+            </Hint>
+          </>
+        )}
         {rerouted && (
           <Hint className="text-xs text-warn sm:col-span-2">
             No {form.provider} key is configured, so this bot runs on the default OpenRouter model from Settings. This model is saved and used once a {form.provider} key is added.
@@ -205,69 +237,78 @@ export default function BotEditorPage() {
           <Toggle checked={form.enabled} onChange={(v) => set("enabled", v)}>Enabled</Toggle>
         </div>
       </Card>
-      <Card className="space-y-3">
-        <SectionTitle>Tools</SectionTitle>
-        <Hint className="text-xs">Core tools (ask_human, list_bots, memory, history recall) are always available.</Hint>
-        <p className="rounded-ui border border-warn/40 border-l-2 border-l-warn bg-warn/[0.06] px-3 py-2 font-sans text-xs leading-relaxed text-fg"><span className="font-mono text-warn">run_shell</span> is not sandboxed. It runs any command as the server user, with access to the whole filesystem and the server environment, including your provider API keys. Only the file tools are confined to the workspace.</p>
-        {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-danger">{e.file}: {e.error}</p>)}
-        <div className="divide-y divide-line">
-          {grouped.flat.map((t) => <ToolRow key={t.name} name={t.name} label={t.name} description={t.description} on={form.tool_names.includes(t.name)} approval={form.approval_tools.includes(t.name)} onToggle={() => toggleTool(t.name)} onToggleApproval={() => toggleApproval(t.name)} />)}
-        </div>
-        {grouped.servers.length > 0 && (
-          <>
-            <SectionTitle className="pt-2">MCP servers</SectionTitle>
-            <Hint className="text-xs">Grant a whole server, or expand it and pick tools. Only connected servers list their tools; grants for a server that is disabled or down are kept and shown below so you can remove them.</Hint>
+      {cli ? (
+        <Card className="space-y-3">
+          <SectionTitle>Tools</SectionTitle>
+          <Hint className="text-xs">{cli.label} works with its own file tools at the access level above. OpenBot's tools, skills and MCP servers are not available inside it.</Hint>
+        </Card>
+      ) : (
+        <>
+          <Card className="space-y-3">
+            <SectionTitle>Tools</SectionTitle>
+            <Hint className="text-xs">Core tools (ask_human, list_bots, memory, history recall) are always available.</Hint>
+            <p className="rounded-ui border border-warn/40 border-l-2 border-l-warn bg-warn/[0.06] px-3 py-2 font-sans text-xs leading-relaxed text-fg"><span className="font-mono text-warn">run_shell</span> is not sandboxed. It runs any command as the server user, with access to the whole filesystem and the server environment, including your provider API keys. Only the file tools are confined to the workspace.</p>
+            {tools.data?.errors.map((e) => <p key={e.file} className="text-xs text-danger">{e.file}: {e.error}</p>)}
             <div className="divide-y divide-line">
-              {grouped.servers.map((g) => {
-                const names = g.tools.map((t) => t.name);
-                const state = groupState(names, form.tool_names);
-                const expanded = !!openGroups[g.server];
-                return (
-                  <div key={g.server} className="py-2">
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={state === "all"} ref={(el) => { if (el) el.indeterminate = state === "some"; }}
-                        onChange={() => setForm((f) => ({ ...f, ...toggleGroup(f, names) }))} aria-label={`All ${g.server} tools`} />
-                      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={expanded} onClick={() => setOpenGroups((o) => ({ ...o, [g.server]: !expanded }))}>
-                        <span className="text-[13px]">{g.server}</span>
-                        <span className="text-xs text-muted">{state === "all" ? `all ${names.length}` : state === "some" ? `${names.filter((n) => form.tool_names.includes(n)).length} of ${names.length}` : `${names.length}`} tools</span>
-                        <span className="ml-auto text-faint">{expanded ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}</span>
-                      </button>
-                    </div>
-                    {expanded && <div className="ml-6 divide-y divide-line/60">{g.tools.map((t) => <ToolRow key={t.name} name={t.name} label={toolLabel(g.server, t.name)} description={t.description} on={form.tool_names.includes(t.name)} approval={form.approval_tools.includes(t.name)} onToggle={() => toggleTool(t.name)} onToggleApproval={() => toggleApproval(t.name)} />)}</div>}
-                  </div>
-                );
-              })}
+              {grouped.flat.map((t) => <ToolRow key={t.name} name={t.name} label={t.name} description={t.description} on={form.tool_names.includes(t.name)} approval={form.approval_tools.includes(t.name)} onToggle={() => toggleTool(t.name)} onToggleApproval={() => toggleApproval(t.name)} />)}
             </div>
-          </>
-        )}
-        {unavailable.length > 0 && (
-          <>
-            <SectionTitle className="pt-2">Granted but currently unavailable</SectionTitle>
-            <Hint className="text-xs">These tools are granted to the bot but their server is not connected right now. They come back when it is; untick to remove the grant.</Hint>
-            <div className="divide-y divide-line">
-              {unavailable.map((n) => <ToolRow key={n} name={n} label={n} description="not available right now" on approval={form.approval_tools.includes(n)} onToggle={() => toggleTool(n)} onToggleApproval={() => toggleApproval(n)} />)}
-            </div>
-          </>
-        )}
-      </Card>
-      <Card>
-        <SectionTitle>Skills</SectionTitle>
-        <Hint className="text-xs">Enable skills to give this bot specialized, on-demand instructions. A skill's name and description are added to the prompt; the bot loads the full instructions with load_skill when a task matches.</Hint>
-        {(skills.data?.skills.length ?? 0) === 0 ? (
-          <Hint className="text-xs">No skills found. Drop a SKILL.md (name + description front matter) under skills/ in the workspace, e.g. skills/git-rebase/SKILL.md.</Hint>
-        ) : (
-          <div className="divide-y divide-line">
-            {skills.data!.skills.map((s) => (
-              <Toggle key={s.id} checked={form.skill_names.includes(s.id)} onChange={() => toggleSkill(s.id)}>
-                <span className="min-w-0">
-                  <span className="font-medium text-fg">{s.id}</span>
-                  <span className="block text-xs text-muted">{s.description}</span>
-                </span>
-              </Toggle>
-            ))}
-          </div>
-        )}
-      </Card>
+            {grouped.servers.length > 0 && (
+              <>
+                <SectionTitle className="pt-2">MCP servers</SectionTitle>
+                <Hint className="text-xs">Grant a whole server, or expand it and pick tools. Only connected servers list their tools; grants for a server that is disabled or down are kept and shown below so you can remove them.</Hint>
+                <div className="divide-y divide-line">
+                  {grouped.servers.map((g) => {
+                    const names = g.tools.map((t) => t.name);
+                    const state = groupState(names, form.tool_names);
+                    const expanded = !!openGroups[g.server];
+                    return (
+                      <div key={g.server} className="py-2">
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" checked={state === "all"} ref={(el) => { if (el) el.indeterminate = state === "some"; }}
+                            onChange={() => setForm((f) => ({ ...f, ...toggleGroup(f, names) }))} aria-label={`All ${g.server} tools`} />
+                          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={expanded} onClick={() => setOpenGroups((o) => ({ ...o, [g.server]: !expanded }))}>
+                            <span className="text-[13px]">{g.server}</span>
+                            <span className="text-xs text-muted">{state === "all" ? `all ${names.length}` : state === "some" ? `${names.filter((n) => form.tool_names.includes(n)).length} of ${names.length}` : `${names.length}`} tools</span>
+                            <span className="ml-auto text-faint">{expanded ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}</span>
+                          </button>
+                        </div>
+                        {expanded && <div className="ml-6 divide-y divide-line/60">{g.tools.map((t) => <ToolRow key={t.name} name={t.name} label={toolLabel(g.server, t.name)} description={t.description} on={form.tool_names.includes(t.name)} approval={form.approval_tools.includes(t.name)} onToggle={() => toggleTool(t.name)} onToggleApproval={() => toggleApproval(t.name)} />)}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {unavailable.length > 0 && (
+              <>
+                <SectionTitle className="pt-2">Granted but currently unavailable</SectionTitle>
+                <Hint className="text-xs">These tools are granted to the bot but their server is not connected right now. They come back when it is; untick to remove the grant.</Hint>
+                <div className="divide-y divide-line">
+                  {unavailable.map((n) => <ToolRow key={n} name={n} label={n} description="not available right now" on approval={form.approval_tools.includes(n)} onToggle={() => toggleTool(n)} onToggleApproval={() => toggleApproval(n)} />)}
+                </div>
+              </>
+            )}
+          </Card>
+          <Card>
+            <SectionTitle>Skills</SectionTitle>
+            <Hint className="text-xs">Enable skills to give this bot specialized, on-demand instructions. A skill's name and description are added to the prompt; the bot loads the full instructions with load_skill when a task matches.</Hint>
+            {(skills.data?.skills.length ?? 0) === 0 ? (
+              <Hint className="text-xs">No skills found. Drop a SKILL.md (name + description front matter) under skills/ in the workspace, e.g. skills/git-rebase/SKILL.md.</Hint>
+            ) : (
+              <div className="divide-y divide-line">
+                {skills.data!.skills.map((s) => (
+                  <Toggle key={s.id} checked={form.skill_names.includes(s.id)} onChange={() => toggleSkill(s.id)}>
+                    <span className="min-w-0">
+                      <span className="font-medium text-fg">{s.id}</span>
+                      <span className="block text-xs text-muted">{s.description}</span>
+                    </span>
+                  </Toggle>
+                ))}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
       <ErrorText error={save.error ?? remove.error} />
       <div className="flex gap-2">
         <Button type="submit" disabled={save.isPending}>{isNew ? "Create bot" : "Save"}</Button>

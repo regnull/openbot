@@ -177,6 +177,7 @@ class ClaudeCode(CliAdapter):
     update_hint = "Update it with `claude update`."
     status_argv = ("auth", "status")
     login_hint = "Run `claude auth login` in a terminal."
+    models = ("sonnet", "opus", "haiku")
 
     def install_dirs(self, *, home: str, env: Mapping[str, str], win: bool) -> list[str]:
         p = ntpath if win else posixpath

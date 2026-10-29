@@ -126,6 +126,7 @@ class CliAdapter(ABC):
     # The CLI's own "am I logged in" command; its exit code is the answer (0 means yes).
     status_argv: tuple[str, ...] = ()
     login_hint: str = ""
+    models: tuple[str, ...] = ()        # suggestions for the editor; any model the CLI accepts works
     session_id_re: re.Pattern[str] = re.compile(r"^[0-9a-fA-F-]{8,64}$")
 
     def install_dirs(self, *, home: str, env: Mapping[str, str], win: bool) -> list[str]:
@@ -310,9 +311,11 @@ async def login_status(adapter: CliAdapter, executable: str, env: dict[str, str]
 _versions: dict[tuple[str, float], tuple[int, int, int]] = {}
 
 
-async def check_version(adapter: CliAdapter, executable: str, env: dict[str, str]) -> None:
+async def check_version(adapter: CliAdapter, executable: str, env: dict[str, str]) -> tuple[int, int, int] | None:
+    """The installed version, or None for a CLI without a minimum. Raises CliAgentError when it is too old
+    or cannot be read."""
     if adapter.min_version == (0, 0, 0):
-        return
+        return None
     try:
         key = (executable, os.path.getmtime(executable))
     except OSError:
@@ -330,6 +333,7 @@ async def check_version(adapter: CliAdapter, executable: str, env: dict[str, str
     if _versions[key] < adapter.min_version:
         raise CliAgentError(f"error: {adapter.label} {'.'.join(map(str, _versions[key]))} is too old; OpenBot needs "
                             f"{'.'.join(map(str, adapter.min_version))} or later. {adapter.update_hint}".rstrip())
+    return _versions[key]
 
 
 async def _tail(stream: asyncio.StreamReader | None) -> str:

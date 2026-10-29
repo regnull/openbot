@@ -167,3 +167,57 @@ it("lists discovered skills and saves the enabled ones", async () => {
   await until(() => update.mock.calls.length > 0);
   expect(update.mock.calls[0][1].skill_names).toEqual(["py"]);
 });
+
+const pick = (select: HTMLSelectElement, value: string) => act(async () => {
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+});
+const providerSelect = () => el.querySelectorAll<HTMLSelectElement>("select")[0];
+const withCli = (found: boolean): ProvidersOut => ({ ...providers,
+  providers: providers.providers.map((p) => (p.id === "openrouter" ? { ...p, configured: true } : p)),
+  cli_agents: [{ id: "claude-code", label: "Claude Code", found, models: ["sonnet", "opus"] }] });
+const ready = { id: "claude-code", label: "Claude Code", path: "/usr/local/bin/claude", version: "2.1.283", logged_in: true, problem: null };
+
+it("offers Claude Code only when the CLI is found, and replaces the tools with its access level", async () => {
+  vi.mocked(Api.getProviders).mockResolvedValue(withCli(false));
+  const status = vi.spyOn(Api, "getCliAgent").mockResolvedValue(ready);
+  vi.spyOn(Api, "getBot").mockResolvedValue({ ...bot("b1", "Opus"), provider: "anthropic", model: "claude-opus-5-5" });
+  await show("/edit/b1");
+  await until(() => nameInput() === "Opus" && qc.getQueryData(["providers"]) !== undefined);
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect([...providerSelect().options].map((o) => o.value)).not.toContain("claude-code");
+
+  vi.mocked(Api.getProviders).mockResolvedValue(withCli(true));
+  qc.clear();
+  await show("/edit/b1");
+  await until(() => [...providerSelect()?.options ?? []].some((o) => o.value === "claude-code"));
+  expect(status).not.toHaveBeenCalled();
+  await pick(providerSelect(), "claude-code");
+  await until(() => el.textContent!.includes("Claude Code 2.1.283 at /usr/local/bin/claude, logged in."));
+  expect(el.querySelector<HTMLInputElement>("input[list=cli-models]")!.value).toBe("");
+  expect(el.querySelector<HTMLSelectElement>("select[aria-label=Access]")!.value).toBe("read-only");
+  expect(el.textContent).toContain("Changes nothing, runs no commands.");
+  expect(el.textContent).not.toContain("run_shell");
+  expect(el.textContent).not.toContain("default OpenRouter model");
+  expect(effortSelect()).toBeNull();
+
+  const update = vi.spyOn(Api, "updateBot").mockImplementation(async (id, b) => ({ ...bot(id, "Opus"), ...b } as Bot));
+  await pick(el.querySelector<HTMLSelectElement>("select[aria-label=Access]")!, "edit");
+  expect(el.textContent).toContain("Reads and changes files in the thread's working directory. Runs no commands.");
+  await submit();
+  await until(() => update.mock.calls.length > 0);
+  expect(update.mock.calls[0][1]).toMatchObject({ provider: "claude-code", model: "", model_settings: { permission: "edit" } });
+});
+
+it("says why a CLI bot cannot run, also when the CLI is gone", async () => {
+  vi.mocked(Api.getProviders).mockResolvedValue(withCli(false));
+  vi.spyOn(Api, "getCliAgent").mockResolvedValue({ ...ready, path: null, version: null, logged_in: null,
+    problem: "Claude Code CLI (claude) not found. Install it, log in once in a terminal, then restart OpenBot." });
+  vi.spyOn(Api, "getBot").mockResolvedValue({ ...bot("b1", "Coder"), provider: "claude-code", model: "sonnet", model_settings: { permission: "edit" } });
+  await show("/edit/b1");
+  await until(() => el.textContent!.includes("Claude Code CLI (claude) not found."));
+  expect(providerSelect().value).toBe("claude-code");
+  expect(providerSelect().selectedOptions[0].textContent).toBe("Claude Code (not found)");
+  expect(el.querySelector<HTMLSelectElement>("select[aria-label=Access]")!.value).toBe("edit");
+  expect(el.querySelector<HTMLInputElement>("input[list=cli-models]")!.value).toBe("sonnet");
+});
