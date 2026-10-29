@@ -8,7 +8,7 @@ import { dismissSaveNotification, notifySave, useSaveMutation } from "../lib/sav
 import { formatSettingValue, groupSettings, parseSettingInput, type SettingGroup } from "../lib/appSettings";
 import { formatArgs, formatKeyValues, mcpActions, mcpInFlight, mcpStatusBadge, parseArgs, parseKeyValues, validateNewMcpServer, type McpTransport } from "../lib/mcpServers";
 import { ChevronDownIcon, ChevronRightIcon } from "../components/icons";
-import { groupTools, toolLabel } from "../lib/toolGroups";
+import { groupState, groupTools, setGroup, toolLabel } from "../lib/toolGroups";
 
 const emptyExt = { handle: "", name: "", webhook_url: "", webhook_secret: "" };
 const Code = ({ children }: { children: React.ReactNode }) => <code className="rounded-ui border border-line bg-sunken px-1 text-[11px]">{children}</code>;
@@ -297,7 +297,7 @@ function McpServersCard() {
         <SectionTitle className="flex-1">MCP servers</SectionTitle>
         <Button variant="secondary" size="sm" onClick={() => setDialog({ mode: "add" })}>Add server</Button>
       </div>
-      <Hint>Tools from Model Context Protocol servers, remote (HTTPS, OAuth when the server asks) or local (a command run over stdio). Tools appear in the tool list as <Code>server__tool</Code>; grant them per bot in the bot editor, by server or one at a time.</Hint>
+      <Hint>Tools from Model Context Protocol servers, remote (HTTPS, OAuth when the server asks) or local (a command run over stdio). Tools appear in the tool list as <Code>server__tool</Code>; grant them per bot in the bot editor, by server or one at a time, or to several bots at once under Edit.</Hint>
       <details><summary className="cursor-pointer text-sm font-medium">Browse MCP catalog</summary><div className="pt-3"><McpCatalog installed={servers.data ?? []} onInstalled={refresh} /></div></details>
       {dialog && <McpServerDialog server={dialog.mode === "edit" ? dialog.server : undefined} onClose={() => setDialog(null)} onSaved={() => { setDialog(null); refresh(); }} />}
       <ErrorText error={servers.error ?? connect.error ?? disconnect.error ?? forget.error ?? remove.error ?? toggleEnabled.error} />
@@ -381,6 +381,11 @@ function McpCatalog({ installed, onInstalled }: { installed: McpServer[]; onInst
 
 function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onClose: () => void; onSaved: () => void }) {
   const editing = !!server;
+  const qc = useQueryClient();
+  const bots = useQuery({ queryKey: ["bots"], queryFn: Api.listBots, enabled: editing });
+  const serverTools = server?.tools ?? [];
+  // Bots ticked or unticked here: true grants all of the server's tools, false clears them.
+  const [grants, setGrants] = useState<Record<string, boolean>>({});
   const [transport, setTransport] = useState<McpTransport>(server?.transport ?? "http");
   const [name, setName] = useState(server?.name ?? "");
   const [url, setUrl] = useState(server?.url ?? "");
@@ -393,11 +398,19 @@ function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onC
   const errors = validateNewMcpServer(name, url, transport, command);
   const kv = parseKeyValues(transport === "http" ? headers : env);
   const save = useSaveMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const body: McpServerInput = transport === "http"
         ? { url: url.trim(), headers: kv.values }
         : { command: command.trim(), args: parseArgs(args), env: kv.values, cwd: cwd.trim() || null };
-      return editing ? Api.updateMcpServer(server!.name, body) : Api.addMcpServer({ name: name.trim(), ...body });
+      if (!editing) return Api.addMcpServer({ name: name.trim(), ...body });
+      try {
+        for (const b of bots.data ?? []) {
+          if (b.id in grants) await Api.updateBot(b.id, setGroup(b, serverTools, grants[b.id]));
+        }
+      } finally {
+        if (Object.keys(grants).length) { qc.invalidateQueries({ queryKey: ["bots"] }); qc.invalidateQueries({ queryKey: ["bot"] }); }
+      }
+      return Api.updateMcpServer(server!.name, body);
     },
     onSuccess: onSaved,
   }, editing ? "MCP server settings saved" : "MCP server added");
@@ -446,8 +459,34 @@ function McpServerDialog({ server, onClose, onSaved }: { server?: McpServer; onC
           <Input value={cwd} placeholder="Working directory (optional)" onChange={(e) => setCwd(e.target.value)} />
         </>
       )}
+      {editing && (
+        <div className="space-y-1">
+          <div className="text-xs font-medium">Bots with this server's tools</div>
+          {serverTools.length === 0 ? (
+            <Hint className="text-xs">Connect the server to grant its tools to bots here.</Hint>
+          ) : (
+            <>
+              <div className="max-h-48 divide-y divide-line overflow-y-auto">
+                {bots.data?.map((b) => {
+                  const state = b.id in grants ? (grants[b.id] ? "all" : "none") : groupState(serverTools, b.tool_names);
+                  return (
+                    <label key={b.id} className="flex items-center gap-2 py-1.5 text-[13px]">
+                      <input type="checkbox" checked={state === "all"} ref={(el) => { if (el) el.indeterminate = state === "some"; }}
+                        onChange={() => setGrants((g) => ({ ...g, [b.id]: state !== "all" }))} aria-label={`Grant ${server!.name} to @${b.handle}`} />
+                      <span>@{b.handle}</span>
+                      <span className="text-xs text-muted">{b.name}</span>
+                      {state === "some" && <span className="ml-auto text-xs text-muted">{serverTools.filter((t) => b.tool_names.includes(t)).length} of {serverTools.length}</span>}
+                    </label>
+                  );
+                })}
+              </div>
+              <Hint className="text-xs">Grants every tool the server has now. Tools it adds later, and single tools, are granted in the bot editor.</Hint>
+            </>
+          )}
+        </div>
+      )}
       <Hint className="text-xs">Only add servers from developers you trust. OpenBot does not control which tools a server exposes or what they do, and every bot you grant those tools acts with whatever access you provide. Mark tools that write as needing approval in the bot editor.</Hint>
-      <ErrorText error={save.error} />
+      <ErrorText error={save.error ?? bots.error} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
         <Button type="submit" disabled={save.isPending || (touched && (Object.keys(errors).length > 0 || !!kv.error))}>{save.isPending ? "Saving…" : editing ? "Save" : "Continue"}</Button>

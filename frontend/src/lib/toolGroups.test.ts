@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolInfo } from "../api/types";
-import { groupState, groupTools, toggleGroup, toolLabel, unavailableGrants } from "./toolGroups";
+import { groupState, groupTools, setGroup, toggleGroup, toolLabel, unavailableGrants } from "./toolGroups";
 
 const tool = (name: string, source: string): ToolInfo => ({ name, description: name, source, args_schema: {} });
 const tools = [
@@ -35,6 +35,13 @@ describe("toggleGroup", () => {
       .toEqual({ tool_names: ["run_shell", "Linear__create_issue", "Linear__list_issues"], approval_tools: ["Linear__create_issue"] });
     expect(toggleGroup({ tool_names: ["run_shell", ...names], approval_tools: ["Linear__create_issue", "run_shell"] }, names))
       .toEqual({ tool_names: ["run_shell"], approval_tools: ["run_shell"] });
+  });
+
+  it("setGroup grants or clears the server's tools whatever the current state", () => {
+    const names = ["Linear__create_issue", "Linear__list_issues"];
+    const some = { tool_names: ["run_shell", "Linear__create_issue"], approval_tools: ["Linear__create_issue"] };
+    expect(setGroup(some, names, true)).toEqual({ tool_names: ["run_shell", ...names], approval_tools: ["Linear__create_issue"] });
+    expect(setGroup(some, names, false)).toEqual({ tool_names: ["run_shell"], approval_tools: [] });
   });
 });
 
