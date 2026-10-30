@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     # its usual install locations unless its *_PATH names the executable; a run is stopped after the
     # timeout (a bot can set its own in model_settings.timeout_seconds).
     claude_code_path: str | None = None
+    hermes_path: str | None = None
+    opencode_path: str | None = None
     cli_agent_timeout: int = 1800
 
     max_concurrent_runs: int = 4
