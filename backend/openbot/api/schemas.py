@@ -215,6 +215,8 @@ class RunOut(BaseModel):
     total_tokens: int | None = None
     cost_usd: float | None = None
     model_calls: int | None = None
+    changed_files: list[str] | None = None
+    diff: str | None = None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
