@@ -275,6 +275,52 @@ def test_cli_bots_and_runs():
     assert r2.exit_code == 0 and "r1" in r2.output
 
 
+def test_cli_connect_saves_and_pings(tmp_path, monkeypatch):
+    cfg = tmp_path / "cfg.json"
+    captured = {}
+
+    class _FakeClient:
+        def __init__(self, base_url, api_key=None):
+            captured["base_url"] = base_url
+            captured["api_key"] = api_key
+
+        def ping(self):
+            captured["pinged"] = True
+            return {"status": "ok"}
+
+    monkeypatch.setattr(cli_mod, "OpenBotClient", _FakeClient)
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.cli, ["connect", "https://example.test", "--api-key", "sek", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert "Saved connection" in result.output
+    assert "Connection OK" in result.output
+    assert captured["base_url"] == "https://example.test"
+    assert captured["api_key"] == "sek"
+    assert captured["pinged"] is True
+    saved = json.loads(cfg.read_text())
+    assert saved["base_url"] == "https://example.test"
+    assert saved["api_key"] == "sek"
+
+
+def test_cli_connect_warns_when_server_unreachable(tmp_path, monkeypatch):
+    cfg = tmp_path / "cfg.json"
+
+    class _FakeClient:
+        def __init__(self, base_url, api_key=None):
+            pass
+
+        def ping(self):
+            raise OpenBotClientError("GET /api/v1/health -> 500")
+
+    monkeypatch.setattr(cli_mod, "OpenBotClient", _FakeClient)
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.cli, ["connect", "https://down.test", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert "Warning:" in result.output
+    # Config is still saved even though the probe failed.
+    assert json.loads(cfg.read_text())["base_url"] == "https://down.test"
+
+
 def test_cli_issues_fetches_github(monkeypatch):
     class FakeResp:
         status_code = 200

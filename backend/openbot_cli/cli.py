@@ -2,7 +2,7 @@
 
 Commands mirror the core web-UI flows against a running OpenBot server:
 
-    openbot connect <url> [--api-key KEY]   Save connection settings
+    openbot connect <url> [--api-key KEY]   Save + verify connection settings
     openbot threads [list]                  List threads
     openbot thread <id> [watch]             Show a thread (or live-follow it)
     openbot send <thread> "<msg>" [--bot @h] Post a message, optionally @-ing a bot
@@ -19,10 +19,11 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 import click
 
-from openbot_cli.client import GitHubIssuesClient, OpenBotClient
+from openbot_cli.client import GitHubIssuesClient, OpenBotClient, OpenBotClientError
 from openbot_cli.config import (
     CONFIG_PATH,
     ConfigError,
@@ -69,8 +70,13 @@ def cli(ctx: click.Context, base_url: str | None, api_key: str | None) -> None:
 @click.option("--api-key", default=None, help="API key to store alongside the URL.")
 @click.option("--config", "config_path", default=None, type=click.Path(), help="Config file (advanced).")
 def connect(url: str | None, api_key: str | None, config_path: str | None) -> None:
-    """Save the OpenBot server URL (and optional API key) for future commands."""
-    path = CONFIG_PATH if config_path is None else __import__("pathlib").Path(config_path)
+    """Save the OpenBot server URL (and optional API key) and verify it responds.
+
+    Persists the connection to the config file, then probes the server's public
+    ``/api/v1/health`` route so a bad URL or key surfaces immediately. A failed
+    probe is only a warning — the config is still saved so the user can retry.
+    """
+    path = CONFIG_PATH if config_path is None else Path(config_path)
     data = load_config(path)
     if url:
         data["base_url"] = url.rstrip("/")
@@ -78,6 +84,13 @@ def connect(url: str | None, api_key: str | None, config_path: str | None) -> No
         data["api_key"] = api_key
     saved = save_config(data, path)
     click.echo(f"Saved connection to {data['base_url']} ({saved})")
+    probe = OpenBotClient(base_url=data["base_url"], api_key=data.get("api_key"))
+    try:
+        probe.ping()
+    except OpenBotClientError as e:
+        click.echo(f"Warning: could not reach the server: {e}", err=True)
+        return
+    click.echo("Connection OK (/api/v1/health)")
 
 
 @cli.command("threads")
