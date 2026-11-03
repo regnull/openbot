@@ -36,11 +36,14 @@ export function groupState(names: string[], selected: string[]): GroupState {
 
 interface Selection { tool_names: string[]; approval_tools: string[] }
 
-/** Group checkbox: select every tool of the server unless all already are, in which case clear them.
- *  Approvals for cleared tools are dropped, since approval_tools must stay a subset of tool_names. */
-export function toggleGroup(sel: Selection, names: string[]): Selection {
-  if (groupState(names, sel.tool_names) === "all") {
+/** Grant all of `names`, or clear them. Approvals for cleared tools are dropped, since approval_tools must
+ *  stay a subset of tool_names. */
+export function setGroup(sel: Selection, names: string[], on: boolean): Selection {
+  if (!on) {
     return { tool_names: sel.tool_names.filter((n) => !names.includes(n)), approval_tools: sel.approval_tools.filter((n) => !names.includes(n)) };
   }
   return { tool_names: [...sel.tool_names, ...names.filter((n) => !sel.tool_names.includes(n))], approval_tools: sel.approval_tools };
 }
+
+/** Group checkbox: select every tool of the server unless all already are, in which case clear them. */
+export const toggleGroup = (sel: Selection, names: string[]): Selection => setGroup(sel, names, groupState(names, sel.tool_names) !== "all");
