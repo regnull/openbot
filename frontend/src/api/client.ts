@@ -1,4 +1,4 @@
-import type { Actor, AppSetting, Bot, BotCatalogEntry, DirectoryListing, McpCatalogEntry, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, BotScratchpad, InboxItem, Message, ModelsOut, ProvidersOut, PurgeResult, Run, RunDetail, SetupStatus, SkillInfo, Thread, ThreadDetail, ThreadUsage, ToolInfo, DatabaseLocation } from "./types";
+import type { Actor, AppSetting, Bot, BotCatalogEntry, DirectoryListing, McpCatalogEntry, McpConnectResult, McpServer, McpServerInput, BotInboxItem, BotInput, BotMemory, BotScratchpad, InboxItem, Message, ModelsOut, ProvidersOut, CliAgentStatus, PurgeResult, Run, RunDetail, SetupStatus, SkillInfo, Thread, ThreadDetail, ThreadUsage, ToolInfo, DatabaseLocation } from "./types";
 
 /** Outgoing attachment for postMessage: a data URL plus an optional display name. */
 export interface ScheduledMessage { id: string; thread_id: string; content: string; due_at: string; status: string; attempts: number; last_error?: string | null; result_message_id?: string | null; to_handles: string[]; }
@@ -88,5 +88,6 @@ export const Api = {
   createScheduled: (body: { thread_id: string; content: string; due_at: string; to: string[] }) => api<ScheduledMessage>("/scheduled", { method: "POST", json: body }),
   cancelScheduled: (id: string) => api<ScheduledMessage>(`/scheduled/${id}/cancel`, { method: "POST" }),
   getProviders: () => api<ProvidersOut>("/providers"),
+  getCliAgent: (provider: string) => api<CliAgentStatus>(`/providers/cli/${encodeURIComponent(provider)}`),
   getModels: (provider: string) => api<ModelsOut>(`/models?provider=${encodeURIComponent(provider)}`),
 };

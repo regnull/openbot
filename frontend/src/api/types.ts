@@ -32,7 +32,11 @@ export interface PurgeResult { cancelled_runs: number; purged_items: number; }
 export interface ToolInfo { name: string; description: string; source: string; args_schema: Record<string, unknown>; }
 export interface SkillInfo { id: string; name: string; description: string; path: string; }
 export interface ProviderInfo { id: string; configured: boolean; models: string[]; default_model: string; }
-export interface ProvidersOut { providers: ProviderInfo[]; embedding_model: string; embeddings_configured: boolean; }
+/** A coding agent CLI a bot can run on; `found` is only a file lookup. */
+export interface CliAgentInfo { id: string; label: string; found: boolean; models: string[]; }
+export interface ProvidersOut { providers: ProviderInfo[]; cli_agents?: CliAgentInfo[]; embedding_model: string; embeddings_configured: boolean; }
+/** GET /providers/cli/{id}: what running the CLI found out, or why it can't run. */
+export interface CliAgentStatus { id: string; label: string; path: string | null; version: string | null; logged_in: boolean | null; problem: string | null; }
 export interface CatalogModel { id: string; name: string; family: string; description: string; reasoning: boolean; effort_levels: string[]; image_input: boolean; context: number | null; output: number | null; cost_input: number | null; cost_output: number | null; cost_cache_read?: number | null; cost_cache_write?: number | null; cost_tiers?: Record<string, unknown>[]; release_date: string; status: string | null; task_ranks?: Record<string, number>; }
 export interface ModelsOut { provider: string; configured: boolean; source: "catalog" | "builtin"; stale: boolean; fetched_at: string | null; models: CatalogModel[]; }
 export interface BusEvent { event: string; thread_id: string | null; data: any; }

@@ -417,8 +417,9 @@ OpenBot-managed model, so it uses the login you already set up for that CLI. The
 threads, streams into the run card, hands off with `@mentions` and can be stopped like any other.
 Claude Code is supported; other CLIs can be added as adapters (`backend/openbot/runtime/cli_agents`).
 
-Install the CLI and log in once in a terminal, then create the bot through the API (there is no
-editor option for it yet):
+Install the CLI and log in once in a terminal. The bot editor then offers Claude Code as a provider,
+with the model and access level below, and shows where it found the CLI, its version and whether it
+is logged in (as `claude auth status` reports it). The same through the API:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/bots -H 'Content-Type: application/json' -d '{
