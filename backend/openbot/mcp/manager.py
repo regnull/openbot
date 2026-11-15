@@ -329,6 +329,9 @@ class McpManager:
             raw_tools = tools if tools is not None else await load_mcp_tools(session)
         except BaseException:
             stop.set()
+            # The holder may still be entering client.session(), where it cannot
+            # observe stop. Cancel it so a stalled handshake cannot hold shutdown.
+            task.cancel()
             await asyncio.gather(task, return_exceptions=True)
             raise
         previous = self._sessions.get(name)
