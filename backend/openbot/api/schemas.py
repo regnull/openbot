@@ -215,6 +215,10 @@ class RunOut(BaseModel):
     total_tokens: int | None = None
     cost_usd: float | None = None
     model_calls: int | None = None
+    # Files changed in the workspace while the run was active (runtime/snapshot.py). The diff
+    # itself is only on RunDetail: thread loads list every run, and diffs can be large.
+    changed_files: list[str] | None = None
+    changes_shared: bool | None = None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -247,6 +251,7 @@ class ActivityOut(BaseModel):
 
 
 class RunDetail(RunOut):
+    diff: str | None = None
     events: list[RunEventOut] = []
 
 

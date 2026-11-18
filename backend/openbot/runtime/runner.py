@@ -54,6 +54,7 @@ from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_
 from openbot.runtime.prompt import build_history, build_system_prompt_parts
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
+from openbot.runtime.snapshot import RunWindows, SnapshotStore, store_for_run
 from openbot.runtime.tool_failures import ToolFailureMiddleware
 from openbot.runtime.tool_loading import LOAD_TOOLS, DeferredToolsMiddleware
 from openbot.runtime.upstream import (
@@ -423,6 +424,15 @@ class Runner:
         self.s = services
         # Each bot's last OpenRouter upstream, so its next call lands on the same warm prompt cache.
         self.upstream_pins = UpstreamPins()
+        # Snapshot before-trees captured at run start, keyed by run id; consumed when the
+        # run ends (runtime/snapshot.py). Kept in memory: captures happen on the same
+        # worker that ends the run, and a crash loses nothing but a diff.
+        self._snapshot_before: dict[str, tuple[SnapshotStore, str]] = {}
+        # Which runs are active in which workspace, so a diff can say other runs shared its window.
+        self._snapshot_windows = RunWindows()
+        # After-captures run in the background once the run's status is recorded; held here
+        # so they are not garbage-collected mid-flight (and so tests can wait for them).
+        self._snapshot_tasks: set[asyncio.Task] = set()
 
     async def _run_turn_triggers(
         self, provider: str, model: str, system_prompt: SystemMessage | None = None
@@ -508,6 +518,82 @@ class Runner:
                     {"id": run.actor_id, "active": status in ("running", "waiting_human")},
                 )
             return run
+
+    async def _snapshot_capture_before(self, run_id: str, thread: Thread) -> None:
+        """Fingerprint the workspace before the run works in it.  Best effort: a failed
+        capture just leaves the run without a diff (runtime/snapshot.py).
+
+        A resumed run re-enters execute(); its original before-tree must survive the
+        pause so the final diff spans every segment of the run."""
+        if run_id in self._snapshot_before:
+            return
+        store = store_for_run(self.s.settings, thread)
+        if store is None:
+            return
+        # Open the window before capturing: a run that starts editing while this capture
+        # waits for the store lock must count as overlapping.
+        self._snapshot_windows.open(store.workspace_root, run_id)
+        tree = None
+        try:
+            tree = await store.capture(pin=run_id)
+        except Exception:
+            log.exception("could not capture snapshot before run %s", run_id)
+        finally:
+            if tree:
+                self._snapshot_before[run_id] = (store, tree)
+            else:
+                self._snapshot_windows.close(store.workspace_root, run_id)
+
+    async def _end_run(self, run_id: str, status: str, **status_kwargs) -> Run | None:
+        """Record the run's terminal status, then diff its workspace in the background.
+
+        The status is written first and the snapshot never runs inline: a slow `git add`
+        on a big workspace must not delay a run's ending, and a second cancellation while
+        it ran would otherwise skip the rest of the cancel path and leave the run "running"."""
+        run = await self._set_status(run_id, status, **status_kwargs)
+        self.snapshot_run_ended(run_id)
+        return run
+
+    def snapshot_run_ended(self, run_id: str) -> None:
+        """A run ended: start its after-capture in the background, if it has a before-tree.
+        Anything that ends a run outside execute() (cancelling a run parked on a human) must
+        call this too, or the run's workspace window stays open and flags every later run."""
+        entry = self._snapshot_before.pop(run_id, None)
+        if entry is None:
+            return
+        task = asyncio.create_task(self._snapshot_finish(run_id, *entry), name=f"snapshot-{run_id}")
+        self._snapshot_tasks.add(task)
+        task.add_done_callback(self._snapshot_tasks.discard)
+
+    async def wait_snapshots(self) -> None:
+        """Wait for in-flight after-captures (tests, and anything that reads diffs right away)."""
+        while self._snapshot_tasks:
+            await asyncio.gather(*list(self._snapshot_tasks), return_exceptions=True)
+
+    async def _snapshot_finish(self, run_id: str, store: SnapshotStore, before: str) -> None:
+        """Diff the workspace against the run's before-tree and attach the result to the run.
+        Best effort: any failure leaves the run's change columns NULL."""
+        try:
+            try:
+                after = await store.capture()
+            finally:
+                # Closed only once the after-tree is taken: a run that started editing while
+                # this one waited for the store lock is inside the window too.
+                shared = self._snapshot_windows.close(store.workspace_root, run_id)
+            rd = await store.diff(before, after) if after else None
+            if rd is None:
+                return
+            async with self.s.session_factory() as session:
+                run = await session.get(Run, run_id)
+                if run is None:
+                    return
+                run.changed_files, run.diff, run.changes_shared = rd.changed_files, rd.diff, shared
+                await session.commit()
+                await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
+        except Exception:
+            log.exception("could not attach snapshot diff to run %s", run_id)
+        finally:
+            await store.unpin(run_id)
 
     async def _reports_so_far(self, run_id: str) -> list[str]:
         async with self.s.session_factory() as session:
@@ -1020,6 +1106,22 @@ class Runner:
         return final_text, interrupt, seq, usage
 
     async def execute(self, run_id: str, resume: Command | None = None) -> None:
+        """Run (or resume) one run.  However it leaves -- finished, failed, cancelled at any
+        await, or bailing out early -- a run that is not parked on a human gets its workspace
+        snapshot finished, so its window never stays open (runtime/snapshot.py)."""
+        try:
+            await self._execute(run_id, resume)
+        except BaseException:
+            self.snapshot_run_ended(run_id)
+            raise
+        if run_id in self._snapshot_before:
+            async with self.s.session_factory() as session:
+                run = await session.get(Run, run_id)
+                parked = run is not None and run.status == "waiting_human"
+            if not parked:
+                self.snapshot_run_ended(run_id)
+
+    async def _execute(self, run_id: str, resume: Command | None = None) -> None:
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
             if run is None or run.status not in ("queued", "waiting_human"):
@@ -1059,6 +1161,7 @@ class Runner:
             workspace_root = thread_workspace_root(
                 self.s.settings.workspace_root, thread.working_directory
             )
+            await self._snapshot_capture_before(run.id, thread)
             eff_provider, eff_model = effective_bot_profile(bot.bot, self.s.settings)
             triggers = await self._run_turn_triggers(eff_provider, eff_model, system_prompt)
             log.info(
@@ -1164,7 +1267,7 @@ class Runner:
                     # run "waiting_human" forever -- unresumable, and showing the bot as busy everywhere.
                     err = "ask_human has no human or external participant in this thread to ask"
                     log.warning("run %s waiting_human but undeliverable: %s", run.id, err)
-                    await self._set_status(run.id, "failed", error=err)
+                    await self._end_run(run.id, "failed", error=err)
                     await self._record(run, await self._next_seq(run.id), "error", {"error": err})
                     await self._system_message(
                         thread.id, f"@{bot.handle} tried to ask a question, but {err}."
@@ -1185,7 +1288,7 @@ class Runner:
                         run_id=run.id,
                     )
                 seq = await self._record(run, seq, "message", {"message_id": res.message.id})
-            await self._set_status(run.id, "completed", langsmith_run_id=ls_id)
+            await self._end_run(run.id, "completed", langsmith_run_id=ls_id)
             log.info(
                 "run %s completed in %.1fs: reply=%d chars %s langsmith_run_id=%s",
                 run.id,
@@ -1207,7 +1310,7 @@ class Runner:
         except asyncio.CancelledError:
             log.info("run %s cancelled after %.1fs", run.id, time.monotonic() - started)
             await self._post_interrupted(bot, thread, run, hop, progress)
-            await self._set_status(run.id, "cancelled")
+            await self._end_run(run.id, "cancelled")
             await self._system_message(thread.id, f"@{bot.handle} run was cancelled.")
             await self._drop_checkpoint(run.id)
             raise
@@ -1215,7 +1318,7 @@ class Runner:
             log.exception("run %s failed", run.id)
             err = (str(e) if isinstance(e, CliAgentError) else f"{type(e).__name__}: {e}")[:2000]
             # Status first: the bookkeeping below is best-effort and must never leave the run in "running".
-            await self._set_status(run.id, "failed", error=err)
+            await self._end_run(run.id, "failed", error=err)
             try:
                 # Re-read the sequence: events recorded inside _stream are not visible to `seq` here.
                 await self._record(run, await self._next_seq(run.id), "error", {"error": err})

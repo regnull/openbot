@@ -108,8 +108,42 @@ export default function RunCard({ run, events, streaming, botName }: { run: Run;
           {run.error && <pre className="whitespace-pre-wrap rounded-ui border border-danger/30 bg-danger/5 p-2 text-danger">{run.error}</pre>}
           {streaming && <pre className="whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed text-fg">{streaming}<span className="caret ml-0.5" aria-hidden /></pre>}
           {body.length === 0 && !run.error && !streaming && <p className="px-1.5 text-faint">No tool calls.</p>}
+          {!!run.changed_files?.length && <RunChanges run={run} files={run.changed_files} />}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Files that changed in the workspace while the run was active. That is a time window, not
+ * attribution: when other runs worked in the same workspace meanwhile, some changes may be theirs.
+ * The diff is fetched only when opened — thread loads list every run, and diffs can be large.
+ */
+function RunChanges({ run, files }: { run: Run; files: string[] }) {
+  const [diffOpen, setDiffOpen] = useState(false);
+  const detail = useQuery({ queryKey: ["run-diff", run.id], queryFn: () => Api.getRun(run.id), enabled: diffOpen, staleTime: Infinity });
+  return (
+    <div className="rounded-ui border border-line bg-canvas p-2">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted">
+        <span className="font-medium text-fg" title="Files that changed in the workspace while this run was active">Workspace changes</span>
+        <span title={files.join("\n")}>{files.length} file{files.length === 1 ? "" : "s"}</span>
+        {files.slice(0, 4).map((f) => <code key={f} className="rounded bg-sunken px-1 py-0.5 font-mono">{f}</code>)}
+        {files.length > 4 && <span>+{files.length - 4} more</span>}
+      </div>
+      {run.changes_shared && (
+        <p className="mt-1 text-[11px] text-warn">Other runs were active in this workspace at the same time, so some of these changes may be theirs.</p>
+      )}
+      <details className="group mt-1.5" onToggle={(e) => setDiffOpen(e.currentTarget.open)}>
+        <summary className="cursor-pointer select-none list-none rounded px-1 py-0.5 text-[11px] text-muted hover:text-fg [&::-webkit-details-marker]:hidden">
+          <span className="inline-block transition-transform group-open:rotate-90">▸</span> View diff
+        </summary>
+        {detail.error ? <ErrorText error={detail.error} /> : (
+          <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-ui border border-line bg-canvas p-2 font-mono text-[10.5px] leading-relaxed text-muted scrollbar-subtle">
+            {detail.isPending ? "Loading…" : detail.data?.diff || "No diff available."}
+          </pre>
+        )}
+      </details>
     </div>
   );
 }

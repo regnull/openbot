@@ -507,6 +507,8 @@ class ActorSystem:
             await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
             await self.s.bus.publish("bots.updated", None, {"id": run.actor_id, "active": False})
             await publish_waiters(self.s, session, run.thread_id)
+        if self.s.runner is not None:
+            self.s.runner.snapshot_run_ended(run_id)   # a run parked on a human still has a workspace window open
         await self._drop_checkpoint(run_id)
         await self.notify(run.actor_id, thread_id=run.thread_id)     # parked thread may now have waiting mail
         return True
