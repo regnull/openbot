@@ -13,8 +13,15 @@ and packages/core/src/git.ts):
 - A snapshot is `git add -A` + `git write-tree` against the store: the resulting
   tree ID is a content-addressed fingerprint of the whole workspace tree.
 - Capturing before and after a run and diffing the two trees
-  (`git diff-tree --name-status` / `-p`) yields exactly the files that run's
-  tools changed, and the unified diff.
+  (`git diff-tree --name-status` / `-p`) yields the files that changed in the
+  workspace while the run was active, and the unified diff.
+
+That is a time window, not attribution: another bot working in the same
+workspace, a human's editor or a background build can change files inside the
+window too.  `RunWindows` records whether any other run was active in the same
+workspace during the window, so the UI can say the changes may not all be this
+run's.  The store keeps its index between captures, so a capture after the first
+only stats the worktree and hashes the files whose stat changed.
 
 The store's index is a pure cache that is rebuilt from the worktree on every
 capture, so concurrent runs (several bots sharing one workspace) never corrupt
@@ -25,10 +32,12 @@ serialize captures per store in-process as well.
 Revert is intentionally out of scope: several bots share one workspace, so
 reverting one run's snapshot would wipe out the other bots' edits.
 
-The workspace's own ignore rules (`.gitignore`, `.git/info/exclude`, global
-excludes) apply to the capture, exactly as they do to OpenCode's snapshot store;
-`.openbot` is additionally always excluded via the store's `info/exclude`, so a
-run can never record OpenBot's own state as one of its changes.
+The workspace's `.gitignore` files and the user's global excludes apply to the
+capture.  The workspace repo's own `.git/info/exclude` does not: git reads
+`info/exclude` from the store's git dir, not the workspace's.  The store's
+`info/exclude` always lists `.openbot`, so a run can never record OpenBot's own
+state as one of its changes.  A nested git repository inside the workspace is
+recorded as a single gitlink, so edits inside it do not show up in the diff.
 """
 
 from __future__ import annotations
@@ -58,16 +67,15 @@ _STORE_CONFIG = {
     "index.threads": "true",
 }
 
-# Statuses that ended a run; only these get the after-capture (a run paused on a
-# human is not done, and a resume continues the same run against the same
-# before-tree).  Statuses that never started doing work have no before-tree.
-_END_STATUSES = ("completed", "failed", "cancelled")
+# The unified diff is stored on the run row; a regenerated lockfile or a generated
+# file must not turn one row into megabytes.  Past this many characters the diff is
+# cut at a line boundary and marked as truncated (the file list is always complete).
+MAX_DIFF_CHARS = 200_000
 
 # In-process serialization per store dir: several bots share one workspace, so
 # captures from concurrent runs must not interleave index writes.  git itself
 # would serialize them via index.lock; this avoids the error path entirely.
 _LOCK_REGISTRY: dict[str, asyncio.Lock] = {}
-_LOCK_REGISTRY_GUARD = asyncio.Lock()
 
 
 def _store_lock(store_dir: Path) -> asyncio.Lock:
@@ -79,12 +87,53 @@ def _store_lock(store_dir: Path) -> asyncio.Lock:
     return lock
 
 
+def truncate_diff(diff: str, limit: int = MAX_DIFF_CHARS) -> str:
+    """`diff` cut to at most about `limit` characters at a line boundary, with a marker."""
+    if len(diff) <= limit:
+        return diff
+    cut = diff.rfind("\n", 0, limit)
+    head = diff[: cut if cut > 0 else limit]
+    return f"{head}\n... diff truncated: showing {len(head):,} of {len(diff):,} characters"
+
+
+class RunWindows:
+    """Which runs are active in which workspace, to flag runs whose window overlapped another's.
+
+    A run opens its window when its before-tree is captured and closes it when the run ends
+    (a run paused on a human stays open: its diff spans the pause).  `close` answers whether
+    any other run was active in the same workspace at any point during the window.
+    In memory only: after a restart, open windows are gone along with their before-trees.
+    """
+
+    def __init__(self) -> None:
+        self._active: dict[str, set[str]] = {}
+        self._shared: set[str] = set()
+
+    def open(self, key: str, run_id: str) -> None:
+        active = self._active.setdefault(key, set())
+        others = active - {run_id}
+        if others:
+            self._shared.add(run_id)
+            self._shared.update(others)
+        active.add(run_id)
+
+    def close(self, key: str, run_id: str) -> bool:
+        active = self._active.get(key)
+        if active is not None:
+            active.discard(run_id)
+            if not active:
+                del self._active[key]
+        shared = run_id in self._shared
+        self._shared.discard(run_id)
+        return shared
+
+
 @dataclass(frozen=True)
 class RunDiff:
     """The files one run changed, and the unified diff, in stable order."""
 
     changed_files: list[str]
-    diff: str  # "" means no changes (or the diff could not be produced)
+    diff: str  # "" means no changes (or the diff could not be produced); capped at MAX_DIFF_CHARS
 
 
 def snapshot_store_dir(settings: Settings, workspace_root: Path) -> Path | None:
@@ -138,6 +187,11 @@ class SnapshotStore:
             raise RuntimeError("snapshots need a state directory (set OPENBOT_ROOT_DIRECTORY)")
         self.store_dir = store
         self._lock = _store_lock(store)
+
+    @property
+    def key(self) -> str:
+        """Identifies the workspace this store snapshots (one store per workspace)."""
+        return str(self.store_dir)
 
     @property
     def _base_args(self) -> list[str]:
@@ -239,7 +293,12 @@ class SnapshotStore:
                 if code != 0:
                     log.warning("snapshot diff failed for %s: %s", self.workspace_root, err.strip())
                     return RunDiff(changed_files=changed, diff="")
-                return RunDiff(changed_files=changed, diff=out.rstrip("\n"))
+                # Every capture writes a tree no ref points at; let git prune old loose
+                # objects once they pile up (a no-op until git's auto thresholds are hit).
+                code, _out, err = await self._git(["gc", "--auto", "--quiet"]).run()
+                if code != 0:
+                    log.warning("snapshot gc failed for %s: %s", self.workspace_root, err.strip())
+                return RunDiff(changed_files=changed, diff=truncate_diff(out.rstrip("\n")))
         except (OSError, RuntimeError) as e:
             log.warning("snapshot diff failed for %s: %s", self.workspace_root, e)
             return empty

@@ -54,7 +54,7 @@ from openbot.runtime.delivery import DEFAULT_BOT_HANDLE, deliver_question, post_
 from openbot.runtime.prompt import build_history, build_system_prompt_parts
 from openbot.runtime.providers import builtin_tools, effective_bot_profile
 from openbot.runtime.retry import ModelRetryMiddleware
-from openbot.runtime.snapshot import RunDiff, store_for_run
+from openbot.runtime.snapshot import RunWindows, SnapshotStore, store_for_run
 from openbot.runtime.tool_failures import ToolFailureMiddleware
 from openbot.runtime.tool_loading import LOAD_TOOLS, DeferredToolsMiddleware
 from openbot.runtime.upstream import (
@@ -427,7 +427,12 @@ class Runner:
         # Snapshot before-trees captured at run start, keyed by run id; consumed when the
         # run ends (runtime/snapshot.py). Kept in memory: captures happen on the same
         # worker that ends the run, and a crash loses nothing but a diff.
-        self._snapshot_before: dict[str, str] = {}
+        self._snapshot_before: dict[str, tuple[SnapshotStore, str]] = {}
+        # Which runs are active in which workspace, so a diff can say other runs shared its window.
+        self._snapshot_windows = RunWindows()
+        # After-captures run in the background once the run's status is recorded; held here
+        # so they are not garbage-collected mid-flight (and so tests can wait for them).
+        self._snapshot_tasks: set[asyncio.Task] = set()
 
     async def _run_turn_triggers(
         self, provider: str, model: str, system_prompt: SystemMessage | None = None
@@ -467,8 +472,6 @@ class Runner:
         error: str | None = None,
         langsmith_run_id: str | None = None,
         usage: dict[str, int | float] | None = None,
-        changed_files: list[str] | None = None,
-        diff: str | None = None,
     ) -> Run | None:
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
@@ -485,10 +488,6 @@ class Runner:
             if usage and usage.get("model_calls"):
                 for k in (*USAGE_KEYS, "cost_usd"):
                     setattr(run, k, (getattr(run, k) or 0) + usage[k])
-            if changed_files is not None:
-                run.changed_files = changed_files
-            if diff is not None:
-                run.diff = diff
             if status == "running" and run.started_at is None:
                 run.started_at = utcnow()
             if status in ("completed", "failed", "cancelled"):
@@ -534,40 +533,58 @@ class Runner:
                 return
             tree = await store.capture()
             if tree:
-                self._snapshot_before[run_id] = tree
+                self._snapshot_before[run_id] = (store, tree)
+                self._snapshot_windows.open(store.key, run_id)
         except Exception:
             log.exception("could not capture snapshot before run %s", run_id)
 
-    async def _snapshot_attach_terminal(
-        self, run_id: str, thread: Thread, status: str, **status_kwargs
-    ) -> Run | None:
-        """Record the run's final status, attaching the snapshot diff computed
-        against its before-tree.  The status is written first so a diff failure
-        never leaves a live run stuck in 'running'."""
-        rd = await self._snapshot_store_after(run_id, thread)
-        kwargs = dict(status_kwargs)
-        if rd is not None:
-            kwargs["changed_files"] = rd.changed_files
-            kwargs["diff"] = rd.diff
-        return await self._set_status(run_id, status, **kwargs)
+    async def _end_run(self, run_id: str, status: str, **status_kwargs) -> Run | None:
+        """Record the run's terminal status, then diff its workspace in the background.
 
-    async def _snapshot_store_after(self, run_id: str, thread: Thread) -> RunDiff | None:
-        """Diff the workspace now against the run's before-tree and return it.
-        None when there was no before-tree (nothing to diff against).  Best effort."""
-        before = self._snapshot_before.pop(run_id, None)
-        if before is None:
-            return None
+        The status is written first and the snapshot never runs inline: a slow `git add`
+        on a big workspace must not delay a run's ending, and a second cancellation while
+        it ran would otherwise skip the rest of the cancel path and leave the run "running"."""
+        run = await self._set_status(run_id, status, **status_kwargs)
+        self.snapshot_run_ended(run_id)
+        return run
+
+    def snapshot_run_ended(self, run_id: str) -> None:
+        """A run ended: start its after-capture in the background, if it has a before-tree.
+        Anything that ends a run outside execute() (cancelling a run parked on a human) must
+        call this too, or the run's workspace window stays open and flags every later run."""
+        if run_id not in self._snapshot_before:
+            return
+        task = asyncio.create_task(self._snapshot_finish(run_id), name=f"snapshot-{run_id}")
+        self._snapshot_tasks.add(task)
+        task.add_done_callback(self._snapshot_tasks.discard)
+
+    async def wait_snapshots(self) -> None:
+        """Wait for in-flight after-captures (tests, and anything that reads diffs right away)."""
+        while self._snapshot_tasks:
+            await asyncio.gather(*list(self._snapshot_tasks), return_exceptions=True)
+
+    async def _snapshot_finish(self, run_id: str) -> None:
+        """Diff the workspace against the run's before-tree and attach the result to the run.
+        Best effort: any failure leaves the run without a diff."""
+        entry = self._snapshot_before.pop(run_id, None)
+        if entry is None:
+            return
+        store, before = entry
+        shared = self._snapshot_windows.close(store.key, run_id)
         try:
-            store = store_for_run(self.s.settings, thread)
-            if store is None:
-                return None
             after = await store.capture()
             if after is None:
-                return None
-            return await store.diff(before, after)
+                return
+            rd = await store.diff(before, after)
+            async with self.s.session_factory() as session:
+                run = await session.get(Run, run_id)
+                if run is None:
+                    return
+                run.changed_files, run.diff, run.changes_shared = rd.changed_files, rd.diff, shared
+                await session.commit()
+                await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
         except Exception:
-            log.exception("could not capture snapshot after run %s", run_id)
-            return None
+            log.exception("could not attach snapshot diff to run %s", run_id)
 
     async def _reports_so_far(self, run_id: str) -> list[str]:
         async with self.s.session_factory() as session:
@@ -1225,7 +1242,7 @@ class Runner:
                     # run "waiting_human" forever -- unresumable, and showing the bot as busy everywhere.
                     err = "ask_human has no human or external participant in this thread to ask"
                     log.warning("run %s waiting_human but undeliverable: %s", run.id, err)
-                    await self._snapshot_attach_terminal(run.id, thread, "failed", error=err)
+                    await self._end_run(run.id, "failed", error=err)
                     await self._record(run, await self._next_seq(run.id), "error", {"error": err})
                     await self._system_message(
                         thread.id, f"@{bot.handle} tried to ask a question, but {err}."
@@ -1246,7 +1263,7 @@ class Runner:
                         run_id=run.id,
                     )
                 seq = await self._record(run, seq, "message", {"message_id": res.message.id})
-            await self._snapshot_attach_terminal(run.id, thread, "completed", langsmith_run_id=ls_id)
+            await self._end_run(run.id, "completed", langsmith_run_id=ls_id)
             log.info(
                 "run %s completed in %.1fs: reply=%d chars %s langsmith_run_id=%s",
                 run.id,
@@ -1268,7 +1285,7 @@ class Runner:
         except asyncio.CancelledError:
             log.info("run %s cancelled after %.1fs", run.id, time.monotonic() - started)
             await self._post_interrupted(bot, thread, run, hop, progress)
-            await self._snapshot_attach_terminal(run.id, thread, "cancelled")
+            await self._end_run(run.id, "cancelled")
             await self._system_message(thread.id, f"@{bot.handle} run was cancelled.")
             await self._drop_checkpoint(run.id)
             raise
@@ -1276,7 +1293,7 @@ class Runner:
             log.exception("run %s failed", run.id)
             err = (str(e) if isinstance(e, CliAgentError) else f"{type(e).__name__}: {e}")[:2000]
             # Status first: the bookkeeping below is best-effort and must never leave the run in "running".
-            await self._snapshot_attach_terminal(run.id, thread, "failed", error=err)
+            await self._end_run(run.id, "failed", error=err)
             try:
                 # Re-read the sequence: events recorded inside _stream are not visible to `seq` here.
                 await self._record(run, await self._next_seq(run.id), "error", {"error": err})
