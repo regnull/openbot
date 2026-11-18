@@ -45,6 +45,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,6 +68,14 @@ _STORE_CONFIG = {
     "index.version": "4",
     "index.threads": "true",
 }
+
+# A capture walks the whole workspace; one that takes longer than this (a huge or slow
+# tree) is abandoned, the git child killed, and the run goes on without a diff.
+GIT_TIMEOUT_SECONDS = 120.0
+
+# A leftover index.lock older than this is from a git that died (the backend was killed
+# mid-capture); captures are serialized in-process, so nothing of ours still holds it.
+STALE_LOCK_SECONDS = 60.0
 
 # The unified diff is stored on the run row; a regenerated lockfile or a generated
 # file must not turn one row into megabytes.  Past this many characters the diff is
@@ -99,30 +109,32 @@ def truncate_diff(diff: str, limit: int = MAX_DIFF_CHARS) -> str:
 class RunWindows:
     """Which runs are active in which workspace, to flag runs whose window overlapped another's.
 
-    A run opens its window when its before-tree is captured and closes it when the run ends
-    (a run paused on a human stays open: its diff spans the pause).  `close` answers whether
-    any other run was active in the same workspace at any point during the window.
-    In memory only: after a restart, open windows are gone along with their before-trees.
+    A run opens its window just before its before-tree is captured and closes it once its
+    after-tree is taken (a run paused on a human stays open: its diff spans the pause).
+    Two windows overlap when their roots are the same directory or one contains the other,
+    since a thread working in `sub/` edits files a thread working at `.` snapshots.
+    `close` answers whether any other run was active in an overlapping root at any point
+    during the window.  In memory only: a restart drops open windows with their before-trees.
     """
 
     def __init__(self) -> None:
-        self._active: dict[str, set[str]] = {}
+        self._active: dict[str, Path] = {}  # run id -> resolved workspace root
         self._shared: set[str] = set()
 
-    def open(self, key: str, run_id: str) -> None:
-        active = self._active.setdefault(key, set())
-        others = active - {run_id}
+    @staticmethod
+    def _nested(a: Path, b: Path) -> bool:
+        return a == b or a in b.parents or b in a.parents
+
+    def open(self, root: Path, run_id: str) -> None:
+        root = root.resolve()
+        others = [rid for rid, r in self._active.items() if rid != run_id and self._nested(r, root)]
         if others:
             self._shared.add(run_id)
             self._shared.update(others)
-        active.add(run_id)
+        self._active[run_id] = root
 
-    def close(self, key: str, run_id: str) -> bool:
-        active = self._active.get(key)
-        if active is not None:
-            active.discard(run_id)
-            if not active:
-                del self._active[key]
+    def close(self, root: Path, run_id: str) -> bool:
+        self._active.pop(run_id, None)
         shared = run_id in self._shared
         self._shared.discard(run_id)
         return shared
@@ -133,7 +145,7 @@ class RunDiff:
     """The files one run changed, and the unified diff, in stable order."""
 
     changed_files: list[str]
-    diff: str  # "" means no changes (or the diff could not be produced); capped at MAX_DIFF_CHARS
+    diff: str  # "" means no changes (or only the file list could be produced); capped at MAX_DIFF_CHARS
 
 
 def snapshot_store_dir(settings: Settings, workspace_root: Path) -> Path | None:
@@ -160,20 +172,34 @@ class _Git:
     env: dict[str, str] | None = None
     input: str | bytes | None = None
 
-    async def run(self) -> tuple[int, str, str]:
+    async def run(self, timeout: float = GIT_TIMEOUT_SECONDS) -> tuple[int, str, str]:
+        """Run git; on timeout or cancellation the child is killed, so it can never keep
+        holding the store's index.lock after we stop waiting for it."""
         proc = await asyncio.create_subprocess_exec(
             "git",
             *self.args,
             cwd=str(self.cwd) if self.cwd else None,
-            env=self.env,
+            env={**os.environ, **self.env} if self.env else None,
             stdin=asyncio.subprocess.PIPE if self.input is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate(
-            self.input.encode("utf-8") if isinstance(self.input, str) else self.input
-        )
+        data = self.input.encode("utf-8") if isinstance(self.input, str) else self.input
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(data), timeout)
+        except TimeoutError as e:
+            await self._kill(proc)
+            raise RuntimeError(f"git timed out after {timeout:.0f}s") from e
+        except BaseException:
+            await self._kill(proc)
+            raise
         return proc.returncode or 0, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
+
+    @staticmethod
+    async def _kill(proc: asyncio.subprocess.Process) -> None:
+        if proc.returncode is None:
+            proc.kill()
+            await asyncio.shield(proc.wait())
 
 
 class SnapshotStore:
@@ -189,11 +215,6 @@ class SnapshotStore:
         self._lock = _store_lock(store)
 
     @property
-    def key(self) -> str:
-        """Identifies the workspace this store snapshots (one store per workspace)."""
-        return str(self.store_dir)
-
-    @property
     def _base_args(self) -> list[str]:
         return ["--git-dir", str(self.store_dir), "--work-tree", str(self.workspace_root)]
 
@@ -204,14 +225,9 @@ class SnapshotStore:
         """Create the store if needed, and pin its config (idempotent, cheap)."""
         self.store_dir.mkdir(parents=True, exist_ok=True)
         if not (self.store_dir / "HEAD").exists():
-            # `git init` with GIT_DIR/GIT_WORK_TREE redirected writes the repo
-            # directly into the store dir; the workspace's own git is untouched.
-            git = _Git(
-                ["init"],
-                env={"GIT_DIR": str(self.store_dir), "GIT_WORK_TREE": str(self.workspace_root)},
-                cwd=self.workspace_root,
-            )
-            code, _out, err = await git.run()
+            # `git --git-dir <store> --work-tree <ws> init` writes the repo directly
+            # into the store dir; the workspace's own git is untouched.
+            code, _out, err = await self._git(["init", "--quiet"]).run()
             if code != 0:
                 raise RuntimeError(f"could not initialize snapshot store: {err.strip()}")
             for key, value in _STORE_CONFIG.items():
@@ -223,6 +239,7 @@ class SnapshotStore:
         # whose .gitignore does not list .openbot.
         exclude = self.store_dir / "info" / "exclude"
         try:
+            exclude.parent.mkdir(parents=True, exist_ok=True)
             text = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
             lines = [line.strip() for line in text.splitlines()]
             if ".openbot" not in lines:
@@ -230,12 +247,27 @@ class SnapshotStore:
         except OSError as e:
             log.warning("could not write snapshot store exclude: %s", e)
 
-    async def capture(self) -> str | None:
+    def _clear_stale_index_lock(self) -> None:
+        """Remove an index.lock a killed git left behind; otherwise every later `git add`
+        fails with "File exists" and snapshots stay off until someone deletes it by hand."""
+        lock = self.store_dir / "index.lock"
+        try:
+            if time.time() - lock.stat().st_mtime > STALE_LOCK_SECONDS:
+                lock.unlink()
+                log.warning("removed stale snapshot index.lock in %s", self.store_dir)
+        except FileNotFoundError:
+            pass
+
+    async def capture(self, *, pin: str | None = None) -> str | None:
         """Fingerprint the workspace tree.  None when the store could not be used
-        (captures are best effort: a run must never fail because snapshots broke)."""
+        (captures are best effort: a run must never fail because snapshots broke).
+
+        `pin` (a run id) keeps the tree reachable from `refs/runs/<pin>` until `unpin`,
+        so `gc --auto` never prunes the before-tree of a run parked on a human for weeks."""
         try:
             async with self._lock:
                 await self._ensure_init()
+                self._clear_stale_index_lock()
                 git = self._git(["add", "-A"])
                 code, _out, err = await git.run()
                 if code != 0:
@@ -249,20 +281,34 @@ class SnapshotStore:
                 tree = out.strip()
                 if not tree:
                     return None
+                if pin is not None:
+                    code, _out, err = await self._git(["update-ref", f"refs/runs/{pin}", tree]).run()
+                    if code != 0:
+                        log.warning("snapshot pin failed for %s: %s", self.workspace_root, err.strip())
                 log.debug("snapshot captured %s at %s", self.workspace_root, tree)
                 return tree
         except (OSError, RuntimeError) as e:
             log.warning("snapshot capture failed for %s: %s", self.workspace_root, e)
             return None
 
-    async def diff(self, before: str, after: str) -> RunDiff:
-        """Diff two captured trees, returning changed paths and the unified diff.
+    async def unpin(self, run_id: str) -> None:
+        """Drop the ref `capture(pin=run_id)` made, letting gc reclaim the tree."""
+        try:
+            async with self._lock:
+                code, _out, err = await self._git(["update-ref", "-d", f"refs/runs/{run_id}"]).run()
+                if code != 0:
+                    log.warning("snapshot unpin failed for %s: %s", self.workspace_root, err.strip())
+        except (OSError, RuntimeError) as e:
+            log.warning("snapshot unpin failed for %s: %s", self.workspace_root, e)
+
+    async def diff(self, before: str, after: str) -> RunDiff | None:
+        """Diff two captured trees, returning changed paths and the unified diff, or None
+        when the trees could not be compared (never an empty diff that reads as "no changes").
 
         Renames are not detected (--no-renames), matching OpenCode: one run's
         delete+recreate of a file shows as delete+add, which is clearer in a
         per-run audit than a rename.
         """
-        empty = RunDiff(changed_files=[], diff="")
         try:
             async with self._lock:
                 # `--name-status -z` is NUL-safe for odd filenames; the -p diff has
@@ -273,7 +319,7 @@ class SnapshotStore:
                 code, out, err = await git.run()
                 if code != 0:
                     log.warning("snapshot diff-tree failed for %s: %s", self.workspace_root, err.strip())
-                    return empty
+                    return None
                 parts = out.split("\0")
                 changed: list[str] = []
                 for i in range(0, len(parts) - 1, 2):
@@ -281,7 +327,7 @@ class SnapshotStore:
                     path = parts[i + 1] if i + 1 < len(parts) else ""
                     if not status or not path:
                         continue
-                    if status[0] in ("A", "M", "D"):
+                    if status[0] in ("A", "M", "D", "T"):  # T: type change, e.g. file -> symlink
                         changed.append(path)
                 git = self._git(
                     [
@@ -301,7 +347,7 @@ class SnapshotStore:
                 return RunDiff(changed_files=changed, diff=truncate_diff(out.rstrip("\n")))
         except (OSError, RuntimeError) as e:
             log.warning("snapshot diff failed for %s: %s", self.workspace_root, e)
-            return empty
+            return None
 
 
 def _workspace_root_for_thread(settings: Settings, thread) -> Path:

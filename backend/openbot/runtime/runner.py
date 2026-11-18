@@ -527,16 +527,22 @@ class Runner:
         pause so the final diff spans every segment of the run."""
         if run_id in self._snapshot_before:
             return
+        store = store_for_run(self.s.settings, thread)
+        if store is None:
+            return
+        # Open the window before capturing: a run that starts editing while this capture
+        # waits for the store lock must count as overlapping.
+        self._snapshot_windows.open(store.workspace_root, run_id)
+        tree = None
         try:
-            store = store_for_run(self.s.settings, thread)
-            if store is None:
-                return
-            tree = await store.capture()
-            if tree:
-                self._snapshot_before[run_id] = (store, tree)
-                self._snapshot_windows.open(store.key, run_id)
+            tree = await store.capture(pin=run_id)
         except Exception:
             log.exception("could not capture snapshot before run %s", run_id)
+        finally:
+            if tree:
+                self._snapshot_before[run_id] = (store, tree)
+            else:
+                self._snapshot_windows.close(store.workspace_root, run_id)
 
     async def _end_run(self, run_id: str, status: str, **status_kwargs) -> Run | None:
         """Record the run's terminal status, then diff its workspace in the background.
@@ -552,9 +558,10 @@ class Runner:
         """A run ended: start its after-capture in the background, if it has a before-tree.
         Anything that ends a run outside execute() (cancelling a run parked on a human) must
         call this too, or the run's workspace window stays open and flags every later run."""
-        if run_id not in self._snapshot_before:
+        entry = self._snapshot_before.pop(run_id, None)
+        if entry is None:
             return
-        task = asyncio.create_task(self._snapshot_finish(run_id), name=f"snapshot-{run_id}")
+        task = asyncio.create_task(self._snapshot_finish(run_id, *entry), name=f"snapshot-{run_id}")
         self._snapshot_tasks.add(task)
         task.add_done_callback(self._snapshot_tasks.discard)
 
@@ -563,19 +570,19 @@ class Runner:
         while self._snapshot_tasks:
             await asyncio.gather(*list(self._snapshot_tasks), return_exceptions=True)
 
-    async def _snapshot_finish(self, run_id: str) -> None:
+    async def _snapshot_finish(self, run_id: str, store: SnapshotStore, before: str) -> None:
         """Diff the workspace against the run's before-tree and attach the result to the run.
-        Best effort: any failure leaves the run without a diff."""
-        entry = self._snapshot_before.pop(run_id, None)
-        if entry is None:
-            return
-        store, before = entry
-        shared = self._snapshot_windows.close(store.key, run_id)
+        Best effort: any failure leaves the run's change columns NULL."""
         try:
-            after = await store.capture()
-            if after is None:
+            try:
+                after = await store.capture()
+            finally:
+                # Closed only once the after-tree is taken: a run that started editing while
+                # this one waited for the store lock is inside the window too.
+                shared = self._snapshot_windows.close(store.workspace_root, run_id)
+            rd = await store.diff(before, after) if after else None
+            if rd is None:
                 return
-            rd = await store.diff(before, after)
             async with self.s.session_factory() as session:
                 run = await session.get(Run, run_id)
                 if run is None:
@@ -585,6 +592,8 @@ class Runner:
                 await self.s.bus.publish("run.updated", run.thread_id, to_json(RunOut, run))
         except Exception:
             log.exception("could not attach snapshot diff to run %s", run_id)
+        finally:
+            await store.unpin(run_id)
 
     async def _reports_so_far(self, run_id: str) -> list[str]:
         async with self.s.session_factory() as session:
@@ -1097,6 +1106,22 @@ class Runner:
         return final_text, interrupt, seq, usage
 
     async def execute(self, run_id: str, resume: Command | None = None) -> None:
+        """Run (or resume) one run.  However it leaves -- finished, failed, cancelled at any
+        await, or bailing out early -- a run that is not parked on a human gets its workspace
+        snapshot finished, so its window never stays open (runtime/snapshot.py)."""
+        try:
+            await self._execute(run_id, resume)
+        except BaseException:
+            self.snapshot_run_ended(run_id)
+            raise
+        if run_id in self._snapshot_before:
+            async with self.s.session_factory() as session:
+                run = await session.get(Run, run_id)
+                parked = run is not None and run.status == "waiting_human"
+            if not parked:
+                self.snapshot_run_ended(run_id)
+
+    async def _execute(self, run_id: str, resume: Command | None = None) -> None:
         async with self.s.session_factory() as session:
             run = await session.get(Run, run_id)
             if run is None or run.status not in ("queued", "waiting_human"):

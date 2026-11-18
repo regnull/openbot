@@ -2,6 +2,7 @@
 attaches changed_files/diff to a finished run."""
 
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -172,20 +173,30 @@ def test_truncate_diff_cuts_at_a_line_and_says_so():
     assert marker.startswith("... diff truncated") and f"{len(diff):,}" in marker
 
 
-def test_run_windows_flag_overlapping_runs_only():
+def test_run_windows_flag_overlapping_runs_only(tmp_path):
+    ws, other_ws = tmp_path / "ws", tmp_path / "other"
     w = RunWindows()
-    w.open("ws", "a")
-    assert w.close("ws", "a") is False  # alone
-    w.open("ws", "a")
-    w.open("other-ws", "x")  # a different workspace never overlaps
-    w.open("ws", "b")  # starts while a is active: both are shared
-    assert w.close("ws", "a") is True
-    w.open("ws", "c")  # starts after a ended, while b is still active
-    assert w.close("ws", "b") is True
-    assert w.close("ws", "c") is True
-    w.open("ws", "d")  # everyone gone: d is alone again
-    assert w.close("ws", "d") is False
-    assert w.close("other-ws", "x") is False
+    w.open(ws, "a")
+    assert w.close(ws, "a") is False  # alone
+    w.open(ws, "a")
+    w.open(other_ws, "x")  # a sibling workspace never overlaps
+    w.open(ws, "b")  # starts while a is active: both are shared
+    assert w.close(ws, "a") is True
+    w.open(ws, "c")  # starts after a ended, while b is still active
+    assert w.close(ws, "b") is True
+    assert w.close(ws, "c") is True
+    w.open(ws, "d")  # everyone gone: d is alone again
+    assert w.close(ws, "d") is False
+    assert w.close(other_ws, "x") is False
+
+
+def test_run_windows_treat_nested_roots_as_overlapping(tmp_path):
+    """A thread working in sub/ edits files a thread working at the root snapshots."""
+    w = RunWindows()
+    w.open(tmp_path / "ws", "root-run")
+    w.open(tmp_path / "ws" / "sub", "sub-run")
+    assert w.close(tmp_path / "ws" / "sub", "sub-run") is True
+    assert w.close(tmp_path / "ws", "root-run") is True
 
 
 def test_run_list_schema_leaves_the_diff_to_run_detail():
@@ -203,9 +214,9 @@ async def test_status_is_recorded_before_the_snapshot_finishes(tmp_path):
     gate = asyncio.Event()
     real_finish = services.runner._snapshot_finish
 
-    async def slow_finish(run_id):
+    async def slow_finish(*args):
         await gate.wait()
-        await real_finish(run_id)
+        await real_finish(*args)
 
     services.runner._snapshot_finish = slow_finish
     await services.runner.execute(run.id)
@@ -223,7 +234,7 @@ async def test_concurrent_runs_in_one_workspace_are_flagged_shared(tmp_path):
     settings.workspace_root.mkdir(parents=True)
     services, _eng, thread, run = await make(settings, {"eng": [ai("done")]})
     # Another run is active in the same workspace while this one works.
-    services.runner._snapshot_windows.open(store_for_run(settings, thread).key, "other-run")
+    services.runner._snapshot_windows.open(store_for_run(settings, thread).workspace_root, "other-run")
     await services.runner.execute(run.id)
     await services.runner.wait_snapshots()
     row = await get(services, Run, run.id)
@@ -238,7 +249,7 @@ async def test_cancelling_a_run_parked_on_a_human_closes_its_window(tmp_path):
     settings.workspace_root.mkdir(parents=True)
     services, _eng, thread, run = await make(settings, {"eng": [ai("done")]})
     await services.runner._snapshot_capture_before(run.id, thread)
-    key = store_for_run(settings, thread).key
+    root = store_for_run(settings, thread).workspace_root
     async with services.session_factory() as session:
         row = await session.get(Run, run.id)
         row.status = "waiting_human"
@@ -249,6 +260,67 @@ async def test_cancelling_a_run_parked_on_a_human_closes_its_window(tmp_path):
     assert await services.actors.cancel_run(run.id)
     await services.runner.wait_snapshots()
     assert run.id not in services.runner._snapshot_before
-    assert services.runner._snapshot_windows.close(key, "probe") is False
+    assert services.runner._snapshot_windows.close(root, "probe") is False
     row = await get(services, Run, run.id)
     assert row.status == "cancelled" and row.changed_files == []
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_crashes_before_its_try_block_still_closes_its_window(tmp_path, monkeypatch):
+    """execute() can leave from any await (an exception, a cancel); a run with a before-tree
+    must still get its snapshot finished, or later runs in the workspace read as shared."""
+    settings = make_settings(tmp_path)
+    settings.workspace_root.mkdir(parents=True)
+    services, _eng, thread, run = await make(settings, {"eng": [ai("done")]})
+    runner = services.runner
+    await runner._snapshot_capture_before(run.id, thread)  # as if a first segment had run
+
+    async def boom(*_a, **_k):
+        raise RuntimeError("db went away")
+
+    monkeypatch.setattr(runner, "_next_seq", boom)
+    with pytest.raises(RuntimeError):
+        await runner.execute(run.id)
+    await runner.wait_snapshots()
+    assert run.id not in runner._snapshot_before
+    assert runner._snapshot_windows.close(store_for_run(settings, thread).workspace_root, "probe") is False
+
+
+@pytest.mark.asyncio
+async def test_pinned_before_tree_survives_until_unpinned(tmp_path):
+    settings = make_settings(tmp_path)
+    ws = settings.workspace_root
+    ws.mkdir(parents=True)
+    (ws / "a.txt").write_text("x\n", encoding="utf-8")
+    store = SnapshotStore(settings, ws)
+    tree = await store.capture(pin="run-1")
+    ref = store.store_dir / "refs" / "runs" / "run-1"
+    assert ref.read_text().strip() == tree
+    await store.unpin("run-1")
+    assert not ref.exists()
+
+
+@pytest.mark.asyncio
+async def test_a_stale_index_lock_does_not_disable_snapshots(tmp_path):
+    settings = make_settings(tmp_path)
+    ws = settings.workspace_root
+    ws.mkdir(parents=True)
+    store = SnapshotStore(settings, ws)
+    assert await store.capture()
+    lock = store.store_dir / "index.lock"
+    lock.write_text("", encoding="utf-8")
+    old = lock.stat().st_mtime - 3600
+    os.utime(lock, (old, old))  # left behind by a git killed an hour ago
+    (ws / "b.txt").write_text("y\n", encoding="utf-8")
+    assert await store.capture()
+    assert not lock.exists()
+
+
+@pytest.mark.asyncio
+async def test_an_uncomparable_tree_gives_no_diff_rather_than_no_changes(tmp_path):
+    settings = make_settings(tmp_path)
+    ws = settings.workspace_root
+    ws.mkdir(parents=True)
+    store = SnapshotStore(settings, ws)
+    after = await store.capture()
+    assert await store.diff("0" * 40, after) is None
