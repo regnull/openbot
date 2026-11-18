@@ -1,14 +1,16 @@
 """Click-based command line interface for the OpenBot terminal client.
 
-Commands mirror the core web-UI flows against a running OpenBot server:
+Installed as the ``openbot_cli`` console script (the plain ``openbot`` command
+in this repository launches the Electron desktop UI). Commands mirror the core
+web-UI flows against a running OpenBot server:
 
-    openbot connect <url> [--api-key KEY]   Save + verify connection settings
-    openbot threads [list]                  List threads
-    openbot thread <id> [watch]             Show a thread (or live-follow it)
-    openbot send <thread> "<msg>" [--bot @h] Post a message, optionally @-ing a bot
-    openbot bots                           List bots
-    openbot runs [<thread>]                List runs (optionally for one thread)
-    openbot issues [--repo regnull/openbot] List GitHub issues
+    openbot_cli connect <url> [--api-key KEY]   Save + verify connection settings
+    openbot_cli threads [list]                  List threads
+    openbot_cli thread <id> [watch]             Show a thread (or live-follow it)
+    openbot_cli send <thread> "<msg>" [--bot @h] Post a message, optionally @-ing a bot
+    openbot_cli bots                           List bots
+    openbot_cli runs [<thread>]                List runs (optionally for one thread)
+    openbot_cli issues [--repo regnull/openbot] List GitHub issues
 
 This is a frontend only — every command calls the existing ``/api/v1`` REST and
 SSE endpoints. See README.md in this package for a full usage guide.

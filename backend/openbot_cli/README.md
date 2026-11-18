@@ -14,7 +14,7 @@ The client lives in the backend package. From the `backend/` directory:
 uv pip install -e .        # or: pip install -e .
 ```
 
-This installs the `openbot` console script (a click group named `openbot`).
+This installs the `openbot_cli` console script (a click group named `openbot_cli`).
 
 Runtime deps: `httpx` (already in the backend) and `click>=8.1`.
 
@@ -24,7 +24,7 @@ Save the server URL once (optional — every command also accepts `--base-url` /
 `--api-key`, or the `OPENBOT_URL` / `OPENBOT_API_KEY` env vars):
 
 ```bash
-openbot connect http://127.0.0.1:8000 --api-key YOUR_KEY
+openbot_cli connect http://127.0.0.1:8000 --api-key YOUR_KEY
 ```
 
 The config is stored at `~/.config/openbot-cli/config.json`.
@@ -33,14 +33,14 @@ The config is stored at `~/.config/openbot-cli/config.json`.
 
 | Command | What it does |
 | --- | --- |
-| `openbot connect <url> [--api-key KEY]` | Save server URL (and optional key) for later commands. |
-| `openbot threads [list]` | List threads (title, last activity, default bot, active flag). |
-| `openbot thread <id> [watch]` | Print a thread's messages; add `watch` to follow live SSE events. |
-| `openbot send <thread> "<msg>" [--bot @handle]` | Post a message; `--bot` (repeatable) `@`-mentions a bot. |
-| `openbot bots` | List bots (handle, name, active/disabled state, description). |
-| `openbot runs [<thread>]` | List runs; pass a `<thread>` id to scope to one thread. |
-| `openbot run <id>` | Show one run and its event log (useful for streaming deltas). |
-| `openbot issues [--repo regnull/openbot] [--state open\|closed\|all]` | List GitHub issues (fetched from the GitHub REST API). |
+| `openbot_cli connect <url> [--api-key KEY]` | Save server URL (and optional key) for later commands. |
+| `openbot_cli threads [list]` | List threads (title, last activity, default bot, active flag). |
+| `openbot_cli thread <id> [watch]` | Print a thread's messages; add `watch` to follow live SSE events. |
+| `openbot_cli send <thread> "<msg>" [--bot @handle]` | Post a message; `--bot` (repeatable) `@`-mentions a bot. |
+| `openbot_cli bots` | List bots (handle, name, active/disabled state, description). |
+| `openbot_cli runs [<thread>]` | List runs; pass a `<thread>` id to scope to one thread. |
+| `openbot_cli run <id>` | Show one run and its event log (useful for streaming deltas). |
+| `openbot_cli issues [--repo regnull/openbot] [--state open\|closed\|all]` | List GitHub issues (fetched from the GitHub REST API). |
 
 Every command accepts `--json` to emit the raw API payload.
 
@@ -48,23 +48,23 @@ Every command accepts `--json` to emit the raw API payload.
 
 ```bash
 # List threads and pick one
-openbot threads
+openbot_cli threads
 
 # Read a thread
-openbot thread 9f3a1c2e
+openbot_cli thread 9f3a1c2e
 
 # Follow it live (prints new messages + run progress as they arrive)
-openbot thread 9f3a1c2e watch
+openbot_cli thread 9f3a1c2e watch
 
 # Ask the default bot a question; @-mention the engineer bot explicitly
-openbot send 9f3a1c2e "Refactor cli.py and run the tests" --bot @engineer
+openbot_cli send 9f3a1c2e "Refactor cli.py and run the tests" --bot @engineer
 
 # See what the bots are doing
-openbot bots
-openbot runs 9f3a1c2e
+openbot_cli bots
+openbot_cli runs 9f3a1c2e
 
 # Triage the upstream project
-openbot issues --repo regnull/openbot --state open
+openbot_cli issues --repo regnull/openbot --state open
 ```
 
 ## Streaming / `watch`
@@ -81,13 +81,15 @@ Press `Ctrl+C` to disconnect.
 ## Authentication
 
 If the server requires an API key (`OPENBOT_API_KEY` setting), pass it via
-`--api-key`, the `OPENBOT_API_KEY` env var, or `openbot connect --api-key`.
+`--api-key`, the `OPENBOT_API_KEY` env var, or `openbot_cli connect --api-key`.
 The `/health` probe used by `connect` is unauthenticated, so a connection test
-works even before a key is configured.
+works even before a key is configured. (Note: the `openbot_cli` command is the
+terminal client; the plain `openbot` command in this repository launches the
+Electron desktop UI — see the repository-root `openbot` script.)
 
 ## GitHub issues
 
-`openbot issues` calls `https://api.github.com/repos/{repo}/issues`. An optional
+`openbot_cli issues` calls `https://api.github.com/repos/{repo}/issues`. An optional
 `GITHUB_TOKEN` (or the OpenBot API key) raises the GitHub rate limit; it is not
 required for small lists. Pull requests returned by the GitHub endpoint are
 filtered out so you see only issues.

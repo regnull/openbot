@@ -1,6 +1,6 @@
 """Persistent connection config for the OpenBot terminal client.
 
-Stored as a tiny JSON file in the user's config dir so ``openbot connect`` only
+Stored as a tiny JSON file in the user's config dir so ``openbot_cli connect`` only
 needs to run once per machine. The schema is intentionally flat and forward
 compatible — unknown keys are preserved on write.
 """

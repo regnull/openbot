@@ -370,3 +370,27 @@ def test_cli_thread_watch_streams(monkeypatch):
     result = _runner_with_client(c)(["thread", "t1", "watch"])
     assert result.exit_code == 0, result.output
     assert "on it" in result.output
+
+
+# The `openbot` command name is shared with the repository-root Electron launcher,
+# so the terminal client must claim `openbot_cli` and leave `openbot` alone.
+
+
+def test_pyproject_exposes_terminal_client_as_openbot_cli():
+    import tomllib
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    scripts = tomllib.loads(pyproject.read_text())["project"]["scripts"]
+    assert scripts["openbot_cli"] == "openbot_cli.cli:cli"
+    # `openbot` must stay free for the Electron launcher (see scripts/test_openbot.py).
+    assert "openbot" not in scripts
+
+
+def test_root_launcher_keeps_launching_electron():
+    from pathlib import Path
+
+    launcher = Path(__file__).resolve().parents[2] / "openbot"
+    text = launcher.read_text()
+    # The launcher delegates to `make app`, which aliases `make electron`.
+    assert "app" in text and "ROOT_DIRECTORY" in text
