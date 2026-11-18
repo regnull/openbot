@@ -9,6 +9,7 @@ from openbot.runtime.upstream import (
     OpenRouterChatOpenAI,
     StickyUpstreamMiddleware,
     UpstreamPins,
+    failed_upstream,
     guess_slug,
     upstream_of,
 )
@@ -265,3 +266,72 @@ async def test_a_pin_to_a_skipped_upstream_is_not_sent(settings):
 
     await mw.awrap_model_call(_request(model()), handler)
     assert sent == [{"ignore": ["z-ai"]}]
+
+
+class _ProviderError(Exception):
+    """Shaped like openai.BadRequestError for OpenRouter's "Provider returned error"."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__("Error code: 400 - Provider returned error")
+        self.body = {"message": "Provider returned error", "code": 400,
+                     "metadata": {"raw": '{"error":{"type":"unsupported_operation"}}', "provider_name": name}}
+
+
+def test_the_failing_upstream_is_read_through_the_exception_chain():
+    try:
+        try:
+            raise _ProviderError("GMICloud")
+        except _ProviderError as e:
+            raise ValueError("langchain wrapper") from e
+    except ValueError as wrapped:
+        assert failed_upstream(wrapped) == "GMICloud"
+    assert failed_upstream(ValueError("no body")) is None
+
+
+async def test_an_upstream_that_refuses_a_routed_call_is_dropped_and_the_call_retried(settings):
+    """2026-11-17: cache learning had skipped every tencent/hy3 upstream but GMICloud, the bot was
+    pinned there, and GMICloud answered 400: OpenRouter had nowhere to fall back and the run died."""
+    settings.openrouter_provider_order = []
+
+    async def fetch(m):
+        return {"z.ai": "z-ai", "deepinfra": "deepinfra", "gmicloud": "gmicloud"}
+
+    pins = UpstreamPins(fetch)
+    for slug in ("z-ai", "deepinfra"):
+        await pins.slug_for("z-ai/glm-5.3-flash", "Z.AI")
+        for _ in range(3):
+            pins.observe_cache("bot1", "z-ai/glm-5.3-flash", slug, 20_000, 0)
+    await pins.record("bot1", "z-ai/glm-5.3-flash", "GMICloud")
+    mw = StickyUpstreamMiddleware(pins, "bot1", "z-ai/glm-5.3-flash", settings)
+    sent = []
+
+    async def handler(request):
+        provider = (request.model_settings.get("extra_body") or {}).get("provider")
+        sent.append(provider)
+        if provider and provider.get("order") == ["gmicloud"]:
+            raise _ProviderError("GMICloud")
+        return AIMessage("ok", response_metadata={UPSTREAM_KEY: ["Z.AI"]})
+
+    reply = await mw.awrap_model_call(_request(model()), handler)
+    assert reply.content == "ok"
+    assert sent[0] == {"order": ["gmicloud"], "allow_fallbacks": True, "ignore": ["deepinfra", "z-ai"]}
+    assert sent[1] == {"ignore": ["gmicloud"]}  # the cache skips are lifted; the refusing upstream is skipped
+    assert pins.pinned("bot1", "z-ai/glm-5.3-flash") == "z-ai"
+
+
+async def test_a_failure_on_a_call_openrouter_routed_itself_is_not_retried(settings):
+    settings.openrouter_provider_order = []
+    mw = StickyUpstreamMiddleware(UpstreamPins(_fetch), "bot1", "z-ai/glm-5.3-flash", settings)
+    calls = []
+
+    async def handler(request):
+        calls.append(request)
+        raise _ProviderError("Z.AI")
+
+    try:
+        await mw.awrap_model_call(_request(model()), handler)
+    except _ProviderError:
+        pass
+    else:
+        raise AssertionError("expected the provider error to propagate")
+    assert len(calls) == 1

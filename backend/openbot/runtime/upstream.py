@@ -14,6 +14,13 @@ upstream as the run's previous call, so the prompt's start should be cached) wit
 skipped for that model for a few hours, via OpenRouter's `provider.ignore`, and bots pinned to it
 move on until they land on one that caches.
 
+Pins and skips are preferences, and they can corner a model: with every other upstream skipped, an
+upstream that refuses a call ("Provider returned error", 400 unsupported_operation from GMICloud
+on tencent/hy3, 2026-11-17) leaves OpenRouter nowhere to fall back, and the run fails. So when a
+call this module routed fails at a named upstream, the bot is unpinned, the model's cache skips are
+lifted, that upstream is skipped instead (unless it is the only one), and the call is retried once
+with the new routing.
+
 OpenRouter reports the upstream by display name ("Z.AI") but routes by slug ("z-ai"); the model's
 public endpoint list maps one to the other.
 """
@@ -42,6 +49,25 @@ CACHE_HIT_SHARE = 0.25  # a warm call with less than this share of its prompt ca
 MISS_LIMIT = 3  # consecutive warm misses before an upstream is skipped (one summarization rewrite is fine)
 IGNORE_TTL = 6 * 3600  # how long a non-caching upstream is skipped before it gets another chance
 MAX_IGNORED = 10  # per model; the oldest skip lapses first, so routing never runs out of upstreams
+
+
+def failed_upstream(err: BaseException) -> str | None:
+    """The upstream OpenRouter blames for a failed call ("Provider returned error" carries
+    `error.metadata.provider_name`), by display name. Follows the exception chain, since
+    langchain-openai re-raises the SDK's error as its own."""
+    seen: set[int] = set()
+    current: BaseException | None = err
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        body = getattr(current, "body", None)
+        if isinstance(body, dict):
+            error = body.get("error") if isinstance(body.get("error"), dict) else body
+            metadata = error.get("metadata")
+            name = metadata.get("provider_name") if isinstance(metadata, dict) else None
+            if isinstance(name, str) and name:
+                return name
+        current = current.__cause__ or current.__context__
+    return None
 
 
 def upstream_of(message: BaseMessage) -> str | None:
@@ -179,6 +205,17 @@ class UpstreamPins:
             slug, model, MISS_LIMIT, IGNORE_TTL // 3600,
         )
 
+    async def refused(self, bot_id: str, model: str, name: str) -> str:
+        """Upstream `name` failed a call routed to it: unpin `bot_id`, lift the model's cache skips
+        (they may be why nothing else was left to fall back to), and skip `name` instead when the
+        model has other upstreams. Returns its slug."""
+        slug = await self.slug_for(model, name)
+        self._pins.pop((bot_id, model), None)
+        self._ignored.pop(model, None)
+        if self._others_remain(model, slug):
+            self._ignored[model] = {slug: time.monotonic() + IGNORE_TTL}
+        return slug
+
     async def record(self, bot_id: str, model: str, name: str) -> str:
         slug = await self.slug_for(model, name)
         previous = self._pins.get((bot_id, model))
@@ -241,7 +278,21 @@ class StickyUpstreamMiddleware(AgentMiddleware):
     async def awrap_model_call(
         self, request: ModelRequest, handler: Callable[[ModelRequest], Awaitable[Any]]
     ) -> Any:
-        response = await handler(self._pinned(request))
+        routed = self._pinned(request)
+        try:
+            response = await handler(routed)
+        except Exception as err:
+            name = failed_upstream(err)
+            if routed is request or name is None:
+                raise  # OpenRouter routed this call on its own: nothing of ours to undo
+            slug = await self.pins.refused(self.bot_id, self.model, name)
+            log.warning(
+                "bot %s on %s: OpenRouter upstream %s refused a routed call (%s); retrying %s",
+                self.bot_id, self.model, slug, err,
+                "without it" if slug in self.pins.ignored(self.model) else "with routing left to OpenRouter",
+            )
+            self._last_slug = None  # the retry may land anywhere: it is a cold call
+            response = await handler(self._pinned(request))
         reply = _reply(response)
         name = upstream_of(reply) if reply is not None else None
         if name and not self._explicit():
