@@ -652,6 +652,8 @@ name, if set, is the default the page shows and the value a reset returns to.
 | Model retries | `model_retry_max_attempts` (3), `model_retry_base_delay` (2.0), `model_retry_backoff_cap` (60.0) | Retries a model call that failed with a transient upstream provider error (rate limit, 5xx, timeout, "model stopped before completing"); 0 or 1 attempts disables retries. Delays double from the base with jitter up to the cap. Auth/permission/invalid-request errors fail immediately. |
 | Model retries | `model_call_timeout` (120) | Seconds one model call may take, including gaps between streamed chunks, before it fails as a transient error and is retried. The provider SDKs' own silent retries are off, so a dead upstream costs at most `model_retry_max_attempts` × this. 0 means no limit. |
 | Telegram | `telegram_bot_token`, `telegram_webhook_url`, `telegram_webhook_secret` | Telegram Bot API token (secret: encrypted at rest, masked in API), public webhook URL for receiving updates, and shared secret for `X-Telegram-Bot-Api-Secret-Token` header validation. Token overrides the `TELEGRAM_BOT_TOKEN` env var when set via the UI. |
+| Discord | `discord_bot_token` | Discord bot token (secret: encrypted at rest, masked in API). The bot connects over the Discord Gateway websocket (no public URL needed); enable the Message Content intent on the bot and invite it with the `bot` scope. DMs map to threads like Telegram's; `/new`, `/start`, `/help` work. Overrides the `DISCORD_BOT_TOKEN` env var when set via the UI. |
+| Slack | `slack_bot_token`, `slack_app_token`, `slack_signing_secret`, `slack_transport` | Slack bot token (`xoxb-…`, secret) posts and reads DMs; the app-level token (`xapp-…` with `connections:write`) opens Socket Mode, the default transport (no public URL needed). `socket_mode` or `webhook`: webhook mode instead validates Slack request signatures with `slack_signing_secret` at `/api/v1/channels/slack/events`. Create a Slack app with Socket Mode on, bot scopes `chat:write`, `im:history`, `im:read`, and the `message.im` event. DMs map to threads like Telegram's; `/new`, `/start`, `/help` work. |
 
 </details>
 
@@ -763,9 +765,10 @@ outbound delivery to external actors), Docker sandboxing for tools, chat platfor
 (Slack/Discord/etc.), and multi-node deployment. The actor system, the LangGraph store, and the
 tool registry are designed as the seams for adding these later.
 
-Docker sandboxing for tools ([#145](https://github.com/regnull/openbot/issues/145)) and a
-Slack/Discord adapter ([#146](https://github.com/regnull/openbot/issues/146)) are open for
-contributors.
+Telegram, Discord and Slack DM adapters ship today (see "Configuration"). Docker sandboxing for
+tools ([#145](https://github.com/regnull/openbot/issues/145)) remains open for contributors; group
+channels, threads-as-conversations, and approval cards on chat platforms are the natural next steps
+for the channel adapters.
 
 ## Contributing
 

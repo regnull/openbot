@@ -13,6 +13,7 @@ dependencies = [
   "aiosqlite>=0.22",
   "alembic>=1.20",
   "httpx>=0.28",
+  "websockets>=15",  # Discord gateway and Slack Socket Mode clients (channels/discord.py, channels/slack.py)
   "langchain>=1.4",
   "langchain-core>=1.6",
   "langgraph>=1.2",
