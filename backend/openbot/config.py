@@ -120,6 +120,16 @@ class Settings(BaseSettings):
     telegram_webhook_secret: str | None = None
     telegram_transport: str = "long_polling"  # "long_polling" or "webhook"
 
+    # Discord channel (gateway websocket; see channels/discord.py)
+    discord_bot_token: str | None = None
+
+    # Slack channel (Socket Mode by default; see channels/slack.py). The bot token (xoxb-) posts and
+    # reads DMs; the app-level token (xapp-, connections:write scope) opens Socket Mode.
+    slack_bot_token: str | None = None
+    slack_app_token: str | None = None
+    slack_signing_secret: str | None = None  # only for the webhook/Events API transport
+    slack_transport: str = "socket_mode"     # "socket_mode" or "webhook"
+
     # Run run_shell commands as this user (name or uid), with a minimal environment instead of the
     # server's. Meant for the Docker setup (compose.yaml), where the backend runs as root and its
     # keys, database and secret.key stay out of the shell's reach. Env only on purpose, so a bot
@@ -233,6 +243,20 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
             )
+        return v
+
+    @field_validator("discord_bot_token", "slack_bot_token", "slack_app_token", "slack_signing_secret", mode="before")
+    @classmethod
+    def _empty_channel_token_means_unset(cls, v):
+        return None if v == "" else v
+
+    @field_validator("slack_transport", mode="before")
+    @classmethod
+    def _validate_slack_transport(cls, v):
+        if isinstance(v, str):
+            v = v.strip().lower()
+        if v not in ("socket_mode", "webhook"):
+            raise ValueError("SLACK_TRANSPORT must be 'socket_mode' or 'webhook'.")
         return v
 
     @field_validator("shell_user", mode="before")

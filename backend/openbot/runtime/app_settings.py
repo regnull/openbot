@@ -110,6 +110,19 @@ TUNABLES: dict[str, Tunable] = {
         "Shared secret for X-Telegram-Bot-Api-Secret-Token header validation.", secret=True),
     "telegram_transport": Tunable("Telegram", "Transport mode",
         "long_polling (default, no public URL needed) or webhook (requires public URL and webhook setup)."),
+    # --- Discord -------------------------------------------------------------------------------------------
+    "discord_bot_token": Tunable("Discord", "Bot token",
+        "Discord bot token. Overrides the DISCORD_BOT_TOKEN env var. The gateway transport needs the "
+        "Message Content intent enabled on the bot.", secret=True),
+    # --- Slack ---------------------------------------------------------------------------------------------
+    "slack_bot_token": Tunable("Slack", "Bot token",
+        "Slack bot token (xoxb-…), posts and reads DMs. Overrides the SLACK_BOT_TOKEN env var.", secret=True),
+    "slack_app_token": Tunable("Slack", "App-level token",
+        "Slack app-level token (xapp-…) with the connections:write scope; opens Socket Mode.", secret=True),
+    "slack_signing_secret": Tunable("Slack", "Signing secret",
+        "Only for the webhook transport: validates Slack request signatures on the Events API endpoint.", secret=True),
+    "slack_transport": Tunable("Slack", "Transport mode",
+        "socket_mode (default, no public URL needed) or webhook (requires public URL and signing secret)."),
     # --- Model retries ---------------------------------------------------------------------------------------
     "model_retry_max_attempts": Tunable("Model retries", "Max model-call attempts",
         "Times a model call may be attempted when it fails with a transient upstream provider error "
@@ -181,6 +194,10 @@ def coerce(key: str, value: Any) -> Any:
         raise ValueError(
             "Invalid Telegram bot token format. Expected '{bot_id}:{token}' (e.g. 123456:ABC-DEF...)."
         )
+    if key == "slack_bot_token" and value is not None and not str(value).startswith("xoxb-"):
+        raise ValueError("Invalid Slack bot token format. Expected a token starting with 'xoxb-'.")
+    if key == "slack_app_token" and value is not None and not str(value).startswith("xapp-"):
+        raise ValueError("Invalid Slack app-level token format. Expected a token starting with 'xapp-'.")
     return value
 
 

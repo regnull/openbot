@@ -29,10 +29,12 @@ from openbot.api import (
     threads,
     tools,
 )
+from openbot.api import discord as discord_api
 from openbot.api import mcp as mcp_api
 from openbot.api import models as models_api
 from openbot.api import settings as settings_api
 from openbot.api import setup as setup_api
+from openbot.api import slack as slack_api
 from openbot.api import telegram as telegram_api
 from openbot.api import workspace as workspace_api
 from openbot.api.deps import require_api_key
@@ -161,16 +163,45 @@ async def start_background(services: Services) -> None:
         else:
             log.info("Telegram webhook transport selected; long-poller not started")
 
+    # Start the Discord gateway client and delivery listener if a bot token is configured.
+    if services.settings.discord_bot_token:
+        from openbot.channels.discord import DiscordDeliveryListener, DiscordGatewayClient
+        discord_listener = DiscordDeliveryListener(services)
+        await discord_listener.start()
+        services._discord_listener = discord_listener
+        gateway = DiscordGatewayClient(services)
+        await gateway.start()
+        services._discord_gateway = gateway
+
+    # Start the Slack delivery listener if a bot token is configured, and the Socket Mode client
+    # unless webhook transport is explicitly selected.
+    if services.settings.slack_bot_token:
+        from openbot.channels.slack import SlackDeliveryListener, SlackSocketModeClient
+        slack_listener = SlackDeliveryListener(services)
+        await slack_listener.start()
+        services._slack_listener = slack_listener
+        if services.settings.slack_transport != "webhook":
+            if services.settings.slack_app_token:
+                socket = SlackSocketModeClient(services)
+                await socket.start()
+                services._slack_socket = socket
+            else:
+                log.info("Slack bot token set but no app-level token; Socket Mode not started (webhook transport available)")
+        else:
+            log.info("Slack webhook transport selected; Socket Mode not started")
+
 
 async def stop_background(services: Services) -> None:
-    # Stop the Telegram long-poller (before actors, so no new updates enter).
-    poller = services._telegram_poller
-    if poller is not None:
-        await poller.stop()
-    # Stop the Telegram delivery listener before actors (so no new deliveries start).
-    listener = services._telegram_listener
-    if listener is not None:
-        await listener.stop()
+    # Stop the channel ingress clients (before actors, so no new messages enter).
+    for attr in ("_telegram_poller", "_discord_gateway", "_slack_socket"):
+        client = getattr(services, attr)
+        if client is not None:
+            await client.stop()
+    # Stop the delivery listeners before actors (so no new deliveries start).
+    for attr in ("_telegram_listener", "_discord_listener", "_slack_listener"):
+        listener = getattr(services, attr)
+        if listener is not None:
+            await listener.stop()
     if services.scheduler is not None:
         await services.scheduler.stop()
     if services.actors is not None:
@@ -321,6 +352,9 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
     # Telegram webhook must be public (Telegram sends updates without our API key).
     # Mounted at /api/v1/channels/telegram/* — no API-key guard.
     app.include_router(telegram_api.router, prefix="/api/v1")
+    # Slack Events API needs the same openness; Discord is gateway-only, so its router is status only.
+    app.include_router(slack_api.router, prefix="/api/v1")
+    app.include_router(discord_api.router, prefix="/api/v1")
 
     dist = settings.frontend_dist
     if dist and Path(dist).is_dir():
