@@ -752,10 +752,16 @@ async def test_api_accepts_cli_bots_without_a_model_and_checks_their_settings(cl
 
 async def test_providers_lists_the_cli_by_whether_it_is_found_without_running_it(client, settings, fake, tmp_path):
     home, exe = fake
+    # All three adapters, not just claude-code. Pin every path so `found` is deterministic and does
+    # not depend on what happens to be installed on this machine's PATH.
     settings.claude_code_path = str(tmp_path / "no-claude")
+    settings.hermes_path = str(tmp_path / "no-hermes")
+    settings.opencode_path = str(tmp_path / "no-opencode")
     r = await client.get("/api/v1/providers")
     assert r.json()["cli_agents"] == [{"id": "claude-code", "label": "Claude Code", "found": False,
-                                         "models": ["sonnet", "opus", "haiku"]}]
+                                         "models": ["sonnet", "opus", "haiku"]},
+                                        {"id": "hermes", "label": "Hermes", "found": False, "models": []},
+                                        {"id": "opencode", "label": "OpenCode", "found": False, "models": []}]
     assert "claude-code" not in {p["id"] for p in r.json()["providers"]}
     settings.claude_code_path = str(exe)
     assert (await client.get("/api/v1/providers")).json()["cli_agents"][0]["found"] is True
