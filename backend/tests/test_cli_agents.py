@@ -752,10 +752,16 @@ async def test_api_accepts_cli_bots_without_a_model_and_checks_their_settings(cl
 
 async def test_providers_lists_the_cli_by_whether_it_is_found_without_running_it(client, settings, fake, tmp_path):
     home, exe = fake
+    # All three adapters, not just claude-code. Pin every path so `found` is deterministic and does
+    # not depend on what happens to be installed on this machine's PATH.
     settings.claude_code_path = str(tmp_path / "no-claude")
+    settings.hermes_path = str(tmp_path / "no-hermes")
+    settings.opencode_path = str(tmp_path / "no-opencode")
     r = await client.get("/api/v1/providers")
     assert r.json()["cli_agents"] == [{"id": "claude-code", "label": "Claude Code", "found": False,
-                                         "models": ["sonnet", "opus", "haiku"]}]
+                                         "models": ["sonnet", "opus", "haiku"]},
+                                        {"id": "hermes", "label": "Hermes", "found": False, "models": []},
+                                        {"id": "opencode", "label": "OpenCode", "found": False, "models": []}]
     assert "claude-code" not in {p["id"] for p in r.json()["providers"]}
     settings.claude_code_path = str(exe)
     assert (await client.get("/api/v1/providers")).json()["cli_agents"][0]["found"] is True
@@ -790,3 +796,126 @@ async def test_cli_status_says_why_the_cli_is_unusable(client, settings, fake, t
 
 def test_settings_default_timeout(settings):
     assert settings.cli_agent_timeout == 1800 and settings.claude_code_path is None
+
+
+# --- hermes and opencode (recorded real captures) ------------------------------------------------------
+
+HERMES = ADAPTERS["hermes"]
+OPENCODE = ADAPTERS["opencode"]
+HERMES_TURN = (FIXTURES / "hermes_turn.jsonl").read_text(encoding="utf-8").splitlines()
+OPENCODE_TURN = (FIXTURES / "opencode_turn.jsonl").read_text(encoding="utf-8").splitlines()
+HERMES_SESSION = "local-f8a2486360628ec24a6bd3cc163cab1b48f1d40ada43388761337f1900caeb59"
+OPENCODE_SESSION = "ses_e781de948ffeGNRK4O3BZJgy62"
+
+
+def test_hermes_and_opencode_are_registered_with_their_install_hints():
+    assert adapter_for("hermes") is HERMES and adapter_for("opencode") is OPENCODE
+    assert HERMES.binary == "hermes" and HERMES.path_setting == "hermes_path"
+    assert OPENCODE.binary == "opencode" and OPENCODE.path_setting == "opencode_path"
+    assert HERMES.status_argv == () and OPENCODE.status_argv == ()
+
+
+def test_hermes_edit_runs_the_file_toolset_only():
+    turn = Turn(system_prompt_file="/tmp/p.md", session_id=None, model="m-1", permission=EDIT, cwd=r"C:\w")
+    assert HERMES.argv("hermes", turn) == [
+        "hermes", "chat", "--format", "stream-json", "--query-file", "-",
+        "--in", r"C:\w", "-t", "file", "--model", "m-1"]
+
+
+def test_hermes_read_only_limits_toolsets_and_a_resumed_turn_still_does():
+    turn = Turn(system_prompt_file="/tmp/p.md", session_id=HERMES_SESSION, model="", permission=READ_ONLY)
+    assert HERMES.argv("hermes", turn) == [
+        "hermes", "chat", "--format", "stream-json", "--query-file", "-",
+        "-t", "search,vision,todo,session_search", "--resume", HERMES_SESSION]
+
+
+def test_hermes_prefixes_the_system_prompt_onto_the_stdin_prompt():
+    assert HERMES.combine("please build it", "You are working for thread t.\n") == \
+        "You are working for thread t.\n\nplease build it"
+    assert HERMES.combine("please build it", "") == "please build it"
+
+
+def test_hermes_parser_turns_the_recorded_stream_into_run_actions():
+    p = HERMES.parser()
+    actions = [a for line in HERMES_TURN for a in p.feed(json.loads(line))]
+    assert [k for k, _ in actions] == ["init", "tool_call", "tool_result", "text", "session"]
+    assert actions[0][1] == {}          # model and session_id are still empty on the CLI's init
+    assert actions[1][1] == {"id": "call-dc44fbca-41c4-45f0-afee-6402de7f3ece", "name": "read_file",
+                             "args": {"path": "README.md"}}
+    assert actions[2][1]["status"] == "error" and '"not_found": true' in actions[2][1]["content"]
+    assert actions[3][1].endswith("done")
+    result = p.finish(exit_code=0, stderr="", resumed=False, baseline=None)
+    assert result.text == "done" and result.session_id == HERMES_SESSION
+    assert result.usage == {"prompt_tokens": 70563 + 35200, "completion_tokens": 104, "cache_read_tokens": 35200,
+                            "cache_write_tokens": 0, "reasoning_tokens": 0,
+                            "total_tokens": 70563 + 35200 + 104, "model_calls": 1, "cost_usd": 0.0}
+
+
+def test_hermes_a_gone_session_raises_unknown_and_a_failure_keeps_its_usage():
+    error = {"type": "result", "session_id": "", "exit_code": 1, "text": "",
+             "tokens": {"input": 0, "output": 0, "total": 0, "cache_read": 0, "cache_write": 0},
+             "error": "No session found matching 'a1b2c3d4-1111'. Use 'hermes sessions list'."}
+    p = HERMES.parser()
+    p.feed(error)
+    with pytest.raises(base.UnknownSession):
+        p.finish(exit_code=1, stderr="Error: No session found matching 'a1b2c3d4-1111'.", resumed=True, baseline=None)
+    p = HERMES.parser()
+    p.feed({**error, "error": "rate limited"})
+    with pytest.raises(base.CliAgentError) as exc:
+        p.finish(exit_code=1, stderr="", resumed=False, baseline=None)
+    assert exc.value.usage["model_calls"] == 1 and exc.value.usage["total_tokens"] == 0
+
+
+def test_hermes_a_crash_without_a_result_reports_stderr():
+    with pytest.raises(base.CliAgentError, match="without a result"):
+        HERMES.parser().finish(exit_code=2, stderr="Traceback: gone", resumed=False, baseline=None)
+
+
+def test_opencode_argv_formats_passes_session_and_model_and_nothing_privileged():
+    turn = Turn(system_prompt_file="/tmp/p.md", session_id=None, model="", permission=READ_ONLY)
+    assert OPENCODE.argv("opencode", turn) == ["opencode", "run", "--format", "json"]
+    turn = Turn(system_prompt_file="/tmp/p.md", session_id=OPENCODE_SESSION, model="org/model", permission=EDIT)
+    assert OPENCODE.argv("opencode", turn) == ["opencode", "run", "--format", "json", "--model", "org/model",
+                                               "--session", OPENCODE_SESSION]
+
+
+@pytest.mark.parametrize("permission", [READ_ONLY, EDIT])
+def test_opencode_permissions_allow_reads_and_never_run_commands_or_reach_the_wider_web(permission):
+    env = OPENCODE.turn_env(Turn(system_prompt_file="", session_id=None, model="", permission=permission))
+    perms = json.loads(env["OPENCODE_PERMISSION"])
+    assert perms["read"] == "allow" and perms["glob"] == "allow" and perms["grep"] == "allow"
+    assert perms["edit"] == ("allow" if permission == EDIT else "deny")
+    assert {k: perms[k] for k in ("bash", "task", "webfetch", "websearch", "skill")} == dict.fromkeys(
+        ("bash", "task", "webfetch", "websearch", "skill"), "deny")
+
+
+def test_opencode_parser_turns_the_recorded_stream_into_run_actions():
+    p = OPENCODE.parser()
+    actions = [a for line in OPENCODE_TURN for a in p.feed(json.loads(line))]
+    assert [k for k, _ in actions] == ["session", "tool_call", "tool_result", "text"]
+    assert p.session_id == OPENCODE_SESSION
+    assert actions[1][1]["name"] == "glob" and actions[1][1]["args"]["pattern"] == "*"
+    assert actions[2][1]["status"] == "success" and actions[2][1]["tool_call_id"] == actions[1][1]["id"]
+    result = p.finish(exit_code=0, stderr="", resumed=False, baseline=None)
+    assert result.text.endswith("done") and result.session_id == OPENCODE_SESSION
+    assert result.usage == {"prompt_tokens": 167981 + 1280, "completion_tokens": 43 + 27, "cache_read_tokens": 1280,
+                            "cache_write_tokens": 0, "reasoning_tokens": 27, "total_tokens": 167981 + 1280 + 70,
+                            "model_calls": 2, "cost_usd": 0.0}
+
+
+def test_opencode_a_pending_call_only_reports_its_result_once():
+    p = OPENCODE.parser()
+    p.feed({"type": "tool_use", "timestamp": 1, "sessionID": OPENCODE_SESSION,
+            "part": {"type": "tool", "id": "c1", "tool": "edit", "state": {"status": "pending", "input": {}}}})
+    out = p.feed({"type": "tool_use", "timestamp": 2, "sessionID": OPENCODE_SESSION,
+                  "part": {"type": "tool", "id": "c1", "tool": "edit",
+                           "state": {"status": "completed", "input": {}, "output": "ok"}}})
+    assert [k for k, _ in out] == ["tool_result"] and out[0][1]["content"] == "ok"
+
+
+def test_opencode_an_error_stream_fails_the_run():
+    p = OPENCODE.parser()
+    p.feed({"type": "error", "timestamp": 1, "sessionID": "",
+            "error": {"type": "unknown", "message": 'Expected a string starting with "ses"'}})
+    with pytest.raises(base.CliAgentError, match='starting with "ses"'):
+        p.finish(exit_code=1, stderr="", resumed=True, baseline=None)

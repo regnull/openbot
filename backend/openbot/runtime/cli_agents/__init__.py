@@ -6,8 +6,10 @@ runner's side, and each CLI has an adapter.
 """
 from openbot.runtime.cli_agents.base import CliAdapter, CliAgentError
 from openbot.runtime.cli_agents.claude_code import ClaudeCode
+from openbot.runtime.cli_agents.hermes import Hermes
+from openbot.runtime.cli_agents.opencode import OpenCode
 
-ADAPTERS: dict[str, CliAdapter] = {a.provider: a for a in (ClaudeCode(),)}
+ADAPTERS: dict[str, CliAdapter] = {a.provider: a for a in (ClaudeCode(), Hermes(), OpenCode())}
 
 
 def adapter_for(provider: str | None) -> CliAdapter | None:

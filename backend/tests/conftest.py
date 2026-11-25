@@ -8,6 +8,13 @@ from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
+# `openbot.main` runs `create_app()` at import time (main.py:334), which calls
+# `configure_logging(Settings())`. The default log file lives beside the database and the test
+# sandbox cannot create files, so pin LOG_FILE to the null device so logging is discarded instead
+# of crashing on a missing directory. `_hermetic_env` deletes it per test afterwards, and the
+# `settings` fixture sets `log_file` explicitly, so nothing leaks between tests.
+os.environ.setdefault("LOG_FILE", "nul")
+
 from openbot.config import Settings
 from openbot.db.session import create_all, make_engine, make_session_factory
 from openbot.main import create_app

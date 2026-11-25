@@ -81,6 +81,7 @@ class Turn:
     session_id: str | None
     model: str
     permission: str
+    cwd: str = ""
 
 
 @dataclass
@@ -132,6 +133,16 @@ class CliAdapter(ABC):
     def install_dirs(self, *, home: str, env: Mapping[str, str], win: bool) -> list[str]:
         """Where the CLI's installers put it, beyond PATH: full paths to the executable."""
         return []
+
+    def combine(self, prompt: str, system_prompt: str) -> str:
+        """The stdin complete prompt this CLI should see. A CLI with no separate system-prompt slot
+        prefixes the system prompt here; the default keeps the real prompt on stdin untouched."""
+        return prompt
+
+    def turn_env(self, turn: Turn) -> dict[str, str]:
+        """Environment added for this one invocation only (a per-turn permission or config pointer).
+        Never a place for credentials; the whole turn env comes from child_env()."""
+        return {}
 
     @abstractmethod
     def argv(self, executable: str, turn: Turn) -> list[str]: ...
@@ -381,7 +392,9 @@ async def _turn(adapter: CliAdapter, executable: str, *, cwd: str, env: dict[str
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(system_prompt)
     argv = adapter.argv(executable, Turn(system_prompt_file=prompt_file, session_id=session_id, model=model,
-                                         permission=permission))
+                                         permission=permission, cwd=cwd))
+    env = {**env, **adapter.turn_env(Turn(system_prompt_file=prompt_file, session_id=session_id, model=model,
+                                          permission=permission, cwd=cwd))}
     parser = adapter.parser()
     stderr_task: asyncio.Task | None = None
     try:
@@ -391,7 +404,7 @@ async def _turn(adapter: CliAdapter, executable: str, *, cwd: str, env: dict[str
         try:
             async with asyncio.timeout(timeout):
                 try:
-                    tree.proc.stdin.write(prompt.encode("utf-8"))
+                    tree.proc.stdin.write(adapter.combine(prompt, system_prompt).encode("utf-8"))
                     await tree.proc.stdin.drain()
                     tree.proc.stdin.close()
                 except (BrokenPipeError, ConnectionResetError):
